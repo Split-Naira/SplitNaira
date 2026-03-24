@@ -10,6 +10,8 @@
     "lint": "eslint . --max-warnings=0"
   },
   "dependencies": {
+    "@stellar/freighter-api": "latest",
+    "@stellar/stellar-sdk": "latest",
     "clsx": "latest",
     "next": "latest",
     "react": "latest",

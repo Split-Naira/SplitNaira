@@ -1,0 +1,58 @@
+import type { SplitProject } from "./stellar";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
+
+export interface CreateSplitPayload {
+  owner: string;
+  projectId: string;
+  title: string;
+  projectType: string;
+  token: string;
+  collaborators: Array<{
+    address: string;
+    alias: string;
+    basisPoints: number;
+  }>;
+}
+
+interface BuildSplitResponse {
+  xdr: string;
+  metadata: {
+    networkPassphrase: string;
+    contractId: string;
+  };
+}
+
+function toErrorMessage(status: number, payload: unknown, fallback: string) {
+  if (payload && typeof payload === "object" && "message" in payload) {
+    const message = (payload as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) {
+      return message;
+    }
+  }
+  return `${fallback} (status ${status})`;
+}
+
+export async function buildCreateSplitXdr(payload: CreateSplitPayload): Promise<BuildSplitResponse> {
+  const response = await fetch(`${API_BASE_URL}/splits`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  const body = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    throw new Error(toErrorMessage(response.status, body, "Failed to build split transaction"));
+  }
+
+  return body as BuildSplitResponse;
+}
+
+export async function getSplit(projectId: string): Promise<SplitProject> {
+  const response = await fetch(`${API_BASE_URL}/splits/${encodeURIComponent(projectId)}`);
+  const body = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    throw new Error(toErrorMessage(response.status, body, "Failed to fetch split project"));
+  }
+  return body as SplitProject;
+}

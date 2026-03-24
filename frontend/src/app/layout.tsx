@@ -1,6 +1,8 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import { DM_Sans, Syne } from "next/font/google";
 import "./globals.css";
+import { ToastProvider } from "@/components/toast-provider";
+import { AppErrorBoundary } from "@/components/app-error-boundary";
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -27,7 +29,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${dmSans.variable} ${syne.variable} antialiased`}>
-        {children}
+        <AppErrorBoundary>
+          <ToastProvider>{children}</ToastProvider>
+        </AppErrorBoundary>
       </body>
     </html>
   );

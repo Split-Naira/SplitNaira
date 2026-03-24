@@ -1,12 +1,14 @@
 import { Router } from "express";
 import { z } from "zod";
 import {
+  Account,
   Address,
   BASE_FEE,
   Contract,
   TransactionBuilder,
   nativeToScVal,
   rpc,
+  scValToNative,
   xdr
 } from "@stellar/stellar-sdk";
 
@@ -147,11 +149,80 @@ async function buildCreateProjectUnsignedXdr(
   };
 }
 
-splitsRouter.get("/:projectId", (req, res) => {
-  res.status(501).json({
-    error: "not_implemented",
-    message: `Split project ${req.params.projectId} is not wired yet.`
-  });
+async function fetchProjectById(projectId: string) {
+  const config = loadStellarConfig();
+  const server = new rpc.Server(config.sorobanRpcUrl, { allowHttp: true });
+  const contract = new Contract(config.contractId);
+
+  const simulationTx = new TransactionBuilder(new Account("GBRPYHIL2C4YVYC3Q4W4A6FTZVJ35UEDPKBQ6F4NNDM44YXV2RDJX2KE", "0"), {
+    fee: BASE_FEE,
+    networkPassphrase: config.networkPassphrase
+  })
+    .addOperation(contract.call("get_project", nativeToScVal(projectId, { type: "symbol" })))
+    .setTimeout(30)
+    .build();
+
+  const simulation = await server.simulateTransaction(simulationTx);
+  if (rpc.Api.isSimulationError(simulation)) {
+    throw new Error(simulation.error);
+  }
+
+  const projectRaw = simulation.result?.retval ? scValToNative(simulation.result.retval) : null;
+  if (!projectRaw) {
+    return null;
+  }
+
+  const project = projectRaw as {
+    project_id: string;
+    title: string;
+    project_type: string;
+    token: string;
+    owner: string;
+    collaborators: Array<{ address: string; alias: string; basis_points: number }>;
+    locked: boolean;
+    total_distributed: string | number | bigint;
+    distribution_round: number;
+  };
+
+  return {
+    projectId: project.project_id,
+    title: project.title,
+    projectType: project.project_type,
+    token: project.token,
+    owner: project.owner,
+    collaborators: project.collaborators.map((collaborator) => ({
+      address: collaborator.address,
+      alias: collaborator.alias,
+      basisPoints: collaborator.basis_points
+    })),
+    locked: project.locked,
+    totalDistributed: String(project.total_distributed),
+    distributionRound: project.distribution_round
+  };
+}
+
+splitsRouter.get("/:projectId", async (req, res, next) => {
+  try {
+    const projectId = req.params.projectId?.trim();
+    if (!projectId) {
+      return res.status(400).json({
+        error: "validation_error",
+        message: "projectId is required"
+      });
+    }
+
+    const project = await fetchProjectById(projectId);
+    if (!project) {
+      return res.status(404).json({
+        error: "not_found",
+        message: `Split project ${projectId} not found.`
+      });
+    }
+
+    return res.status(200).json(project);
+  } catch (error) {
+    return next(error);
+  }
 });
 
 splitsRouter.post("/", async (req, res, next) => {
