@@ -9,7 +9,9 @@ import { randomUUID } from "crypto";
  */
 export const requestIdMiddleware: RequestHandler = (req, res, next) => {
   const incoming = req.header("x-request-id");
-  const requestId = incoming && incoming.trim().length > 0 ? incoming.trim() : randomUUID();
+  const requestId = typeof incoming === "string" && incoming.trim().length > 0
+    ? incoming.trim()
+    : randomUUID();
 
   res.locals.requestId = requestId;
   res.setHeader("x-request-id", requestId);

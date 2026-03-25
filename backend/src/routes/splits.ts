@@ -316,7 +316,8 @@ splitsRouter.get("/", async (_req, res, next) => {
 splitsRouter.get("/:projectId", async (req, res, next) => {
   try {
     const requestId = res.locals.requestId;
-    const projectId = (req.params.projectId as string | undefined)?.trim();
+    const rawProjectId = req.params.projectId;
+    const projectId = typeof rawProjectId === "string" ? rawProjectId.trim() : undefined;
     if (!projectId) {
       return res.status(400).json({
         error: "validation_error",

@@ -368,7 +368,7 @@ impl SplitNairaContract {
         let contract_address = env.current_contract_address();
 
         let mut total_sent: i128 = 0;
-        let last_index = project.collaborators.len() - 1;
+        let last_index = (project.collaborators.len()).saturating_sub(1);
 
         for (i, collab) in project.collaborators.iter().enumerate() {
             // Calculate share using basis points
