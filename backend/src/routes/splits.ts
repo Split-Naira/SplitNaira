@@ -1,14 +1,12 @@
 import { Request, Response, NextFunction, Router } from "express";
 import { z } from "zod";
 import {
-  Account,
   Address,
   BASE_FEE,
   Contract,
   TransactionBuilder,
   nativeToScVal,
   rpc,
-  scValToNative,
   xdr
 } from "@stellar/stellar-sdk";
 
@@ -191,190 +189,42 @@ async function buildCreateProjectUnsignedXdr(
   };
 }
 
-async function buildLockProjectUnsignedXdr(input: { projectId: string } & z.infer<typeof lockProjectSchema>) {
-  const config = loadStellarConfig();
-  const server = new rpc.Server(config.sorobanRpcUrl, { allowHttp: true });
+const listProjectsSchema = z.object({
+  start: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(100).default(10)
+});
 
-  let sourceAccount;
+splitsRouter.get("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    sourceAccount = await server.getAccount(input.owner);
-  } catch {
-    throw new RequestValidationError("owner account not found on selected network");
-  }
+    const requestId = res.locals.requestId;
 
-  let ownerAddress: Address;
-  try {
-    ownerAddress = Address.fromString(input.owner);
-  } catch {
-    throw new RequestValidationError("owner must be a valid Stellar address");
-  }
-
-  const contract = new Contract(config.contractId);
-
-  const tx = new TransactionBuilder(sourceAccount, {
-    fee: BASE_FEE,
-    networkPassphrase: config.networkPassphrase
-  })
-    .addOperation(
-      contract.call(
-        "lock_project",
-        nativeToScVal(input.projectId, { type: "symbol" }),
-        ownerAddress.toScVal()
-      )
-    )
-    .setTimeout(300)
-    .build();
-
-  const preparedTx = await server.prepareTransaction(tx);
-
-  return {
-    xdr: preparedTx.toXDR(),
-    metadata: {
-      contractId: config.contractId,
-      networkPassphrase: config.networkPassphrase,
-      sourceAccount: input.owner,
-      sequenceNumber: preparedTx.sequence,
-      fee: preparedTx.fee,
-      operation: "lock_project"
+    const parsed = listProjectsSchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: "validation_error",
+        message: "Invalid request payload.",
+        details: parsed.error.flatten(),
+        requestId
+      });
     }
-  };
-}
 
-type UpdateCollaboratorsInput = {
-  projectId: string;
-} & z.infer<typeof updateCollaboratorsSchema>;
-
-async function buildUpdateCollaboratorsUnsignedXdr(input: UpdateCollaboratorsInput) {
-  const config = loadStellarConfig();
-  const server = new rpc.Server(config.sorobanRpcUrl, { allowHttp: true });
-
-  let sourceAccount;
-  try {
-    sourceAccount = await server.getAccount(input.owner);
-  } catch {
-    throw new RequestValidationError("owner account not found on selected network");
-  }
-
-  let ownerAddress: Address;
-  try {
-    ownerAddress = Address.fromString(input.owner);
-  } catch {
-    throw new RequestValidationError("owner must be a valid Stellar address");
-  }
-
-  let collaboratorScVals: xdr.ScVal[];
-  try {
-    collaboratorScVals = input.collaborators.map((collaborator) =>
-      toCollaboratorScVal(collaborator)
-    );
-  } catch {
-    throw new RequestValidationError("collaborator addresses must be valid Stellar addresses");
-  }
-
-  const contract = new Contract(config.contractId);
-
-  const tx = new TransactionBuilder(sourceAccount, {
-    fee: BASE_FEE,
-    networkPassphrase: config.networkPassphrase
-  })
-    .addOperation(
-      contract.call(
-        "update_collaborators",
-        nativeToScVal(input.projectId, { type: "symbol" }),
-        ownerAddress.toScVal(),
-        xdr.ScVal.scvVec(collaboratorScVals)
-      )
-    )
-    .setTimeout(300)
-    .build();
-
-  const preparedTx = await server.prepareTransaction(tx);
-
-  return {
-    xdr: preparedTx.toXDR(),
-    metadata: {
-      contractId: config.contractId,
-      networkPassphrase: config.networkPassphrase,
-      sourceAccount: input.owner,
-      sequenceNumber: preparedTx.sequence,
-      fee: preparedTx.fee,
-      operation: "update_collaborators"
+    try {
+      const projects = await listProjects(parsed.data.start, parsed.data.limit);
+      return res.status(200).json(projects);
+    } catch (error) {
+      if (error instanceof RequestValidationError) {
+        return res.status(400).json({
+          error: "validation_error",
+          message: error.message,
+          requestId
+        });
+      }
+      throw error;
     }
-  };
-}
-
-async function fetchProjectById(projectId: string) {
-  const config = loadStellarConfig();
-  const server = new rpc.Server(config.sorobanRpcUrl, { allowHttp: true });
-  const contract = new Contract(config.contractId);
-
-  let simulatorAccount: Account;
-  try {
-    simulatorAccount = await server.getAccount(config.simulatorAccount);
-  } catch {
-    throw new RequestValidationError("simulator account not found on selected network");
+  } catch (error) {
+    return next(error);
   }
-
-  // 1. Fetch project details
-  const projectTx = new TransactionBuilder(simulatorAccount, {
-    fee: BASE_FEE,
-    networkPassphrase: config.networkPassphrase
-  })
-    .addOperation(contract.call("get_project", nativeToScVal(projectId, { type: "symbol" })))
-    .setTimeout(30)
-    .build();
-
-  const projectSim = await server.simulateTransaction(projectTx);
-  if (rpc.Api.isSimulationError(projectSim)) {
-    return null;
-  }
-
-  const projectRaw = projectSim.result?.retval ? scValToNative(projectSim.result.retval) : null;
-  if (!projectRaw) {
-    return null;
-  }
-
-  // 2. Fetch project balance
-  const balanceTx = new TransactionBuilder(simulatorAccount, {
-    fee: BASE_FEE,
-    networkPassphrase: config.networkPassphrase
-  })
-    .addOperation(contract.call("get_balance", nativeToScVal(projectId, { type: "symbol" })))
-    .setTimeout(30)
-    .build();
-
-  const balanceSim = await server.simulateTransaction(balanceTx);
-  const balance = balanceSim.result?.retval ? scValToNative(balanceSim.result.retval) : 0;
-
-  const project = projectRaw as {
-    project_id: string;
-    title: string;
-    project_type: string;
-    token: string;
-    owner: string;
-    collaborators: Array<{ address: string; alias: string; basis_points: number }>;
-    locked: boolean;
-    total_distributed: string | number | bigint;
-    distribution_round: number;
-  };
-
-  return {
-    projectId: project.project_id,
-    title: project.title,
-    projectType: project.project_type,
-    token: project.token,
-    owner: project.owner,
-    collaborators: project.collaborators.map((collaborator) => ({
-      address: collaborator.address,
-      alias: collaborator.alias,
-      basisPoints: collaborator.basis_points
-    })),
-    locked: project.locked,
-    totalDistributed: String(project.total_distributed),
-    distributionRound: project.distribution_round,
-    balance: String(balance)
-  };
-}
+});
 
 splitsRouter.get("/:projectId", async (req: Request, res: Response, next: NextFunction) => {
   try {
