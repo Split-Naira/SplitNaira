@@ -731,6 +731,155 @@ fn test_multi_project_balances_are_isolated() {
 }
 
 // ============================================================
+//  LIST PROJECTS TESTS (upstream — issues #49)
+// ============================================================
+
+#[test]
+fn test_list_projects_empty() {
+    let (env, _admin, _token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let projects = client.list_projects(&0, &10);
+    assert_eq!(projects.len(), 0);
+
+    let project_ids = client.list_project_ids(&0, &10);
+    assert_eq!(project_ids.len(), 0);
+}
+
+#[test]
+fn test_list_projects_single() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice, bob]),
+        Vec::from_slice(&env, &[5000u32, 5000u32]),
+    );
+
+    client.create_project(
+        &owner,
+        &Symbol::new(&env, "single_project"),
+        &String::from_str(&env, "Single Project"),
+        &String::from_str(&env, "music"),
+        &token,
+        &collabs,
+    );
+
+    let projects = client.list_projects(&0, &10);
+    assert_eq!(projects.len(), 1);
+    assert_eq!(
+        projects.get(0).unwrap().project_id,
+        Symbol::new(&env, "single_project")
+    );
+
+    let project_ids = client.list_project_ids(&0, &10);
+    assert_eq!(project_ids.len(), 1);
+    assert_eq!(
+        project_ids.get(0).unwrap(),
+        Symbol::new(&env, "single_project")
+    );
+}
+
+#[test]
+fn test_list_projects_pagination() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[5000u32, 5000u32]),
+    );
+
+    // Create 5 projects
+    for (id, title) in [
+        ("proj_0", "P0"),
+        ("proj_1", "P1"),
+        ("proj_2", "P2"),
+        ("proj_3", "P3"),
+        ("proj_4", "P4"),
+    ] {
+        client.create_project(
+            &owner,
+            &Symbol::new(&env, id),
+            &String::from_str(&env, title),
+            &String::from_str(&env, "music"),
+            &token,
+            &collabs,
+        );
+    }
+
+    // Test first page
+    let page1 = client.list_projects(&0, &2);
+    assert_eq!(page1.len(), 2);
+
+    // Test second page
+    let page2 = client.list_projects(&2, &2);
+    assert_eq!(page2.len(), 2);
+
+    // Test third page (only 1 remaining)
+    let page3 = client.list_projects(&4, &2);
+    assert_eq!(page3.len(), 1);
+
+    // Test beyond bounds
+    let page4 = client.list_projects(&5, &2);
+    assert_eq!(page4.len(), 0);
+
+    // Test pagination with project IDs
+    let ids_page1 = client.list_project_ids(&0, &3);
+    assert_eq!(ids_page1.len(), 3);
+    let ids_page2 = client.list_project_ids(&3, &3);
+    assert_eq!(ids_page2.len(), 2);
+}
+
+#[test]
+fn test_list_projects_bounds() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice, bob]),
+        Vec::from_slice(&env, &[5000u32, 5000u32]),
+    );
+
+    client.create_project(
+        &owner,
+        &Symbol::new(&env, "only_project"),
+        &String::from_str(&env, "Only Project"),
+        &String::from_str(&env, "music"),
+        &token,
+        &collabs,
+    );
+
+    // Start beyond total
+    let projects = client.list_projects(&10, &5);
+    assert_eq!(projects.len(), 0);
+
+    // Limit larger than available
+    let projects = client.list_projects(&0, &100);
+    assert_eq!(projects.len(), 1);
+
+    // Start at exact end
+    let projects = client.list_projects(&1, &5);
+    assert_eq!(projects.len(), 0);
+}
+
+// ============================================================
 //  ISSUE #49 — get_project_ids TESTS
 // ============================================================
 
@@ -778,7 +927,6 @@ fn test_get_project_ids_returns_ids_in_creation_order() {
         &collabs,
     );
 
-    // Fetch all 3
     let ids = client.get_project_ids(&0u32, &10u32);
     assert_eq!(ids.len(), 3);
     assert_eq!(ids.get(0u32).unwrap(), id_a);

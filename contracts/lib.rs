@@ -70,8 +70,8 @@ pub enum DataKey {
     Claimed(Symbol, Address),
     /// Total project count (for enumeration)
     ProjectCount,
-    /// Ordered project ID at creation index i (for get_project_ids)
-    ProjectId(u32),
+    /// Stores all project IDs in order for enumeration
+    ProjectIds,
     /// Contract admin for global allowlist management
     Admin,
     /// Number of allowlisted token contract addresses
@@ -109,7 +109,11 @@ impl SplitNairaContract {
     /// If admin is not set yet, `admin` must authorize this call.
     /// If admin is already set, the current admin must authorize this call.
     pub fn set_admin(env: Env, admin: Address) -> Result<(), SplitError> {
-        if let Some(current_admin) = env.storage().persistent().get::<DataKey, Address>(&DataKey::Admin) {
+        if let Some(current_admin) = env
+            .storage()
+            .persistent()
+            .get::<DataKey, Address>(&DataKey::Admin)
+        {
             current_admin.require_auth();
         } else {
             admin.require_auth();
@@ -226,7 +230,7 @@ impl SplitNairaContract {
             .set(&DataKey::ProjectBalance(project_id.clone()), &0i128);
         Self::bump_project_ttl(&env, &project_id);
 
-        // Increment global project count and record ID at its index
+        // Increment global project count
         let count: u32 = env
             .storage()
             .persistent()
@@ -234,10 +238,18 @@ impl SplitNairaContract {
             .unwrap_or(0);
         env.storage()
             .persistent()
-            .set(&DataKey::ProjectId(count), &project_id);
+            .set(&DataKey::ProjectCount, &(count + 1));
+
+        // Add project_id to the index for enumeration
+        let mut project_ids: Vec<Symbol> = env
+            .storage()
+            .persistent()
+            .get::<DataKey, Vec<Symbol>>(&DataKey::ProjectIds)
+            .unwrap_or(Vec::new(&env));
+        project_ids.push_back(project_id.clone());
         env.storage()
             .persistent()
-            .set(&DataKey::ProjectCount, &(count + 1));
+            .set(&DataKey::ProjectIds, &project_ids);
 
         // Emit creation event
         SplitEvents::project_created(&env, &project_id, &owner);
@@ -476,6 +488,78 @@ impl SplitNairaContract {
             .unwrap_or(0)
     }
 
+    /// Returns a list of projects with pagination.
+    /// Does not bump TTL to avoid excessive storage writes during listing.
+    ///
+    /// # Arguments
+    /// * `start` - Starting index (0-based)
+    /// * `limit` - Maximum number of projects to return
+    ///
+    /// # Returns
+    /// Vector of SplitProject structs
+    pub fn list_projects(env: Env, start: u32, limit: u32) -> Vec<SplitProject> {
+        let project_ids: Vec<Symbol> = env
+            .storage()
+            .persistent()
+            .get::<DataKey, Vec<Symbol>>(&DataKey::ProjectIds)
+            .unwrap_or(Vec::new(&env));
+
+        let total = project_ids.len();
+        if start >= total {
+            return Vec::new(&env);
+        }
+
+        let end = (start + limit).min(total);
+        let mut result = Vec::new(&env);
+
+        for i in start..end {
+            if let Some(project_id) = project_ids.get(i) {
+                if let Some(project) = env
+                    .storage()
+                    .persistent()
+                    .get::<DataKey, SplitProject>(&DataKey::Project(project_id))
+                {
+                    result.push_back(project);
+                }
+            }
+        }
+
+        result
+    }
+
+    /// Returns a list of project IDs with pagination.
+    /// Does not bump TTL to avoid excessive storage writes during listing.
+    ///
+    /// # Arguments
+    /// * `start` - Starting index (0-based)
+    /// * `limit` - Maximum number of IDs to return
+    ///
+    /// # Returns
+    /// Vector of project ID Symbols
+    pub fn list_project_ids(env: Env, start: u32, limit: u32) -> Vec<Symbol> {
+        let project_ids: Vec<Symbol> = env
+            .storage()
+            .persistent()
+            .get::<DataKey, Vec<Symbol>>(&DataKey::ProjectIds)
+            .unwrap_or(Vec::new(&env));
+
+        let total = project_ids.len();
+        if start >= total {
+            return Vec::new(&env);
+        }
+
+        let end = (start + limit).min(total);
+        let mut result = Vec::new(&env);
+
+        for i in start..end {
+            if let Some(project_id) = project_ids.get(i) {
+                result.push_back(project_id);
+            }
+        }
+
+        result
+    }
+
     /// Returns the project-scoped distributable balance.
     pub fn get_balance(env: Env, project_id: Symbol) -> Result<i128, SplitError> {
         Self::get_project_or_err(&env, &project_id)?;
@@ -503,7 +587,9 @@ impl SplitNairaContract {
 
     /// Returns the configured contract admin, if set.
     pub fn get_admin(env: Env) -> Option<Address> {
-        env.storage().persistent().get::<DataKey, Address>(&DataKey::Admin)
+        env.storage()
+            .persistent()
+            .get::<DataKey, Address>(&DataKey::Admin)
     }
 
     /// Returns a paginated list of project IDs (Symbols) in creation order.
@@ -514,20 +600,21 @@ impl SplitNairaContract {
     ///
     /// Returns an empty Vec when `start` is beyond the total project count.
     pub fn get_project_ids(env: Env, start: u32, limit: u32) -> Vec<Symbol> {
-        let count: u32 = env
+        let project_ids: Vec<Symbol> = env
             .storage()
             .persistent()
-            .get::<DataKey, u32>(&DataKey::ProjectCount)
-            .unwrap_or(0);
+            .get::<DataKey, Vec<Symbol>>(&DataKey::ProjectIds)
+            .unwrap_or(Vec::new(&env));
 
+        let total = project_ids.len();
+        if start >= total {
+            return Vec::new(&env);
+        }
+
+        let end = (start + limit).min(total);
         let mut ids = Vec::new(&env);
-        let end = (start + limit).min(count);
         for i in start..end {
-            if let Some(id) = env
-                .storage()
-                .persistent()
-                .get::<DataKey, Symbol>(&DataKey::ProjectId(i))
-            {
+            if let Some(id) = project_ids.get(i) {
                 ids.push_back(id);
             }
         }
