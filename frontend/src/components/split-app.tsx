@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { rpc, Transaction, StrKey } from "@stellar/stellar-sdk";
 import { clsx } from "clsx";
 
 import {
   buildCreateSplitXdr,
   buildDistributeXdr,
+  buildLockProjectXdr,
   getProjectHistory,
   getSplit,
   type ProjectHistoryItem,
 } from "@/lib/api";
+import { isOwner } from "@/lib/address";
 import {
   connectFreighter,
   getFreighterWalletState,
@@ -68,8 +70,11 @@ export function SplitApp() {
   );
   const [isFetchingProject, setIsFetchingProject] = useState(false);
   const [showDistributeModal, setShowDistributeModal] = useState(false);
+  const [showLockModal, setShowLockModal] = useState(false);
+  const [isLocking, setIsLocking] = useState(false);
   const [history, setHistory] = useState<ProjectHistoryItem[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const lockModalRef = useRef<HTMLDivElement | null>(null);
 
   // Phase 3: Projects tab state
   const [projectsList, setProjectsList] = useState<SplitProject[]>([]);
@@ -322,6 +327,98 @@ export function SplitApp() {
       showToast(message, "error");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const isProjectOwner = useMemo(() => {
+    if (!fetchedProject) {
+      return false;
+    }
+
+    return isOwner(fetchedProject.owner, wallet.address);
+  }, [fetchedProject, wallet.address]);
+
+  const canLockProject = Boolean(fetchedProject && !fetchedProject.locked && isProjectOwner);
+
+  useEffect(() => {
+    if (!showLockModal) {
+      return;
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !isLocking) {
+        setShowLockModal(false);
+      }
+    };
+
+    const handleTabTrap = (event: KeyboardEvent) => {
+      if (event.key !== "Tab" || !lockModalRef.current) {
+        return;
+      }
+
+      const focusableElements = lockModalRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+
+      if (focusableElements.length === 0) {
+        return;
+      }
+
+      const first = focusableElements[0];
+      const last = focusableElements[focusableElements.length - 1];
+      const active = document.activeElement;
+
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    const focusableElements = lockModalRef.current?.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    focusableElements?.[0]?.focus();
+
+    document.addEventListener("keydown", handleEscape);
+    document.addEventListener("keydown", handleTabTrap);
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+      document.removeEventListener("keydown", handleTabTrap);
+    };
+  }, [showLockModal, isLocking]);
+
+  const onLockProject = async () => {
+    if (!fetchedProject || !wallet.address) {
+      return;
+    }
+
+    setIsLocking(true);
+    setTxHash(null);
+    try {
+      const { xdr, metadata } = await buildLockProjectXdr(fetchedProject.projectId, wallet.address);
+      const signedTxXdr = await signWithFreighter(xdr, metadata.networkPassphrase);
+      const server = new rpc.Server(
+        process.env.NEXT_PUBLIC_SOROBAN_RPC_URL ?? "https://soroban-testnet.stellar.org",
+        { allowHttp: true }
+      );
+      const transaction = new Transaction(signedTxXdr, metadata.networkPassphrase);
+      const submitResponse = await server.sendTransaction(transaction);
+      if (submitResponse.status === "ERROR") {
+        throw new Error(submitResponse.errorResult?.toString() ?? "Project lock transaction failed.");
+      }
+
+      setTxHash(submitResponse.hash ?? null);
+      setFetchedProject((prev) => (prev ? { ...prev, locked: true } : prev));
+      setShowLockModal(false);
+      showToast("Project locked permanently.", "success");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to lock project.";
+      showToast(message, "error");
+    } finally {
+      setIsLocking(false);
     }
   };
 
@@ -932,6 +1029,22 @@ export function SplitApp() {
                       {fetchedProject.projectId}
                     </p>
                   </div>
+                  {fetchedProject.locked ? (
+                    <div className="rounded-2xl border border-amber-400/40 bg-amber-400/10 px-4 py-3 text-amber-200">
+                      <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
+                        <span aria-hidden="true">🔒</span>
+                        Split locked - immutable
+                      </p>
+                    </div>
+                  ) : canLockProject ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowLockModal(true)}
+                      className="premium-button rounded-2xl border border-red-400/30 bg-red-500/10 px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-red-300 transition hover:bg-red-500/20"
+                    >
+                      Lock Project
+                    </button>
+                  ) : null}
                   <div className="text-right space-y-1">
                     <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">
                       Available Funds
@@ -947,9 +1060,16 @@ export function SplitApp() {
 
                 <div className="mt-10 grid gap-10 md:grid-cols-2">
                   <div className="space-y-6">
-                    <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-muted border-l-2 border-greenBright pl-4">
-                      Distribution Rules
-                    </h3>
+                    <div className="space-y-2">
+                      <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-muted border-l-2 border-greenBright pl-4">
+                        Distribution Rules
+                      </h3>
+                      {fetchedProject.locked && (
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-amber-300">
+                          Locked state active: split configuration is immutable.
+                        </p>
+                      )}
+                    </div>
                     <div className="space-y-3">
                       {fetchedProject.collaborators.map((collab, idx) => (
                         <div
@@ -1094,7 +1214,7 @@ export function SplitApp() {
                                   <>
                                     To:{" "}
                                     <span className="text-ink font-mono">
-                                      {item.recipient.slice(0, 8)}...
+                                      {item.recipient?.slice(0, 8) ?? "Unknown"}...
                                     </span>{" "}
                                     Amount:{" "}
                                     <span className="text-ink">
@@ -1319,7 +1439,7 @@ export function SplitApp() {
                                   {item.type === "round" ? (
                                     <>Total: <span className="text-ink">{Number(item.amount).toLocaleString()}</span> Stroops</>
                                   ) : (
-                                    <>To: <span className="text-ink font-mono">{item.recipient.slice(0, 8)}...</span> Amount: <span className="text-ink">{Number(item.amount).toLocaleString()}</span></>
+                                    <>To: <span className="text-ink font-mono">{item.recipient?.slice(0, 8) ?? "Unknown"}...</span> Amount: <span className="text-ink">{Number(item.amount).toLocaleString()}</span></>
                                   )}
                                 </p>
                                 <a
@@ -1421,6 +1541,54 @@ export function SplitApp() {
                 onClick={() => setShowDistributeModal(false)}
                 disabled={isSubmitting}
                 className="premium-button w-full rounded-2xl border border-white/10 py-5 text-xs font-bold uppercase tracking-[0.2em] text-muted hover:text-ink hover:bg-white/5"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLockModal && fetchedProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0a0a09]/80 p-6 backdrop-blur-xl animate-in fade-in duration-300">
+          <div
+            ref={lockModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="lock-project-title"
+            aria-describedby="lock-project-warning"
+            className="glass-card w-full max-w-lg rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-10 duration-500"
+          >
+            <h2 id="lock-project-title" className="font-display text-3xl">
+              Lock this project?
+            </h2>
+            <p className="mt-4 text-sm text-muted leading-relaxed">
+              You are about to permanently lock
+              {" "}
+              <span className="text-ink font-bold italic">&quot;{fetchedProject.title}&quot;</span>.
+            </p>
+
+            <div id="lock-project-warning" className="mt-6 rounded-2xl border border-red-400/40 bg-red-500/10 p-4">
+              <p className="text-xs font-bold uppercase tracking-widest text-red-300">Permanent action</p>
+              <p className="mt-2 text-sm font-semibold text-red-200">
+                This action is permanent and cannot be undone. Once locked, the split configuration can never be changed.
+              </p>
+            </div>
+
+            <div className="mt-10 flex flex-col gap-4">
+              <button
+                type="button"
+                onClick={onLockProject}
+                disabled={isLocking}
+                className="premium-button w-full rounded-2xl bg-red-500 py-5 text-xs font-black uppercase tracking-[0.3em] text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isLocking ? "Locking..." : "Lock Project"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowLockModal(false)}
+                disabled={isLocking}
+                className="premium-button w-full rounded-2xl border border-white/10 py-5 text-xs font-bold uppercase tracking-[0.2em] text-muted hover:bg-white/5 hover:text-ink"
               >
                 Cancel
               </button>

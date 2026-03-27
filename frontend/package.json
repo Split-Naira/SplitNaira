@@ -7,7 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint . --max-warnings=0"
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run"
   },
   "dependencies": {
     "@stellar/freighter-api": "latest",
@@ -23,6 +24,9 @@
     "@typescript-eslint/parser": "latest",
     "@types/node": "latest",
     "@types/react": "latest",
+    "@testing-library/jest-dom": "latest",
+    "@testing-library/react": "latest",
+    "@testing-library/user-event": "latest",
     "autoprefixer": "latest",
     "@tailwindcss/postcss": "latest",
     "eslint": "latest",
@@ -32,6 +36,8 @@
     "globals": "latest",
     "postcss": "latest",
     "tailwindcss": "latest",
-    "typescript": "latest"
+    "typescript": "latest",
+    "vitest": "latest",
+    "jsdom": "latest"
   }
 }
