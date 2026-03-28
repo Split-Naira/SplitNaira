@@ -6,11 +6,11 @@ use soroban_sdk::{
 
 mod errors;
 mod events;
+use events::{DepositReceived, DistributionComplete, MetadataUpdated, PaymentSent, ProjectCreated, ProjectLocked, UnallocatedWithdrawn};
 #[cfg(test)]
 mod tests;
 
 use errors::SplitError;
-use events::SplitEvents;
 
 // Keep active projects alive by extending persistent TTL whenever they are
 // created, mutated, distributed, or read.
@@ -80,7 +80,8 @@ pub enum DataKey {
     AllowedTokenCount,
     /// Allowlisted token contract address marker
     AllowedToken(Address),
-}
+    /// Global flag to pause all distributions (emergency stop)
+    DistributionsPaused,
 
 /// Returned by `get_claimable`: how much a collaborator has received and the
 /// last distribution round the project has completed.
@@ -122,6 +123,24 @@ impl SplitNairaContract {
         }
 
         env.storage().persistent().set(&DataKey::Admin, &admin);
+        Ok(())
+    }
+
+    /// Pauses all distributions (emergency stop). Only contract admin can call.
+    pub fn pause_distributions(env: Env, admin: Address) -> Result<(), SplitError> {
+        Self::require_contract_admin(&env, &admin)?;
+        admin.require_auth();
+
+        env.storage().persistent().set(&DataKey::DistributionsPaused, &true);
+        Ok(())
+    }
+
+    /// Unpauses distributions. Only contract admin can call.
+    pub fn unpause_distributions(env: Env, admin: Address) -> Result<(), SplitError> {
+        Self::require_contract_admin(&env, &admin)?;
+        admin.require_auth();
+
+        env.storage().persistent().set(&DataKey::DistributionsPaused, &false);
         Ok(())
     }
 
@@ -254,7 +273,7 @@ impl SplitNairaContract {
             .set(&DataKey::ProjectIds, &project_ids);
 
         // Emit creation event
-        SplitEvents::project_created(&env, &project_id, &owner);
+        ProjectCreated { project_id: project_id.clone(), owner: owner.clone() }.publish(&env);
 
         Ok(())
     }
@@ -323,7 +342,7 @@ impl SplitNairaContract {
             .persistent()
             .set(&DataKey::Project(project_id.clone()), &project);
 
-        SplitEvents::project_locked(&env, &project_id);
+        ProjectLocked { project_id: project_id.clone() }.publish(&env);
 
         Ok(())
     }
@@ -362,7 +381,7 @@ impl SplitNairaContract {
             .persistent()
             .set(&DataKey::ProjectBalance(project_id.clone()), &new_balance);
 
-        SplitEvents::deposit_received(&env, &project_id, &from, amount);
+        DepositReceived { project_id: project_id.clone(), from: from.clone(), amount, project_balance: new_balance }.publish(&env);
 
         Ok(())
     }
@@ -385,6 +404,16 @@ impl SplitNairaContract {
     /// * `SplitError::NoBalance`  - if contract has zero balance
     pub fn distribute(env: Env, project_id: Symbol) -> Result<(), SplitError> {
         let mut project = Self::get_project_or_err(&env, &project_id)?;
+
+        // Check if distributions are paused
+        let paused: bool = env
+            .storage()
+            .persistent()
+            .get::<DataKey, bool>(&DataKey::DistributionsPaused)
+            .unwrap_or(false);
+        if paused {
+            return Err(SplitError::DistributionsPaused);
+        }
 
         // Read project-scoped distributable balance.
         let balance: i128 = env
@@ -430,7 +459,7 @@ impl SplitNairaContract {
 
                 total_sent += amount;
 
-                SplitEvents::payment_sent(&env, &project_id, &collab.address, amount);
+                PaymentSent { project_id: project_id.clone(), recipient: collab.address.clone(), amount }.publish(&env);
             }
         }
 
@@ -447,12 +476,7 @@ impl SplitNairaContract {
             .set(&DataKey::Project(project_id.clone()), &project);
         Self::bump_project_ttl(&env, &project_id);
 
-        SplitEvents::distribution_complete(
-            &env,
-            &project_id,
-            project.distribution_round,
-            total_sent,
-        );
+        DistributionComplete { project_id: project_id.clone(), round: project.distribution_round, total: total_sent }.publish(&env);
 
         Ok(())
     }
@@ -585,7 +609,7 @@ impl SplitNairaContract {
         token_client.transfer(&contract_address, &to, &amount);
 
         let remaining = available - amount;
-        SplitEvents::unallocated_withdrawn(&env, &token, &admin, &to, amount, remaining);
+        UnallocatedWithdrawn { token: token.clone(), admin: admin.clone(), to: to.clone(), amount, remaining_unallocated: remaining }.publish(&env);
 
         Ok(())
     }
@@ -596,7 +620,13 @@ impl SplitNairaContract {
             .persistent()
             .has(&DataKey::AllowedToken(token))
     }
-
+    /// Returns true if distributions are currently paused.
+    pub fn is_distributions_paused(env: Env) -> bool {
+        env.storage()
+            .persistent()
+            .get::<DataKey, bool>(&DataKey::DistributionsPaused)
+            .unwrap_or(false)
+    }
     /// Returns the number of allowlisted token addresses.
     pub fn get_allowed_token_count(env: Env) -> u32 {
         env.storage()
@@ -698,7 +728,7 @@ impl SplitNairaContract {
             .set(&DataKey::Project(project_id.clone()), &project);
         Self::bump_project_ttl(&env, &project_id);
 
-        SplitEvents::metadata_updated(&env, &project_id);
+        MetadataUpdated { project_id: project_id.clone() }.publish(&env);
 
         Ok(())
     }

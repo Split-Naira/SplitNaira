@@ -3,7 +3,7 @@
 use super::*;
 use soroban_sdk::{
     testutils::{Address as _, Events as _},
-    token, Address, Env, String, Symbol, Vec,
+    token, Address, Env, String, Symbol, Vec, vec,
 };
 
 // ============================================================
@@ -1035,9 +1035,33 @@ fn test_deposit_emits_deposit_received_event() {
     // Verify balance was credited correctly
     assert_eq!(client.get_balance(&project_id), amount);
 
-    // Verify that at least two events were emitted:
-    // 1) project_created  2) deposit_received
-    assert!(env.events().all().len() >= 2);
+    // Verify that exactly two relevant events were emitted:
+    // 1) project_created  2) deposit_received (with updated project balance)
+    let expected_events = vec![
+        (
+            contract_id.clone(),
+            Vec::from_slice(
+                &env,
+                &[
+                    Symbol::new(&env, "project_created"),
+                    project_id.clone(),
+                ],
+            ),
+            owner.clone(),
+        ),
+        (
+            contract_id.clone(),
+            Vec::from_slice(
+                &env,
+                &[
+                    Symbol::new(&env, "deposit_received"),
+                    project_id.clone(),
+                ],
+            ),
+            (funder.clone(), amount, amount),
+        ),
+    ];
+    assert_eq!(env.events().all(), expected_events);
 }
 
 // ============================================================
@@ -1123,6 +1147,93 @@ fn test_get_claimable_after_distribution() {
     let outsider_info = client.get_claimable(&project_id, &outsider);
     assert_eq!(outsider_info.claimed, 0);
     assert_eq!(outsider_info.distribution_round, 1);
+}
+
+// ============================================================
+//  ISSUE #56 — PAUSE DISTRIBUTIONS TESTS
+// ============================================================
+
+#[test]
+fn test_pause_distributions_requires_admin() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let unauthorized = Address::generate(&env);
+
+    let result = client.try_pause_distributions(&unauthorized);
+    assert_eq!(result, Err(Ok(SplitError::AdminNotSet)));
+}
+
+#[test]
+fn test_pause_and_unpause_distributions() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    client.set_admin(&admin);
+
+    // Initially not paused
+    assert_eq!(client.is_distributions_paused(), false);
+
+    // Pause
+    client.pause_distributions(&admin);
+    assert_eq!(client.is_distributions_paused(), true);
+
+    // Unpause
+    client.unpause_distributions(&admin);
+    assert_eq!(client.is_distributions_paused(), false);
+}
+
+#[test]
+fn test_distribute_fails_when_paused() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    client.set_admin(&admin);
+
+    let owner = Address::generate(&env);
+    let funder = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice, bob]),
+        Vec::from_slice(&env, &[5000u32, 5000u32]),
+    );
+
+    let project_id = Symbol::new(&env, "paused_distribute");
+    client.create_project(
+        &owner,
+        &project_id,
+        &String::from_str(&env, "Paused Distribute"),
+        &String::from_str(&env, "music"),
+        &token,
+        &collabs,
+    );
+
+    // Deposit funds
+    deposit_to_project(&env, &client, &token, &project_id, &funder, 1000_0000000i128);
+    assert_eq!(client.get_balance(&project_id), 1000_0000000i128);
+
+    // Pause distributions
+    client.pause_distributions(&admin);
+    assert_eq!(client.is_distributions_paused(), true);
+
+    // Distribute should fail
+    let result = client.try_distribute(&project_id);
+    assert_eq!(result, Err(Ok(SplitError::DistributionsPaused)));
+
+    // Unpause
+    client.unpause_distributions(&admin);
+    assert_eq!(client.is_distributions_paused(), false);
+
+    // Now distribute should succeed
+    client.distribute(&project_id);
+    assert_eq!(client.get_balance(&project_id), 0);
 }
 
 #[test]

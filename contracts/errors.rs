@@ -49,4 +49,7 @@ pub enum SplitError {
 
     /// Requested unallocated withdrawal exceeds available amount
     InsufficientUnallocated = 15,
+
+    /// Distributions are currently paused by admin
+    DistributionsPaused = 16,
 }
