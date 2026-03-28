@@ -3,7 +3,7 @@
 use super::*;
 use soroban_sdk::{
     testutils::{Address as _, Events as _},
-    token, Address, Env, String, Symbol, Vec,
+    token, Address, Env, String, Symbol, Vec, vec,
 };
 
 // ============================================================
