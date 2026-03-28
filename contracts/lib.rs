@@ -6,11 +6,11 @@ use soroban_sdk::{
 
 mod errors;
 mod events;
+use events::{DepositReceived, DistributionComplete, MetadataUpdated, PaymentSent, ProjectCreated, ProjectLocked, UnallocatedWithdrawn};
 #[cfg(test)]
 mod tests;
 
 use errors::SplitError;
-use events::SplitEvents;
 
 // Keep active projects alive by extending persistent TTL whenever they are
 // created, mutated, distributed, or read.
@@ -254,7 +254,7 @@ impl SplitNairaContract {
             .set(&DataKey::ProjectIds, &project_ids);
 
         // Emit creation event
-        SplitEvents::project_created(&env, &project_id, &owner);
+        ProjectCreated { project_id: project_id.clone(), owner: owner.clone() }.publish(&env);
 
         Ok(())
     }
@@ -323,7 +323,7 @@ impl SplitNairaContract {
             .persistent()
             .set(&DataKey::Project(project_id.clone()), &project);
 
-        SplitEvents::project_locked(&env, &project_id);
+        ProjectLocked { project_id: project_id.clone() }.publish(&env);
 
         Ok(())
     }
@@ -362,7 +362,7 @@ impl SplitNairaContract {
             .persistent()
             .set(&DataKey::ProjectBalance(project_id.clone()), &new_balance);
 
-        SplitEvents::deposit_received(&env, &project_id, &from, amount);
+        DepositReceived { project_id: project_id.clone(), from: from.clone(), amount, project_balance: new_balance }.publish(&env);
 
         Ok(())
     }
@@ -430,7 +430,7 @@ impl SplitNairaContract {
 
                 total_sent += amount;
 
-                SplitEvents::payment_sent(&env, &project_id, &collab.address, amount);
+                PaymentSent { project_id: project_id.clone(), recipient: collab.address.clone(), amount }.publish(&env);
             }
         }
 
@@ -447,12 +447,7 @@ impl SplitNairaContract {
             .set(&DataKey::Project(project_id.clone()), &project);
         Self::bump_project_ttl(&env, &project_id);
 
-        SplitEvents::distribution_complete(
-            &env,
-            &project_id,
-            project.distribution_round,
-            total_sent,
-        );
+        DistributionComplete { project_id: project_id.clone(), round: project.distribution_round, total: total_sent }.publish(&env);
 
         Ok(())
     }
@@ -585,7 +580,7 @@ impl SplitNairaContract {
         token_client.transfer(&contract_address, &to, &amount);
 
         let remaining = available - amount;
-        SplitEvents::unallocated_withdrawn(&env, &token, &admin, &to, amount, remaining);
+        UnallocatedWithdrawn { token: token.clone(), admin: admin.clone(), to: to.clone(), amount, remaining_unallocated: remaining }.publish(&env);
 
         Ok(())
     }
@@ -698,7 +693,7 @@ impl SplitNairaContract {
             .set(&DataKey::Project(project_id.clone()), &project);
         Self::bump_project_ttl(&env, &project_id);
 
-        SplitEvents::metadata_updated(&env, &project_id);
+        MetadataUpdated { project_id: project_id.clone() }.publish(&env);
 
         Ok(())
     }

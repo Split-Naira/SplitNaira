@@ -226,6 +226,12 @@ GitHub Actions runs the following checks:
 - Backend: `npm run lint`, `npm run build`
 - Contracts: `cargo test`
 
+## Contract release runbook
+
+- Main runbook: [docs/contract-release-and-upgrade-runbook.md](./docs/contract-release-and-upgrade-runbook.md)
+- Readiness checklist: [docs/release-readiness-checklist.md](./docs/release-readiness-checklist.md)
+- Soroban setup: [docs/SOROBAN_SETUP.md](./docs/SOROBAN_SETUP.md)
+
 ## Backend CD
 
 - Backend deployment workflow: `.github/workflows/backend-deploy.yml`
