@@ -166,3 +166,85 @@ describe("SplitApp lock project flow", () => {
     });
   });
 });
+
+describe("SplitApp distribute flow", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.mockGetFreighterWalletState.mockResolvedValue({
+      connected: true,
+      address: "GOWNER123",
+      network: "testnet"
+    });
+    mocks.mockGetProjectHistory.mockResolvedValue([]);
+    mocks.mockGetSplit.mockResolvedValue({ ...baseProject, balance: "5000" });
+    mocks.mockSignWithFreighter.mockResolvedValue("SIGNED_XDR");
+    mocks.mockBuildDistributeXdr.mockResolvedValue({
+      xdr: "DISTRIBUTE_XDR",
+      metadata: { networkPassphrase: "TESTNET", contractId: "CID" }
+    });
+    mocks.mockSendTransaction.mockResolvedValue({ status: "PENDING", hash: "DIST_TX_HASH" });
+  });
+
+  it("shows distribute button when project has balance and wallet connected", async () => {
+    await loadProject();
+    expect(screen.getByRole("button", { name: "Trigger Distribution" })).toBeInTheDocument();
+  });
+
+  it("opens distribution modal with Final Confirmation heading", async () => {
+    const user = await loadProject();
+    await user.click(screen.getByRole("button", { name: "Trigger Distribution" }));
+
+    expect(screen.getByRole("heading", { name: "Final Confirmation" })).toBeInTheDocument();
+    expect(screen.getByText(/Splitting/)).toBeInTheDocument();
+    expect(screen.getByText("5,000 stroops")).toBeInTheDocument();
+  });
+
+  it("shows collaborator payment preview in modal", async () => {
+    const user = await loadProject();
+    await user.click(screen.getByRole("button", { name: "Trigger Distribution" }));
+
+    const modal = screen.getByRole("heading", { name: "Final Confirmation" }).parentElement;
+    expect(within(modal!).getByText("60.00% Share")).toBeInTheDocument();
+    expect(within(modal!).getByText("40.00% Share")).toBeInTheDocument();
+  });
+
+  it("cancels distribution when cancel button clicked", async () => {
+    const user = await loadProject();
+    await user.click(screen.getByRole("button", { name: "Trigger Distribution" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("heading", { name: "Final Confirmation" })).not.toBeInTheDocument();
+    });
+    expect(mocks.mockBuildDistributeXdr).not.toHaveBeenCalled();
+  });
+
+  it("executes distribution and calls buildDistributeXdr", async () => {
+    const user = await loadProject();
+    await user.click(screen.getByRole("button", { name: "Trigger Distribution" }));
+    await user.click(screen.getByRole("button", { name: "Execute Payout" }));
+
+    await waitFor(() => {
+      expect(mocks.mockBuildDistributeXdr).toHaveBeenCalledWith("project_1", "GOWNER123");
+    });
+  });
+
+  it("disables distribute button when wallet not connected", async () => {
+    mocks.mockGetFreighterWalletState.mockResolvedValue({
+      connected: false,
+      address: null,
+      network: null
+    });
+
+    await loadProject();
+    expect(screen.getByRole("button", { name: "Trigger Distribution" })).toBeDisabled();
+  });
+
+  it("disables distribute button when balance is zero", async () => {
+    mocks.mockGetSplit.mockResolvedValue({ ...baseProject, balance: "0" });
+
+    await loadProject();
+    expect(screen.getByRole("button", { name: "Trigger Distribution" })).toBeDisabled();
+    expect(screen.getByText("No funds available to distribute")).toBeInTheDocument();
+  });
+});

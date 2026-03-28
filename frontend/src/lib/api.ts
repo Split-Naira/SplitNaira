@@ -28,15 +28,6 @@ interface BuildSplitResponse {
     contractId: string;
   };
 }
-export interface ProjectHistoryItem {
-  id: string;
-  type: "round" | "payment";
-  txHash: string;
-  ledgerCloseTime: string;
-  round?: number;
-  amount: string;
-  recipient?: string;
-}
 function toErrorMessage(status: number, payload: unknown, fallback: string) {
   if (payload && typeof payload === "object" && "message" in payload) {
     const message = (payload as { message?: unknown }).message;
