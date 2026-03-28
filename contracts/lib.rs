@@ -362,7 +362,7 @@ impl SplitNairaContract {
             .persistent()
             .set(&DataKey::ProjectBalance(project_id.clone()), &new_balance);
 
-        SplitEvents::deposit_received(&env, &project_id, &from, amount);
+        SplitEvents::deposit_received(&env, &project_id, &from, amount, new_balance);
 
         Ok(())
     }

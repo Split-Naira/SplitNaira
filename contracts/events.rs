@@ -56,11 +56,17 @@ impl SplitEvents {
     /// Emitted on every successful deposit into a project.
     ///
     /// Topics:  ["deposit_received", project_id]
-    /// Data:    (from address, amount in stroops)
-    pub fn deposit_received(env: &Env, project_id: &Symbol, from: &Address, amount: i128) {
+    /// Data:    (from address, amount in stroops, project_balance in stroops)
+    pub fn deposit_received(
+        env: &Env,
+        project_id: &Symbol,
+        from: &Address,
+        amount: i128,
+        project_balance: i128,
+    ) {
         env.events().publish(
             (Symbol::new(env, "deposit_received"), project_id.clone()),
-            (from.clone(), amount),
+            (from.clone(), amount, project_balance),
         );
     }
 

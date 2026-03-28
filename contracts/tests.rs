@@ -1035,9 +1035,33 @@ fn test_deposit_emits_deposit_received_event() {
     // Verify balance was credited correctly
     assert_eq!(client.get_balance(&project_id), amount);
 
-    // Verify that at least two events were emitted:
-    // 1) project_created  2) deposit_received
-    assert!(env.events().all().len() >= 2);
+    // Verify that exactly two relevant events were emitted:
+    // 1) project_created  2) deposit_received (with updated project balance)
+    let expected_events = vec![
+        (
+            contract_id.clone(),
+            Vec::from_slice(
+                &env,
+                &[
+                    Symbol::new(&env, "project_created"),
+                    project_id.clone(),
+                ],
+            ),
+            owner.clone(),
+        ),
+        (
+            contract_id.clone(),
+            Vec::from_slice(
+                &env,
+                &[
+                    Symbol::new(&env, "deposit_received"),
+                    project_id.clone(),
+                ],
+            ),
+            (funder.clone(), amount, amount),
+        ),
+    ];
+    assert_eq!(env.events().all(), expected_events);
 }
 
 // ============================================================
