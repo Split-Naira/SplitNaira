@@ -7,14 +7,16 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^14.6.1",
     "cors": "latest",
-    "express-rate-limit": "latest",
     "dotenv": "latest",
     "express": "latest",
+    "express-rate-limit": "latest",
     "helmet": "latest",
     "morgan": "latest",
     "zod": "latest"
@@ -25,11 +27,15 @@
     "@types/express": "latest",
     "@types/morgan": "latest",
     "@types/node": "latest",
+    "@types/supertest": "^7.2.0",
     "@typescript-eslint/eslint-plugin": "latest",
     "@typescript-eslint/parser": "latest",
+    "@vitest/coverage-v8": "^4.1.2",
     "eslint": "latest",
     "globals": "latest",
+    "supertest": "^7.2.2",
     "tsx": "latest",
-    "typescript": "latest"
+    "typescript": "latest",
+    "vitest": "^4.1.2"
   }
 }
