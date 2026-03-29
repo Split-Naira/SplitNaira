@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { RequestValidationError } from "../services/stellar.js";
 
 export function notFoundHandler(_req: Request, res: Response) {
   res.status(404).json({
@@ -15,6 +16,16 @@ export function errorHandler(
   _next: NextFunction
 ) {
   const requestId = res.locals.requestId;
+
+  if (err instanceof RequestValidationError) {
+    res.status(400).json({
+      error: "validation_error",
+      message: err.message,
+      requestId
+    });
+    return;
+  }
+
   console.error({ requestId, err });
   res.status(500).json({
     error: "internal_error",

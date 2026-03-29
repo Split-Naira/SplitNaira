@@ -546,12 +546,14 @@ const distributeSchema = z.object({
 
 splitsRouter.post("/:projectId/distribute", async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const requestId = res.locals.requestId;
     const projectIdRaw = req.params.projectId;
     const projectId = typeof projectIdRaw === "string" ? projectIdRaw.trim() : "";
     if (!projectId) {
       return res.status(400).json({
         error: "validation_error",
-        message: "projectId is required"
+        message: "projectId is required",
+        requestId
       });
     }
 
@@ -560,7 +562,8 @@ splitsRouter.post("/:projectId/distribute", async (req: Request, res: Response, 
       return res.status(400).json({
         error: "validation_error",
         message: "Invalid request payload.",
-        details: parsed.error.flatten()
+        details: parsed.error.flatten(),
+        requestId
       });
     }
 
@@ -574,7 +577,8 @@ splitsRouter.post("/:projectId/distribute", async (req: Request, res: Response, 
     } catch {
       return res.status(400).json({
         error: "validation_error",
-        message: "source account not found on selected network"
+        message: "source account not found on selected network",
+        requestId
       });
     }
 
@@ -607,12 +611,14 @@ splitsRouter.post("/:projectId/distribute", async (req: Request, res: Response, 
 
 splitsRouter.get("/:projectId/history", async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const requestId = res.locals.requestId;
     const projectIdRaw = req.params.projectId;
     const projectId = typeof projectIdRaw === "string" ? projectIdRaw.trim() : "";
     if (!projectId) {
       return res.status(400).json({
         error: "validation_error",
-        message: "projectId is required"
+        message: "projectId is required",
+        requestId
       });
     }
 
