@@ -74,9 +74,55 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 if (process.env.NODE_ENV !== "test") {
-  const port = Number(process.env.PORT ?? 3001);
-  app.listen(port, () => {
-    console.log(`SplitNaira API listening on :${port}`);
-  });
+  // Startup wrapper to allow clean fatal handling
+  const start = async () => {
+    try {
+      const port = Number(process.env.PORT ?? 3001);
+      const server = app.listen(port, () => {
+        console.log(`[startup] SplitNaira API listening on :${port}`);
+      });
+
+      // Graceful shutdown
+      const shutdown = (signal: NodeJS.Signals) => {
+        console.log(`[shutdown] Received ${signal}. Closing server...`);
+        // Stop accepting new connections and wait for in-flight to complete
+        server.close((err?: Error) => {
+          if (err) {
+            console.error("[shutdown] Error during server close:", err);
+            process.exit(1);
+          }
+          console.log("[shutdown] Server closed cleanly. Exiting.");
+          process.exit(0);
+        });
+
+        // Fallback: force exit after timeout
+        const forceTimeoutMs = Number(process.env.SHUTDOWN_FORCE_TIMEOUT_MS ?? 10_000);
+        setTimeout(() => {
+          console.warn("[shutdown] Force exiting after timeout.");
+          process.exit(1);
+        }, forceTimeoutMs).unref();
+      };
+
+      process.on("SIGINT", shutdown);
+      process.on("SIGTERM", shutdown);
+
+      // Fatal error handlers
+      process.on("unhandledRejection", (reason) => {
+        console.error("[fatal] Unhandled promise rejection:", reason);
+        // Exit to allow orchestrator to restart
+        process.exit(1);
+      });
+      process.on("uncaughtException", (err) => {
+        console.error("[fatal] Uncaught exception:", err);
+        process.exit(1);
+      });
+    } catch (err) {
+      console.error("[startup] Failed to start server:", err);
+      process.exit(1);
+    }
+  };
+  // Immediately invoke
+  // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  start();
 }
 

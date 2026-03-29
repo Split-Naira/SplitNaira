@@ -19,8 +19,23 @@ import {
 
 export const splitsRouter = Router();
 
+// Strict Stellar address validator used across schemas
+const stellarAddressSchema = z
+  .string()
+  .min(1, "address is required")
+  .superRefine((value, ctx) => {
+    try {
+      Address.fromString(value);
+    } catch {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "must be a valid Stellar address (classic or contract)"
+      });
+    }
+  });
+
 const collaboratorSchema = z.object({
-  address: z.string().min(1, "address is required"),
+  address: stellarAddressSchema,
   alias: z.string().min(1, "alias is required").max(64),
   basisPoints: z
     .number()
@@ -31,7 +46,7 @@ const collaboratorSchema = z.object({
 
 const createSplitSchema = z
   .object({
-    owner: z.string().min(1, "owner is required"),
+    owner: stellarAddressSchema.describe("owner"),
     projectId: z
       .string()
       .min(1, "projectId is required")
@@ -39,7 +54,7 @@ const createSplitSchema = z
       .regex(/^[a-zA-Z0-9_]+$/, "projectId must be alphanumeric/underscore"),
     title: z.string().min(1, "title is required").max(128),
     projectType: z.string().min(1, "projectType is required").max(32),
-    token: z.string().min(1, "token is required"),
+    token: stellarAddressSchema.describe("token"),
     collaborators: z.array(collaboratorSchema).min(2, "at least 2 collaborators are required")
   })
   .superRefine((payload, ctx) => {
@@ -76,12 +91,12 @@ const projectIdParamSchema = z
   .regex(/^[a-zA-Z0-9_]+$/, "projectId must be alphanumeric/underscore");
 
 const lockProjectSchema = z.object({
-  owner: z.string().min(1, "owner is required")
+  owner: stellarAddressSchema.describe("owner")
 });
 
 const updateCollaboratorsSchema = z
   .object({
-    owner: z.string().min(1, "owner is required"),
+    owner: stellarAddressSchema.describe("owner"),
     collaborators: z.array(collaboratorSchema).min(2, "at least 2 collaborators are required")
   })
   .superRefine((payload, ctx) => {
@@ -550,12 +565,14 @@ const distributeSchema = z.object({
 
 splitsRouter.post("/:projectId/distribute", async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const requestId = res.locals.requestId;
     const projectIdRaw = req.params.projectId;
     const projectId = typeof projectIdRaw === "string" ? projectIdRaw.trim() : "";
     if (!projectId) {
       return res.status(400).json({
         error: "validation_error",
-        message: "projectId is required"
+        message: "projectId is required",
+        requestId
       });
     }
 
@@ -564,7 +581,8 @@ splitsRouter.post("/:projectId/distribute", async (req: Request, res: Response, 
       return res.status(400).json({
         error: "validation_error",
         message: "Invalid request payload.",
-        details: parsed.error.flatten()
+        details: parsed.error.flatten(),
+        requestId
       });
     }
 
@@ -578,7 +596,8 @@ splitsRouter.post("/:projectId/distribute", async (req: Request, res: Response, 
     } catch {
       return res.status(400).json({
         error: "validation_error",
-        message: "source account not found on selected network"
+        message: "source account not found on selected network",
+        requestId
       });
     }
 
@@ -609,16 +628,34 @@ splitsRouter.post("/:projectId/distribute", async (req: Request, res: Response, 
   }
 });
 
+const historyQuerySchema = z.object({
+  cursor: z.string().default(""),
+  limit: z.coerce.number().int().min(1).max(200).default(100)
+});
+
 splitsRouter.get("/:projectId/history", async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const requestId = res.locals.requestId;
     const projectIdRaw = req.params.projectId;
     const projectId = typeof projectIdRaw === "string" ? projectIdRaw.trim() : "";
     if (!projectId) {
       return res.status(400).json({
         error: "validation_error",
-        message: "projectId is required"
+        message: "projectId is required",
+        requestId
       });
     }
+
+    const parsedQuery = historyQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      return res.status(400).json({
+        error: "validation_error",
+        message: "Invalid query parameters.",
+        details: parsedQuery.error.flatten(),
+        requestId
+      });
+    }
+    const { cursor, limit } = parsedQuery.data;
 
     const config = loadStellarConfig();
     const server = getStellarRpcServer();
@@ -628,7 +665,7 @@ splitsRouter.get("/:projectId/history", async (req: Request, res: Response, next
     const paymentTopic = nativeToScVal("payment_sent", { type: "symbol" }).toXDR("base64");
 
     const roundEventResponse = await server.getEvents({
-      cursor: "",
+      cursor,
       filters: [
         {
           type: "contract",
@@ -636,11 +673,11 @@ splitsRouter.get("/:projectId/history", async (req: Request, res: Response, next
           topics: [[roundTopic], [topicProjectId]]
         }
       ],
-      limit: 100
+      limit
     });
 
     const paymentEventResponse = await server.getEvents({
-      cursor: "",
+      cursor,
       filters: [
         {
           type: "contract",
@@ -648,7 +685,7 @@ splitsRouter.get("/:projectId/history", async (req: Request, res: Response, next
           topics: [[paymentTopic], [topicProjectId]]
         }
       ],
-      limit: 100
+      limit
     });
 
     const events = [
@@ -676,7 +713,19 @@ splitsRouter.get("/:projectId/history", async (req: Request, res: Response, next
       })
     ].sort((a, b) => b.ledgerCloseTime.localeCompare(a.ledgerCloseTime));
 
-    return res.status(200).json(events);
+    // Prefer the server-provided pagination cursor when available
+    const nextCursor =
+      // soroban-rpc getEvents commonly returns `cursor` for pagination
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ((roundEventResponse as any)?.cursor as string | undefined) ||
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ((paymentEventResponse as any)?.cursor as string | undefined) ||
+      null;
+
+    return res.status(200).json({
+      items: events,
+      nextCursor
+    });
   } catch (error) {
     return next(error);
   }
