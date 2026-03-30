@@ -92,7 +92,8 @@
           },
           "operation": {
             "type": "string",
-            "example": "lock_project"
+            "description": "The operation being performed. Possible values: create_project, lock_project, update_collaborators, distribute",
+            "example": "create_project"
           }
         },
         "additionalProperties": true
@@ -234,6 +235,72 @@
         ],
         "properties": {
           "owner": { "type": "string", "example": "GABCDEF12345..." }
+        },
+        "additionalProperties": false
+      },
+      "UpdateCollaboratorsRequest": {
+        "type": "object",
+        "required": [
+          "owner",
+          "collaborators"
+        ],
+        "properties": {
+          "owner": { "type": "string", "example": "GABCDEF12345..." },
+          "collaborators": {
+            "type": "array",
+            "minItems": 2,
+            "items": { "$ref": "#/components/schemas/CreateSplitCollaboratorInput" },
+            "example": [
+              { "address": "GAAAA...", "alias": "Artist A", "basisPoints": 6000 },
+              { "address": "GBBBB...", "alias": "Artist B", "basisPoints": 4000 }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "DistributeRequest": {
+        "type": "object",
+        "properties": {
+          "sourceAddress": { "type": "string", "example": "GABCDEF12345..." }
+        },
+        "additionalProperties": false
+      },
+      "HistoryEvent": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["type", "round", "amount", "txHash", "ledgerCloseTime", "id"],
+            "properties": {
+              "type": { "type": "string", "enum": ["round"] },
+              "round": { "type": "integer", "example": 1 },
+              "amount": { "type": "string", "example": "1000000" },
+              "txHash": { "type": "string", "example": "abc123..." },
+              "ledgerCloseTime": { "type": "string", "format": "date-time" },
+              "id": { "type": "string", "example": "event123" }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["type", "recipient", "amount", "txHash", "ledgerCloseTime", "id"],
+            "properties": {
+              "type": { "type": "string", "enum": ["payment"] },
+              "recipient": { "type": "string", "example": "GAAAA..." },
+              "amount": { "type": "string", "example": "500000" },
+              "txHash": { "type": "string", "example": "def456..." },
+              "ledgerCloseTime": { "type": "string", "format": "date-time" },
+              "id": { "type": "string", "example": "event456" }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "HistoryResponse": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/HistoryEvent" } },
+          "nextCursor": { "type": "string", "nullable": true, "example": "cursor123" }
         },
         "additionalProperties": false
       }
@@ -537,6 +604,278 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/splits": {
+      "get": {
+        "tags": [
+          "splits"
+        ],
+        "summary": "List split projects",
+        "parameters": [
+          {
+            "name": "start",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "example": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "minimum": 1,
+              "maximum": 100,
+              "example": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of projects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/SplitProject" }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/splits/{projectId}/collaborators": {
+      "put": {
+        "tags": [
+          "splits"
+        ],
+        "summary": "Build unsigned transaction to update collaborators",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "afrobeats_001"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateCollaboratorsRequest" },
+              "example": {
+                "owner": "GABCDEF12345...",
+                "collaborators": [
+                  { "address": "GAAAA...", "alias": "Artist A", "basisPoints": 6000 },
+                  { "address": "GBBBB...", "alias": "Artist B", "basisPoints": 4000 }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transaction built",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/splits/{projectId}/distribute": {
+      "post": {
+        "tags": [
+          "splits"
+        ],
+        "summary": "Build unsigned transaction to distribute funds",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "afrobeats_001"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DistributeRequest" },
+              "example": {
+                "sourceAddress": "GABCDEF12345..."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transaction built",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/splits/{projectId}/history": {
+      "get": {
+        "tags": [
+          "splits"
+        ],
+        "summary": "Get distribution history",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "afrobeats_001"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "",
+              "example": ""
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "minimum": 1,
+              "maximum": 200,
+              "example": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "History",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HistoryResponse" }
               }
             }
           },
