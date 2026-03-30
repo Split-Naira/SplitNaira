@@ -201,11 +201,7 @@ impl SplitNairaContract {
         owner.require_auth();
 
         // Guard: project must not already exist
-        if env
-            .storage()
-            .persistent()
-            .has(&DataKey::Project(project_id.clone()))
-        {
+        if Self::has_project(&env, &project_id) {
             return Err(SplitError::ProjectExists);
         }
 
@@ -475,9 +471,7 @@ impl SplitNairaContract {
 
     /// Returns true if the project key exists in persistent storage.
     pub fn project_exists(env: Env, project_id: Symbol) -> bool {
-        env.storage()
-            .persistent()
-            .has(&DataKey::Project(project_id))
+        Self::has_project(&env, &project_id)
     }
 
     /// Returns how much a specific address has been paid for a project.
@@ -715,6 +709,13 @@ impl SplitNairaContract {
             .ok_or(SplitError::NotFound)?;
         Self::bump_project_ttl(env, project_id);
         Ok(project)
+    }
+
+    /// Performs a cheap key existence check without loading project data.
+    fn has_project(env: &Env, project_id: &Symbol) -> bool {
+        env.storage()
+            .persistent()
+            .has(&DataKey::Project(project_id.clone()))
     }
 
     /// Extends TTL for the core project entries so active projects don't expire.
