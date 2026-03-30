@@ -83,6 +83,22 @@ export async function buildLockProjectXdr(projectId: string, owner: string): Pro
   }
   return body as BuildSplitResponse;
 }
+export async function buildDepositXdr(
+  projectId: string,
+  from: string,
+  amount: number
+): Promise<BuildSplitResponse> {
+  const response = await fetch(`${API_BASE_URL}/splits/${encodeURIComponent(projectId)}/deposit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ from, amount })
+  });
+  const body = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    throw new Error(toErrorMessage(response.status, body, "Failed to build deposit transaction"));
+  }
+  return body as BuildSplitResponse;
+}
 export async function getSplit(projectId: string): Promise<SplitProject> {
   const response = await fetch(`${API_BASE_URL}/splits/${encodeURIComponent(projectId)}`);
   const body = (await response.json().catch(() => null)) as unknown;

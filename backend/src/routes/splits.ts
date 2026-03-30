@@ -94,6 +94,14 @@ const lockProjectSchema = z.object({
   owner: stellarAddressSchema.describe("owner")
 });
 
+const depositSchema = z.object({
+  from: stellarAddressSchema.describe("from"),
+  amount: z
+    .number()
+    .positive("amount must be greater than 0")
+    .describe("deposit amount in stroops")
+});
+
 const updateCollaboratorsSchema = z
   .object({
     owner: stellarAddressSchema.describe("owner"),
@@ -322,6 +330,60 @@ async function buildLockProjectUnsignedXdr(input: LockProjectRequest) {
   };
 }
 
+interface DepositRequest {
+  projectId: string;
+  from: string;
+  amount: number;
+}
+
+async function buildDepositUnsignedXdr(input: DepositRequest) {
+  const config = loadStellarConfig();
+  const server = new rpc.Server(config.sorobanRpcUrl, { allowHttp: true });
+
+  let sourceAccount;
+  try {
+    sourceAccount = await server.getAccount(input.from);
+  } catch {
+    throw new RequestValidationError("from account not found on selected network");
+  }
+
+  let fromAddress: Address;
+  try {
+    fromAddress = Address.fromString(input.from);
+  } catch {
+    throw new RequestValidationError("from address must be a valid Stellar address");
+  }
+
+  const contract = new Contract(config.contractId);
+  const tx = new TransactionBuilder(sourceAccount, {
+    fee: BASE_FEE,
+    networkPassphrase: config.networkPassphrase
+  })
+    .addOperation(
+      contract.call(
+        "deposit",
+        nativeToScVal(input.projectId, { type: "symbol" }),
+        fromAddress.toScVal(),
+        nativeToScVal(input.amount, { type: "i128" })
+      )
+    )
+    .setTimeout(300)
+    .build();
+
+  const preparedTx = await server.prepareTransaction(tx);
+  return {
+    xdr: preparedTx.toXDR(),
+    metadata: {
+      contractId: config.contractId,
+      networkPassphrase: config.networkPassphrase,
+      sourceAccount: input.from,
+      sequenceNumber: preparedTx.sequence,
+      fee: preparedTx.fee,
+      operation: "deposit"
+    }
+  };
+}
+
 interface UpdateCollaboratorsRequest {
   projectId: string;
   owner: string;
@@ -470,6 +532,47 @@ splitsRouter.post("/:projectId/lock", async (req, res, next) => {
       const result = await buildLockProjectUnsignedXdr({
         projectId: parsedParams.data,
         owner: parsedBody.data.owner
+      });
+      return res.status(200).json(result);
+    } catch (error) {
+      if (error instanceof RequestValidationError) {
+        return res.status(400).json({
+          error: "validation_error",
+          message: error.message,
+          requestId
+        });
+      }
+      throw error;
+    }
+  } catch (error) {
+    return next(error);
+  }
+});
+
+splitsRouter.post("/:projectId/deposit", async (req, res, next) => {
+  try {
+    const requestId = res.locals.requestId;
+
+    const parsedParams = projectIdParamSchema.safeParse(req.params.projectId);
+    const parsedBody = depositSchema.safeParse(req.body);
+
+    if (!parsedParams.success || !parsedBody.success) {
+      return res.status(400).json({
+        error: "validation_error",
+        message: "Invalid request payload.",
+        details: {
+          params: parsedParams.success ? null : parsedParams.error.flatten(),
+          body: parsedBody.success ? null : parsedBody.error.flatten()
+        },
+        requestId
+      });
+    }
+
+    try {
+      const result = await buildDepositUnsignedXdr({
+        projectId: parsedParams.data,
+        from: parsedBody.data.from,
+        amount: parsedBody.data.amount
       });
       return res.status(200).json(result);
     } catch (error) {

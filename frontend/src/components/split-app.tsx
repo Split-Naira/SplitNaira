@@ -6,6 +6,7 @@ import { clsx } from "clsx";
 
 import {
   buildCreateSplitXdr,
+  buildDepositXdr,
   buildDistributeXdr,
   buildLockProjectXdr,
   getProjectHistory,
@@ -72,9 +73,13 @@ export function SplitApp() {
   const [showDistributeModal, setShowDistributeModal] = useState(false);
   const [showLockModal, setShowLockModal] = useState(false);
   const [isLocking, setIsLocking] = useState(false);
+  const [showDepositModal, setShowDepositModal] = useState(false);
+  const [depositAmount, setDepositAmount] = useState("");
+  const [isDepositing, setIsDepositing] = useState(false);
   const [history, setHistory] = useState<ProjectHistoryItem[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const lockModalRef = useRef<HTMLDivElement | null>(null);
+  const depositModalRef = useRef<HTMLDivElement | null>(null);
 
   // Phase 3: Projects tab state
   const [projectsList, setProjectsList] = useState<SplitProject[]>([]);
@@ -419,6 +424,100 @@ export function SplitApp() {
       showToast(message, "error");
     } finally {
       setIsLocking(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!showDepositModal) {
+      return;
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !isDepositing) {
+        setShowDepositModal(false);
+      }
+    };
+
+    const handleTabTrap = (event: KeyboardEvent) => {
+      if (event.key !== "Tab" || !depositModalRef.current) {
+        return;
+      }
+
+      const focusableElements = depositModalRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+
+      if (focusableElements.length === 0) {
+        return;
+      }
+
+      const first = focusableElements[0];
+      const last = focusableElements[focusableElements.length - 1];
+      const active = document.activeElement;
+
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    const focusableElements = depositModalRef.current?.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    focusableElements?.[0]?.focus();
+
+    document.addEventListener("keydown", handleEscape);
+    document.addEventListener("keydown", handleTabTrap);
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+      document.removeEventListener("keydown", handleTabTrap);
+    };
+  }, [showDepositModal, isDepositing]);
+
+  const onDeposit = async () => {
+    if (!fetchedProject || !wallet.address) {
+      return;
+    }
+
+    if (!depositAmount || Number.parseFloat(depositAmount) <= 0) {
+      showToast("Please enter a valid deposit amount.", "error");
+      return;
+    }
+
+    setIsDepositing(true);
+    setTxHash(null);
+    try {
+      const amountInStroops = Math.floor(Number.parseFloat(depositAmount) * 10_000_000);
+      const { xdr, metadata } = await buildDepositXdr(
+        fetchedProject.projectId,
+        wallet.address,
+        amountInStroops
+      );
+      const signedTxXdr = await signWithFreighter(xdr, metadata.networkPassphrase);
+      const server = new rpc.Server(
+        process.env.NEXT_PUBLIC_SOROBAN_RPC_URL ?? "https://soroban-testnet.stellar.org",
+        { allowHttp: true }
+      );
+      const transaction = new Transaction(signedTxXdr, metadata.networkPassphrase);
+      const submitResponse = await server.sendTransaction(transaction);
+      if (submitResponse.status === "ERROR") {
+        throw new Error(submitResponse.errorResult?.toString() ?? "Deposit transaction failed.");
+      }
+
+      setTxHash(submitResponse.hash ?? null);
+      setShowDepositModal(false);
+      setDepositAmount("");
+      showToast("Deposit successful!", "success");
+      // Refresh project details to show updated balance
+      await onFetchProject();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Deposit failed.";
+      showToast(message, "error");
+    } finally {
+      setIsDepositing(false);
     }
   };
 
@@ -1242,6 +1341,19 @@ export function SplitApp() {
                     </div>
 
                     <button
+                      onClick={() => setShowDepositModal(true)}
+                      disabled={!wallet.connected}
+                      className="premium-button w-full rounded-2xl bg-goldLight py-6 text-xs font-black uppercase tracking-[0.3em] text-[#0a0a09] shadow-xl shadow-goldLight/20 disabled:opacity-10 disabled:bg-white"
+                    >
+                      Deposit Funds
+                    </button>
+                    {!wallet.connected && (
+                      <p className="text-center text-[10px] font-bold text-red-500 uppercase tracking-widest">
+                        Connect wallet to deposit
+                      </p>
+                    )}
+
+                    <button
                       onClick={() => setShowDistributeModal(true)}
                       disabled={
                         Number(fetchedProject.balance) <= 0 || !wallet.connected
@@ -1588,6 +1700,100 @@ export function SplitApp() {
                 type="button"
                 onClick={() => setShowLockModal(false)}
                 disabled={isLocking}
+                className="premium-button w-full rounded-2xl border border-white/10 py-5 text-xs font-bold uppercase tracking-[0.2em] text-muted hover:bg-white/5 hover:text-ink"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDepositModal && fetchedProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0a0a09]/80 p-6 backdrop-blur-xl animate-in fade-in duration-300">
+          <div
+            ref={depositModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="deposit-title"
+            aria-describedby="deposit-description"
+            className="glass-card w-full max-w-lg rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-10 duration-500"
+          >
+            <h2 id="deposit-title" className="font-display text-3xl mb-2">
+              Deposit Funds
+            </h2>
+            <p id="deposit-description" className="text-muted text-sm mb-8 leading-relaxed">
+              Contribute funds to project{" "}
+              <span className="text-ink font-bold italic">
+                &quot;{fetchedProject.title}&quot;
+              </span>
+              .
+            </p>
+
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label
+                  htmlFor="deposit-amount"
+                  className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted"
+                >
+                  Amount (in tokens)
+                </label>
+                <input
+                  id="deposit-amount"
+                  type="number"
+                  min="0"
+                  step="0.0000001"
+                  value={depositAmount}
+                  onChange={(e) => setDepositAmount(e.target.value)}
+                  placeholder="0.0"
+                  disabled={isDepositing}
+                  className="glass-input w-full rounded-2xl px-5 py-4 text-sm disabled:opacity-50"
+                />
+              </div>
+
+              <div className="rounded-2xl border border-blue-400/40 bg-blue-500/10 p-4">
+                <p className="text-xs font-bold uppercase tracking-widest text-blue-300">
+                  Deposit Summary
+                </p>
+                <div className="mt-3 space-y-2">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted">Amount to deposit:</span>
+                    <span className="text-ink font-bold">
+                      {depositAmount || "0"} tokens
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted">Project:</span>
+                    <span className="text-ink font-bold">
+                      {fetchedProject.projectId}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm pt-2 border-t border-blue-400/20">
+                    <span className="text-muted">Current balance:</span>
+                    <span className="text-greenBright font-bold">
+                      {Number(fetchedProject.balance).toLocaleString()} Stroops
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-10 flex flex-col gap-4">
+              <button
+                type="button"
+                onClick={onDeposit}
+                disabled={isDepositing || !depositAmount || Number.parseFloat(depositAmount) <= 0}
+                className="premium-button w-full rounded-2xl bg-blue-500 py-5 text-xs font-black uppercase tracking-[0.3em] text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isDepositing ? "Processing..." : "Confirm Deposit"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDepositModal(false);
+                  setDepositAmount("");
+                }}
+                disabled={isDepositing}
                 className="premium-button w-full rounded-2xl border border-white/10 py-5 text-xs font-bold uppercase tracking-[0.2em] text-muted hover:bg-white/5 hover:text-ink"
               >
                 Cancel
