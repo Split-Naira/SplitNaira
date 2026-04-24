@@ -9,31 +9,19 @@ export interface TokenInfo {
 export const KNOWN_TOKENS: TokenInfo[] = [
   // Testnet tokens
   {
-    id: "native",
-    name: "Stellar Lumens (XLM)",
-    network: "testnet",
-    code: "XLM"
-  },
-  {
     id: "CBLASIRZ7CUKC7S5IS3VSNMQGKZ5FTRWLHZZXH7H4YG6ZLRFPJF5H2LR",
     name: "USD Coin (USDC)",
     network: "testnet",
     code: "USDC"
   },
   {
-    id: "CDLZJQG2OZZXZAU3YICESOJE73SOXREH74DRBEDAFTMPциклон",
+    id: "CDLZJQG2OZZXZAU3YICESOJE73SOXREH74DRBEDAFTMPAQWX3JD3YQ",
     name: "Soroban Waved USD (wUSD)",
     network: "testnet",
     code: "wUSD"
   },
 
   // Mainnet tokens
-  {
-    id: "native",
-    name: "Stellar Lumens (XLM)",
-    network: "mainnet",
-    code: "XLM"
-  },
   {
     id: "CBBD3L2DQADRDX3CI4UJL3XNPVVVMMB7VPZL3DQUMHWQ6XGYWYSGPBEM",
     name: "USD Coin (USDC)",

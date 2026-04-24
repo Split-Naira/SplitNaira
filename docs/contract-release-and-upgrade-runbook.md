@@ -60,14 +60,49 @@ This runbook describes the end-to-end release/upgrade path for the `contracts/` 
 ## 8. Recovery
 - Use `contracts` `get_unallocated_balance()` and `withdraw_unallocated()` to manage stray funds during upgrade.
 
-## 9. Release sign-off checklist
+## 9. Storage lifetime maintenance (TTL)
+
+### 9.1 Record durability policy
+- Must stay alive for long-lived projects:
+   - `Project(project_id)`
+   - `ProjectBalance(project_id)`
+   - `Claimed(project_id, collaborator_address)` for current collaborators
+- Managed as global metadata (not per-project hot records):
+   - `ProjectIds`, `ProjectCount`
+   - `Admin`, `AllowedToken*`, `DistributionsPaused`
+
+### 9.2 How TTL is maintained
+- Automatic maintenance (contract hot paths):
+   - `create_project`, `update_collaborators`, `update_project_metadata`, `lock_project`, `deposit`, `distribute`, `get_project`, `get_claimed`
+- Explicit maintenance endpoint for long inactivity windows:
+   - `refresh_project_storage(project_id)` (permissionless)
+   - Returns `NotFound` if the project no longer exists.
+
+### 9.3 Operator cadence for long-lived projects
+1. Weekly/bi-weekly, list active and high-value project IDs.
+2. Call `refresh_project_storage(project_id)` for projects expected to remain live but quiet.
+3. Verify state is present with `get_project(project_id)` and (if applicable) `get_claimed(project_id, collaborator)`.
+
+### 9.4 Restore and incident response
+- If a project lookup returns `NotFound`, treat it as potential eviction/corruption and start incident handling.
+- Use backend/indexed snapshots (or historical records) to reconstruct collaborator config and metadata.
+- Recreate project state and resume operations only after sign-off that balances/claims are reconciled.
+
+### 9.5 Contributor verification
+- Contract tests must include coverage for:
+   - `refresh_project_storage` success on existing projects
+   - `refresh_project_storage` failure on missing projects
+   - unchanged payout accounting after refresh calls
+- Backend tests must include ScVal/address compatibility checks for create/update/history/admin flows.
+
+## 10. Release sign-off checklist
 - [ ] All tests pass locally + GitHub Actions
 - [ ] Version and CLI docs aligned (`README.md`, `docs/SOROBAN_SETUP.md`)
 - [ ] Contract event behavior is stable
 - [ ] Runbook updated for any new contract entrypoints
 - [ ] Release note summarized in PR
 
-## 10. Operators guidance
+## 11. Operators guidance
 - Prefer `stellar contract deploy` for initial release.
 - Prefer managed configuration store for `CONTRACT_ID` in deployment.
 - Document each release tag in changelog.

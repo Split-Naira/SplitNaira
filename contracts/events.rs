@@ -71,7 +71,10 @@ pub struct DistributionComplete {
 impl DistributionComplete {
     pub fn publish(&self, env: &Env) {
         env.events().publish(
-            (Symbol::new(env, "distribution_complete"), self.project_id.clone()),
+            (
+                Symbol::new(env, "distribution_complete"),
+                self.project_id.clone(),
+            ),
             (self.round, self.total),
         );
     }
@@ -92,7 +95,10 @@ pub struct DepositReceived {
 impl DepositReceived {
     pub fn publish(&self, env: &Env) {
         env.events().publish(
-            (Symbol::new(env, "deposit_received"), self.project_id.clone()),
+            (
+                Symbol::new(env, "deposit_received"),
+                self.project_id.clone(),
+            ),
             (self.from.clone(), self.amount, self.project_balance),
         );
     }
@@ -110,7 +116,10 @@ pub struct MetadataUpdated {
 impl MetadataUpdated {
     pub fn publish(&self, env: &Env) {
         env.events().publish(
-            (Symbol::new(env, "metadata_updated"), self.project_id.clone()),
+            (
+                Symbol::new(env, "metadata_updated"),
+                self.project_id.clone(),
+            ),
             self.project_id.clone(),
         );
     }
@@ -132,7 +141,10 @@ pub struct UnallocatedWithdrawn {
 impl UnallocatedWithdrawn {
     pub fn publish(&self, env: &Env) {
         env.events().publish(
-            (Symbol::new(env, "unallocated_withdrawn"), self.token.clone()),
+            (
+                Symbol::new(env, "unallocated_withdrawn"),
+                self.token.clone(),
+            ),
             (
                 self.admin.clone(),
                 self.to.clone(),

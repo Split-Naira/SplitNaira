@@ -92,7 +92,7 @@
           },
           "operation": {
             "type": "string",
-            "description": "The operation being performed. Possible values: create_project, lock_project, update_collaborators, distribute, allow_token, disallow_token",
+            "description": "The operation being performed. Possible values: create_project, lock_project, update_collaborators, distribute, allow_token, disallow_token, pause_distributions, unpause_distributions",
             "example": "create_project"
           }
         },
@@ -271,6 +271,14 @@
         "properties": {
           "admin": { "type": "string", "example": "GADMIN12345..." },
           "token": { "type": "string", "example": "CTOKEN1234..." }
+        },
+        "additionalProperties": false
+      },
+      "AdminPauseRequest": {
+        "type": "object",
+        "required": ["admin"],
+        "properties": {
+          "admin": { "type": "string", "example": "GADMIN12345..." }
         },
         "additionalProperties": false
       },
@@ -1010,6 +1018,76 @@
           },
           "500": {
             "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/splits/admin/pause-distributions": {
+      "post": {
+        "tags": ["splits"],
+        "summary": "Build unsigned transaction to pause distributions",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AdminPauseRequest" },
+              "example": {
+                "admin": "GADMIN12345..."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transaction built",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/splits/admin/unpause-distributions": {
+      "post": {
+        "tags": ["splits"],
+        "summary": "Build unsigned transaction to unpause distributions",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AdminPauseRequest" },
+              "example": {
+                "admin": "GADMIN12345..."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transaction built",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/RequestIdError" }

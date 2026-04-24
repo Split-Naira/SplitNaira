@@ -47,6 +47,7 @@ jobs:
       - run: npm run deps:check
       - run: npm run lint
       - run: npm run build
+      - run: npm run test:compat -- --reporter=verbose
       - run: npm run test -- --reporter=verbose
 
   contracts:

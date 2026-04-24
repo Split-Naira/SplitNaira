@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { StrKey } from "@stellar/stellar-sdk";
 import { clsx } from "clsx";
 
-import { getTokensByNetwork, getTokenDisplayName, type TokenInfo } from "@/lib/token-constants";
+import { getTokensByNetwork, getTokenDisplayName } from "@/lib/token-constants";
 
 interface TokenSelectorProps {
   value: string;
@@ -21,34 +21,24 @@ export function TokenSelector({
   disabled = false,
   required = false
 }: TokenSelectorProps) {
-  const [availableTokens, setAvailableTokens] = useState<TokenInfo[]>([]);
-  const [showCustom, setShowCustom] = useState(false);
+  const availableTokens = useMemo(() => getTokensByNetwork(network), [network]);
+  const [forceShowCustom, setForceShowCustom] = useState(false);
   const [customToken, setCustomToken] = useState("");
+  const valueInAvailableTokens = availableTokens.some((t) => t.id === value);
+  const showCustom = forceShowCustom || Boolean(value && !valueInAvailableTokens);
+  const customTokenValue = forceShowCustom ? customToken : value;
   const isValidAddress =
-    !customToken ||
-    StrKey.isValidEd25519PublicKey(customToken) ||
-    StrKey.isValidContract(customToken);
-
-  useEffect(() => {
-    const tokens = getTokensByNetwork(network);
-    setAvailableTokens(tokens);
-
-    // If current value is not in the list, show custom input
-    if (value && !tokens.some((t) => t.id === value)) {
-      setShowCustom(true);
-      setCustomToken(value);
-    } else {
-      setShowCustom(false);
-      setCustomToken("");
-    }
-  }, [network, value]);
+    !customTokenValue ||
+    StrKey.isValidEd25519PublicKey(customTokenValue) ||
+    StrKey.isValidContract(customTokenValue);
 
   const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedValue = e.target.value;
     if (selectedValue === "custom") {
-      setShowCustom(true);
+      setForceShowCustom(true);
+      setCustomToken(value);
     } else {
-      setShowCustom(false);
+      setForceShowCustom(false);
       setCustomToken("");
       onChange(selectedValue);
     }
@@ -56,6 +46,7 @@ export function TokenSelector({
 
   const handleCustomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
+    setForceShowCustom(true);
     setCustomToken(val);
     if (val && isValidAddress) {
       onChange(val);
@@ -63,8 +54,8 @@ export function TokenSelector({
   };
 
   const handleUseCustom = () => {
-    if (customToken && isValidAddress) {
-      onChange(customToken);
+    if (customTokenValue && isValidAddress) {
+      onChange(customTokenValue);
     }
   };
 
@@ -109,7 +100,7 @@ export function TokenSelector({
               <button
                 type="button"
                 onClick={() => {
-                  setShowCustom(true);
+                  setForceShowCustom(true);
                   setCustomToken(value);
                 }}
                 className="ml-4 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-greenBright hover:text-greenMid transition-colors"
@@ -124,17 +115,17 @@ export function TokenSelector({
           <div>
             <input
               type="text"
-              value={customToken}
+              value={customTokenValue}
               onChange={handleCustomChange}
               placeholder="G... or C... (contract address)"
               className={clsx(
                 "glass-input w-full rounded-2xl px-5 py-4 text-sm",
-                customToken && !isValidAddress
+                customTokenValue && !isValidAddress
                   ? "border-red-500/50 bg-red-500/5"
                   : ""
               )}
             />
-            {customToken && !isValidAddress && (
+            {customTokenValue && !isValidAddress && (
               <p className="mt-2 px-1 text-[10px] font-bold text-red-400 uppercase tracking-tighter">
                 Invalid Stellar address format
               </p>
@@ -145,7 +136,7 @@ export function TokenSelector({
             <button
               type="button"
               onClick={handleUseCustom}
-              disabled={!customToken || !isValidAddress}
+              disabled={!customTokenValue || !isValidAddress}
               className="flex-1 rounded-xl bg-greenMid/10 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-greenBright transition-all hover:bg-greenMid/20 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Use This Token
@@ -153,7 +144,7 @@ export function TokenSelector({
             <button
               type="button"
               onClick={() => {
-                setShowCustom(false);
+                setForceShowCustom(false);
                 setCustomToken("");
                 onChange("");
               }}

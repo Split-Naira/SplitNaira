@@ -3,7 +3,7 @@
 import { useCallback } from "react";
 import { useWallet } from "./useWallet";
 import { useNetworkGuard } from "./useNetworkGuard";
-import { useToast } from "../components/ToastProvider";
+import { useToast } from "../components/toast-provider";
 
 /**
  * Returns a wrapper that guards any async wallet action behind a network check.

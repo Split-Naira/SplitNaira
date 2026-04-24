@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { DM_Sans, Syne } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/toast-provider";
+import { WalletProvider } from "@/components/wallet-provider";
 import { AppErrorBoundary } from "@/components/app-error-boundary";
 
 const dmSans = DM_Sans({
@@ -30,7 +31,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${dmSans.variable} ${syne.variable} antialiased`}>
         <AppErrorBoundary>
-          <ToastProvider>{children}</ToastProvider>
+          <ToastProvider>
+            <WalletProvider>{children}</WalletProvider>
+          </ToastProvider>
         </AppErrorBoundary>
       </body>
     </html>

@@ -9,10 +9,13 @@
     "start": "node dist/index.js",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:compat": "vitest run src/routes/splits.compatibility.test.ts",
     "test:watch": "vitest --watch",
-    "deps:check": "npm ls --all --omit=optional"
+    "deps:check": "npm ls --all --omit=optional",
+    "generate:openapi": "tsx src/openapi.ts"
   },
   "dependencies": {
+    "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@stellar/stellar-sdk": "14.6.1",
     "cors": "2.8.5",
     "dotenv": "16.4.7",
@@ -20,7 +23,8 @@
     "express-rate-limit": "7.5.0",
     "helmet": "8.0.0",
     "morgan": "1.10.0",
-    "zod": "3.24.2"
+    "yaml": "^2.8.3",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@eslint/js": "9.39.4",

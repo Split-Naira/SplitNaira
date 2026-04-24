@@ -3,7 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import { WalletContext, useWalletState } from "../hooks/useWallet";
 import { useNetworkGuard } from "../hooks/useNetworkGuard";
-import { useToast } from "./ToastProvider";
+import { useToast } from "./toast-provider";
 
 /**
  * Provides wallet state to the component tree AND fires a toast whenever a
@@ -26,7 +26,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (guard.mismatch) {
       toast(guard.message, "error", 0 /* sticky — user must dismiss */);
     }
-  }, [guard.mismatch]); // intentionally omit `toast` & `guard.message` — only react to mismatch toggling
+  }, [guard.message, guard.mismatch, toast]);
 
   return (
     <WalletContext.Provider

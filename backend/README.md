@@ -9,6 +9,13 @@ Express + TypeScript API scaffold for SplitNaira.
 - `npm run start`
 - `npm run test`
 - `npm run deps:check`
+- `npm run generate:openapi` - Regenerates the OpenAPI specification
+
+## OpenAPI
+The API documentation is defined using Zod schemas and generated into an OpenAPI 3.0 specification.
+- Source: `src/openapi.ts`
+- Output: `openapi/openapi.yaml`
+- Command: `npm run generate:openapi`
 
 ## Notes
 - Dependencies are pinned to exact versions in `package.json` and `package-lock.json`.
