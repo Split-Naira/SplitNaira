@@ -8,20 +8,26 @@ interface Props {
 
 interface State {
   hasError: boolean;
+  error: Error | null;
 }
 
 export class AppErrorBoundary extends Component<Props, State> {
   public state: State = {
-    hasError: false
+    hasError: false,
+    error: null
   };
 
-  public static getDerivedStateFromError(): State {
-    return { hasError: true };
+  public static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Unhandled app error", error, errorInfo);
   }
+
+  private handleReset = () => {
+    this.setState({ hasError: false, error: null });
+  };
 
   public render() {
     if (this.state.hasError) {
@@ -32,6 +38,13 @@ export class AppErrorBoundary extends Component<Props, State> {
             <p className="mt-2 text-sm text-red-900/80">
               Please refresh the page. If the issue persists, reconnect your wallet and try again.
             </p>
+            <button
+              type="button"
+              onClick={this.handleReset}
+              className="mt-4 rounded-full bg-red-900 px-5 py-2 text-sm font-semibold text-white"
+            >
+              Try again
+            </button>
           </div>
         </main>
       );
