@@ -19,8 +19,8 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm i --no-audit --no-fund
-      - run: npm run lint -- -w frontend --max-warnings=10
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint -w frontend
       - run: npm run build -w frontend
       - run: npm run test -w frontend
 
@@ -35,18 +35,12 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm i --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
       - run: npm run deps:check -w backend
       - run: npm run lint -w backend
       - run: npm run build -w backend
+      - run: npm run test:compat -w backend -- --reporter=verbose
       - run: npm run test -w backend -- --reporter=verbose
-          cache-dependency-path: backend/package-lock.json
-      - run: npm ci --no-audit --no-fund
-      - run: npm run deps:check
-      - run: npm run lint
-      - run: npm run build
-      - run: npm run test:compat -- --reporter=verbose
-      - run: npm run test -- --reporter=verbose
 
   contracts:
     runs-on: ubuntu-latest

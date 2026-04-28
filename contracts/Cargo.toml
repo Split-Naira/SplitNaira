@@ -4,10 +4,11 @@ version = "0.1.0"
 edition = "2021"
 description = "Soroban smart contracts for SplitNaira — royalty splitting on Stellar"
 license = "MIT"
-repository = "https://github.com/your-org/splitnaira"
+repository = "https://github.com/Split-Naira/SplitNaira"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
+name = "splitnaira_contract"
 path = "lib.rs"
 
 [features]

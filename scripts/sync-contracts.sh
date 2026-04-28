@@ -14,7 +14,9 @@ echo "=============================="
 
 # Check if artifacts exist
 if [ ! -f "$ARTIFACT_DIR/splitnaira_contract.wasm" ]; then
-    echo "Error: Contract WASM not found. Run 'cargo build' in contracts first."
+    echo "Error: Contract WASM not found."
+    echo "Build it first with: (from repo root) npm run build:contracts"
+    echo "Or: (from contracts/) cargo build --release --target wasm32v1-none"
     exit 1
 fi
 

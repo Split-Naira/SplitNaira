@@ -90,8 +90,9 @@ npm run dev
 
 ```bash
 cd contracts
-cargo build
-cargo test
+cargo test --locked
+rustup target add wasm32v1-none
+cargo build --release --target wasm32v1-none --locked
 ```
 
 ## Project Structure

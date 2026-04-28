@@ -17,9 +17,10 @@ This runbook describes the end-to-end release/upgrade path for the `contracts/` 
 4. `cargo clippy --all-targets -- -D warnings`
 
 ## 3. Build WASM bundle
-1. `cargo build --release --target wasm32-unknown-unknown`
-2. `wasm-bindgen` is not required for Soroban contracts.
-3. Verify artifact path: `contracts/target/wasm32v1-none/release/splitnaira_contract.wasm`
+1. `rustup target add wasm32v1-none` (one-time)
+2. `cargo build --release --target wasm32v1-none`
+3. `wasm-bindgen` is not required for Soroban contracts.
+4. Verify artifact path: `contracts/target/wasm32v1-none/release/splitnaira_contract.wasm`
 
 ## 4. Run contract-level testing
 - Unit test suite in `contracts/tests.rs` includes behavior, edge cases, event emission.

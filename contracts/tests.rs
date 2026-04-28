@@ -1553,17 +1553,11 @@ fn test_upgrade_regression_pagination_views_remain_aligned_after_project_mutatio
         }
     }
 
-    let renamed = client
-        .list_projects(&1, &1)
-        .get(0u32)
-        .unwrap();
+    let renamed = client.list_projects(&1, &1).get(0u32).unwrap();
     assert_eq!(renamed.project_id, Symbol::new(&env, "rg_page_1"));
     assert_eq!(renamed.title, String::from_str(&env, "Page One Renamed"));
 
-    let distributed = client
-        .list_projects(&3, &1)
-        .get(0u32)
-        .unwrap();
+    let distributed = client.list_projects(&3, &1).get(0u32).unwrap();
     assert_eq!(distributed.project_id, Symbol::new(&env, "rg_page_3"));
     assert_eq!(distributed.distribution_round, 1);
     assert_eq!(distributed.total_distributed, 25i128);
@@ -1626,7 +1620,10 @@ fn test_upgrade_regression_metadata_updates_only_mutate_metadata_fields() {
     assert_eq!(after.distribution_round, before.distribution_round);
     assert_eq!(after.title, String::from_str(&env, "Updated Metadata"));
     assert_eq!(after.project_type, String::from_str(&env, "film"));
-    assert_eq!(client.get_claimed(&project_id, &alice), alice_claimed_before);
+    assert_eq!(
+        client.get_claimed(&project_id, &alice),
+        alice_claimed_before
+    );
     assert_eq!(client.get_claimed(&project_id, &bob), bob_claimed_before);
     assert_eq!(client.get_balance(&project_id), 0);
 
@@ -2185,14 +2182,20 @@ fn test_admin_rotation_pause_allowlist_and_recovery_preserve_project_invariants(
     );
     // Invariant: pause cannot mutate accounted project balances/round metadata.
     assert_eq!(client.get_balance(&project_id), balance_before_pause);
-    assert_eq!(client.get_project(&project_id).unwrap().distribution_round, 0);
+    assert_eq!(
+        client.get_project(&project_id).unwrap().distribution_round,
+        0
+    );
 
     // Send unallocated funds and recover some without affecting project ledger.
     let token_admin_client = token::StellarAssetClient::new(&env, &token_allowed);
     token_admin_client.mint(&donor, &300_0000000i128);
     let token_client = token::Client::new(&env, &token_allowed);
     token_client.transfer(&donor, &contract_id, &300_0000000i128);
-    assert_eq!(client.get_unallocated_balance(&token_allowed), 300_0000000i128);
+    assert_eq!(
+        client.get_unallocated_balance(&token_allowed),
+        300_0000000i128
+    );
     client.withdraw_unallocated(&admin_b, &token_allowed, &recovery_to, &200_0000000i128);
     assert_eq!(client.get_balance(&project_id), balance_before_pause);
     assert_eq!(token_client.balance(&recovery_to), 200_0000000i128);
@@ -2368,7 +2371,10 @@ fn test_new_owner_can_exercise_owner_gated_actions() {
         &String::from_str(&env, "podcast"),
     );
     let project = client.get_project(&project_id).unwrap();
-    assert_eq!(project.title, String::from_str(&env, "Renamed By New Owner"));
+    assert_eq!(
+        project.title,
+        String::from_str(&env, "Renamed By New Owner")
+    );
 
     // New owner can update collaborators.
     let new_collabs = make_collaborators(
@@ -2377,7 +2383,10 @@ fn test_new_owner_can_exercise_owner_gated_actions() {
         Vec::from_slice(&env, &[4000u32, 3000u32, 3000u32]),
     );
     client.update_collaborators(&project_id, &new_owner, &new_collabs);
-    assert_eq!(client.get_project(&project_id).unwrap().collaborators.len(), 3);
+    assert_eq!(
+        client.get_project(&project_id).unwrap().collaborators.len(),
+        3
+    );
 
     // New owner can lock.
     client.lock_project(&project_id, &new_owner);

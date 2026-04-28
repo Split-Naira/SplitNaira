@@ -11,7 +11,7 @@
     "build": "npm run build:frontend && npm run build:backend && npm run build:contracts",
     "build:frontend": "cd frontend && npm run build",
     "build:backend": "cd backend && npm run build",
-    "build:contracts": "cd contracts && cargo build",
+    "build:contracts": "cd contracts && cargo build --release --target wasm32v1-none",
     "test": "npm run test:frontend && npm run test:backend && npm run test:contracts",
     "test:frontend": "cd frontend && npm run test",
     "test:backend": "cd backend && npm run test",

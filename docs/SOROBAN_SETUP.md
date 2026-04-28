@@ -65,9 +65,12 @@ cargo install stellar-cli
 
 ## Workspace steps
 ```bash
+# Install the Soroban WASM target (one-time)
+rustup target add wasm32v1-none
+
 cd contracts
-cargo build
-cargo test
+cargo test --locked
+cargo build --release --target wasm32v1-none --locked
 ```
 
 ## Deploy artifacts
