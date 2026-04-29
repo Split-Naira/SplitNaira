@@ -69,6 +69,7 @@ export function SplitApp() {
 
   const [projectId, setProjectId] = useState("");
   const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
   const [projectType, setProjectType] = useState("music");
   const [token, setToken] = useState("");
   const [collaborators, setCollaborators] = useState<CollaboratorInput[]>(getInitialCollaborators());
@@ -113,6 +114,7 @@ export function SplitApp() {
   // Metadata editing state
   const [isEditingMetadata, setIsEditingMetadata] = useState(false);
   const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
   const [editProjectType, setEditProjectType] = useState("music");
   const [isUpdatingMetadata, setIsUpdatingMetadata] = useState(false);
 
@@ -484,7 +486,8 @@ export function SplitApp() {
         fetchedProject.projectId,
         wallet.address,
         editTitle.trim(),
-        editProjectType.trim()
+        editProjectType.trim(),
+        editDescription.trim() || undefined
       );
 
       const signedTxXdr = await signWithFreighter(
@@ -605,6 +608,7 @@ export function SplitApp() {
         owner: wallet.address,
         projectId: projectId.trim(),
         title: title.trim(),
+        description: description.trim() || undefined,
         projectType: projectType.trim(),
         token: token.trim(),
         collaborators: collaboratorPayload,
@@ -1757,6 +1761,24 @@ export function SplitApp() {
                 />
               </div>
             </div>
+            <div className="mt-6 space-y-2">
+              <label
+                htmlFor="description"
+                className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted px-1"
+              >
+                Description <span className="font-normal normal-case tracking-normal opacity-50">(optional)</span>
+              </label>
+              <textarea
+                id="description"
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="Describe the project, the creators, or the royalty arrangement…"
+                maxLength={300}
+                rows={3}
+                className="glass-input w-full rounded-2xl px-5 py-4 text-sm resize-none"
+              />
+              <p className="text-right text-[10px] text-muted opacity-40 pr-1">{description.length}/300</p>
+            </div>
 
             <div className="mt-12 space-y-8">
               <div className="flex items-center justify-between border-b border-white/5 pb-6">
@@ -2119,6 +2141,11 @@ export function SplitApp() {
                     <p className="font-mono text-xs text-muted opacity-60 break-all">
                       {fetchedProject.projectId}
                     </p>
+                    {fetchedProject.description && (
+                      <p className="mt-2 text-sm text-muted leading-relaxed max-w-prose">
+                        {fetchedProject.description}
+                      </p>
+                    )}
                   </div>
                   {fetchedProject.locked ? (
                     <div className="rounded-2xl border border-amber-400/40 bg-amber-400/10 px-4 py-3 text-amber-200">
@@ -2135,6 +2162,7 @@ export function SplitApp() {
                             type="button"
                             onClick={() => {
                               setEditTitle(fetchedProject.title);
+                              setEditDescription(fetchedProject.description ?? "");
                               setEditProjectType(fetchedProject.projectType);
                               setIsEditingMetadata(true);
                             }}
@@ -2820,6 +2848,17 @@ export function SplitApp() {
                     onChange={(e) => setEditProjectType(e.target.value)}
                     className="glass-input w-full rounded-2xl px-5 py-4 text-sm"
                   />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted">Description <span className="font-normal normal-case tracking-normal opacity-50">(optional)</span></label>
+                  <textarea
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    maxLength={300}
+                    rows={3}
+                    className="glass-input w-full rounded-2xl px-5 py-4 text-sm resize-none"
+                  />
+                  <p className="text-right text-[10px] text-muted opacity-40">{editDescription.length}/300</p>
                 </div>
                 <div className="flex gap-3 pt-4">
                   <button
