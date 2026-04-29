@@ -3,6 +3,7 @@ export type StellarNetwork = "testnet" | "mainnet";
 export interface SplitProject {
   projectId: string;
   title: string;
+  description?: string;
   projectType: string;
   token: string;
   owner: string;

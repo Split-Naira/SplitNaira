@@ -630,6 +630,24 @@ describe("SplitApp async state handling", () => {
     expect(screen.getAllByText(/Showing stale history data/i).length).toBeGreaterThan(0);
   });
 
+  it("renders project description as plain text (XSS-safe)", async () => {
+    mocks.mockGetSplit.mockResolvedValue({
+      ...baseProject,
+      description: "A royalty split for <script>alert('xss')</script> artists"
+    });
+    await loadProject();
+    // The literal string must appear in the DOM, not execute as HTML
+    expect(screen.getByText(/A royalty split for/i)).toBeTruthy();
+    expect(document.querySelector("script")).toBeNull();
+  });
+
+  it("does not render description section when description is absent", async () => {
+    mocks.mockGetSplit.mockResolvedValue({ ...baseProject, description: undefined });
+    await loadProject();
+    // No stray empty paragraph injected
+    expect(screen.queryByText(/undefined/i)).toBeNull();
+  });
+
   it("shows projects empty retry state when list requests fail", async () => {
     mocks.mockGetSplit.mockRejectedValue(new Error("offline"));
     const user = userEvent.setup();

@@ -7,6 +7,7 @@ export interface CreateSplitPayload {
   owner: string;
   projectId: string;
   title: string;
+  description?: string;
   projectType: string;
   token: string;
   collaborators: Array<{
@@ -166,7 +167,8 @@ export async function buildUpdateMetadataXdr(
   projectId: string,
   owner: string,
   title: string,
-  projectType: string
+  projectType: string,
+  description?: string
 ): Promise<BuildSplitResponse> {
   return requestJson<BuildSplitResponse>(
     `/splits/${encodeURIComponent(projectId)}/metadata`,
@@ -174,7 +176,7 @@ export async function buildUpdateMetadataXdr(
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ owner, title, projectType })
+      body: JSON.stringify({ owner, title, projectType, description })
     }
   );
 }
