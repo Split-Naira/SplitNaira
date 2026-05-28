@@ -4,6 +4,10 @@ use soroban_sdk::{
     contract, contractimpl, contracttype, token, Address, Env, Map, String, Symbol, Vec,
 };
 
+/// Number of project IDs stored per bucket to avoid loading the entire index
+/// into memory during paginated reads.
+const PROJECT_ID_BUCKET_SIZE: u32 = 100;
+
 mod errors;
 mod events;
 use events::{
@@ -77,6 +81,11 @@ pub enum DataKey {
     ProjectCount,
     /// Stores all project IDs in order for enumeration
     ProjectIds,
+    /// Bucketed project ID index for memory-efficient pagination.
+    /// Each bucket holds up to PROJECT_ID_BUCKET_SIZE IDs.
+    ProjectIdsBucket(u32),
+    /// Total number of buckets in the ProjectIdsBucket index.
+    ProjectIdsBucketCount,
     /// Contract admin for global allowlist management
     Admin,
     /// Number of allowlisted token contract addresses
@@ -300,6 +309,35 @@ impl SplitNairaContract {
         env.storage()
             .persistent()
             .set(&DataKey::ProjectIds, &project_ids);
+
+        // Append to bucketed index for memory-efficient pagination
+        let bucket_count: u32 = env
+            .storage()
+            .persistent()
+            .get::<DataKey, u32>(&DataKey::ProjectIdsBucketCount)
+            .unwrap_or(0);
+        let total_ids = project_ids.len();
+        let target_bucket = (total_ids - 1) / PROJECT_ID_BUCKET_SIZE;
+        if target_bucket >= bucket_count {
+            let mut new_bucket = Vec::new(&env);
+            new_bucket.push_back(project_id.clone());
+            env.storage()
+                .persistent()
+                .set(&DataKey::ProjectIdsBucket(target_bucket), &new_bucket);
+            env.storage()
+                .persistent()
+                .set(&DataKey::ProjectIdsBucketCount, &(bucket_count + 1));
+        } else {
+            let mut bucket: Vec<Symbol> = env
+                .storage()
+                .persistent()
+                .get::<DataKey, Vec<Symbol>>(&DataKey::ProjectIdsBucket(target_bucket))
+                .unwrap_or(Vec::new(&env));
+            bucket.push_back(project_id.clone());
+            env.storage()
+                .persistent()
+                .set(&DataKey::ProjectIdsBucket(target_bucket), &bucket);
+        }
 
         // Emit creation event
         ProjectCreated {
@@ -606,32 +644,17 @@ impl SplitNairaContract {
     /// # Returns
     /// Vector of SplitProject structs
     pub fn list_projects(env: Env, start: u32, limit: u32) -> Vec<SplitProject> {
-        let project_ids: Vec<Symbol> = env
-            .storage()
-            .persistent()
-            .get::<DataKey, Vec<Symbol>>(&DataKey::ProjectIds)
-            .unwrap_or(Vec::new(&env));
-
-        let total = project_ids.len();
-        if start >= total {
-            return Vec::new(&env);
-        }
-
-        let end = (start + limit).min(total);
+        let ids = Self::get_project_ids_from_buckets(&env, start, limit);
         let mut result = Vec::new(&env);
-
-        for i in start..end {
-            if let Some(project_id) = project_ids.get(i) {
-                if let Some(project) = env
-                    .storage()
-                    .persistent()
-                    .get::<DataKey, SplitProject>(&DataKey::Project(project_id))
-                {
-                    result.push_back(project);
-                }
+        for project_id in ids.iter() {
+            if let Some(project) = env
+                .storage()
+                .persistent()
+                .get::<DataKey, SplitProject>(&DataKey::Project(project_id))
+            {
+                result.push_back(project);
             }
         }
-
         result
     }
 
@@ -760,25 +783,7 @@ impl SplitNairaContract {
     ///
     /// Returns an empty Vec when `start` is beyond the total project count.
     pub fn get_project_ids(env: Env, start: u32, limit: u32) -> Vec<Symbol> {
-        let project_ids: Vec<Symbol> = env
-            .storage()
-            .persistent()
-            .get::<DataKey, Vec<Symbol>>(&DataKey::ProjectIds)
-            .unwrap_or(Vec::new(&env));
-
-        let total = project_ids.len();
-        if start >= total {
-            return Vec::new(&env);
-        }
-
-        let end = (start + limit).min(total);
-        let mut ids = Vec::new(&env);
-        for i in start..end {
-            if let Some(id) = project_ids.get(i) {
-                ids.push_back(id);
-            }
-        }
-        ids
+        Self::get_project_ids_from_buckets(&env, start, limit)
     }
 
     /// Returns how much a collaborator has been paid across all distribution
@@ -1011,12 +1016,79 @@ impl SplitNairaContract {
         Ok(())
     }
 
-    fn sum_project_balances_for_token(env: &Env, token: &Address) -> Result<i128, SplitError> {
-        let project_ids: Vec<Symbol> = env
+    /// Reads project IDs from the bucketed index for the requested range.
+    /// Falls back to the flat ProjectIds Vec if bucketed index is empty.
+    fn get_project_ids_from_buckets(env: &Env, start: u32, limit: u32) -> Vec<Symbol> {
+        let bucket_count: u32 = env
             .storage()
             .persistent()
-            .get::<DataKey, Vec<Symbol>>(&DataKey::ProjectIds)
-            .unwrap_or(Vec::new(env));
+            .get::<DataKey, u32>(&DataKey::ProjectIdsBucketCount)
+            .unwrap_or(0);
+
+        if bucket_count > 0 {
+            let mut ids = Vec::new(env);
+            let mut idx = start;
+            let end = start.saturating_add(limit);
+            while idx < end {
+                let bucket = idx / PROJECT_ID_BUCKET_SIZE;
+                if bucket >= bucket_count {
+                    break;
+                }
+                let offset = idx % PROJECT_ID_BUCKET_SIZE;
+                let bucket_data: Vec<Symbol> = env
+                    .storage()
+                    .persistent()
+                    .get::<DataKey, Vec<Symbol>>(&DataKey::ProjectIdsBucket(bucket))
+                    .unwrap_or(Vec::new(env));
+                let remaining_in_bucket = bucket_data.len().saturating_sub(offset as u32);
+                let needed = end.saturating_sub(idx);
+                let take = remaining_in_bucket.min(needed);
+                for i in 0..take {
+                    if let Some(id) = bucket_data.get(offset + i) {
+                        ids.push_back(id);
+                    }
+                }
+                idx += take;
+            }
+            ids
+        } else {
+            env.storage()
+                .persistent()
+                .get::<DataKey, Vec<Symbol>>(&DataKey::ProjectIds)
+                .unwrap_or(Vec::new(env))
+        }
+    }
+
+    /// Loads all project IDs by iterating buckets. Falls back to flat Vec.
+    fn get_all_project_ids(env: &Env) -> Vec<Symbol> {
+        let bucket_count: u32 = env
+            .storage()
+            .persistent()
+            .get::<DataKey, u32>(&DataKey::ProjectIdsBucketCount)
+            .unwrap_or(0);
+        if bucket_count > 0 {
+            let mut all = Vec::new(env);
+            for i in 0..bucket_count {
+                let bucket: Vec<Symbol> = env
+                    .storage()
+                    .persistent()
+                    .get::<DataKey, Vec<Symbol>>(&DataKey::ProjectIdsBucket(i))
+                    .unwrap_or(Vec::new(env));
+                for id in bucket.iter() {
+                    all.push_back(id);
+                }
+            }
+            all
+        } else {
+            env.storage()
+                .persistent()
+                .get::<DataKey, Vec<Symbol>>(&DataKey::ProjectIds)
+                .unwrap_or(Vec::new(env))
+        }
+    }
+
+    fn sum_project_balances_for_token(env: &Env, token: &Address) -> Result<i128, SplitError> {
+        let project_ids = Self::get_all_project_ids(env);
 
         let mut total: i128 = 0;
         for project_id in project_ids.iter() {
