@@ -23,6 +23,10 @@ export function createDataSource(): DataSource {
     !databaseUrl.includes("sslmode=") &&
     !databaseUrl.includes("ssl=");
 
+  const poolMax = env.DATABASE_POOL_MAX
+    ? Number(env.DATABASE_POOL_MAX)
+    : 10;
+
   return new DataSource({
     type: "postgres",
     url: databaseUrl,
@@ -31,6 +35,9 @@ export function createDataSource(): DataSource {
     entities: [User, TransactionRecord],
     migrations: ["src/migrations/*.ts"],
     migrationsTableName: "migrations",
+    extra: {
+      max: poolMax,
+    },
     ssl: needsSsl
       ? {
         rejectUnauthorized: false

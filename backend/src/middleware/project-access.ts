@@ -15,12 +15,16 @@
  */
 
 import type { Request, Response, NextFunction } from "express";
-import { Address } from "@stellar/stellar-sdk";
-import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
+import {
+  STELLAR_ADDRESS_HEADER,
+  canAccessProject,
+  createUnauthorizedProjectAccessError,
+  parseStellarAddressHeader,
+  type ProjectAccessTarget,
+} from "../services/auth.js";
 import { logger } from "../services/logger.js";
 
-/** Header carrying the requester's verified Stellar address. */
-export const STELLAR_ADDRESS_HEADER = "x-stellar-address";
+export { STELLAR_ADDRESS_HEADER, type ProjectAccessTarget };
 
 /**
  * Validates that the `X-Stellar-Address` header contains a well-formed
@@ -33,42 +37,17 @@ export function requireStellarAddress(
   res: Response,
   next: NextFunction,
 ): void {
-  const raw = req.headers[STELLAR_ADDRESS_HEADER];
-  const addressStr = typeof raw === "string" ? raw.trim() : "";
+  const result = parseStellarAddressHeader(
+    req.headers[STELLAR_ADDRESS_HEADER] as string | string[] | undefined,
+  );
 
-  if (!addressStr) {
-    next(
-      new AppError(
-        ErrorType.AUTH,
-        ErrorCode.UNAUTHORIZED,
-        `Missing required header: ${STELLAR_ADDRESS_HEADER}. Include your Stellar public key.`,
-      ),
-    );
+  if (!result.ok) {
+    next(result.error);
     return;
   }
 
-  try {
-    Address.fromString(addressStr);
-  } catch {
-    next(
-      new AppError(
-        ErrorType.VALIDATION,
-        ErrorCode.VALIDATION_ERROR,
-        `Invalid Stellar address in ${STELLAR_ADDRESS_HEADER} header.`,
-      ),
-    );
-    return;
-  }
-
-  res.locals.requesterAddress = addressStr;
+  res.locals.requesterAddress = result.address;
   next();
-}
-
-export interface ProjectAccessTarget {
-  /** The owner address stored on the project. */
-  owner: string;
-  /** Collaborator addresses (fetched from the project record). */
-  collaborators: string[];
 }
 
 /**
@@ -113,23 +92,14 @@ export function requireProjectAccess(
         return;
       }
 
-      const isOwner = target.owner === requester;
-      const isCollaborator = target.collaborators.includes(requester);
-
-      if (!isOwner && !isCollaborator) {
+      if (!canAccessProject(requester, target)) {
         logger.warn("Unauthorized project access attempt blocked", {
           requester,
           projectId,
           requestId: res.locals.requestId,
           ip: req.ip,
         });
-        next(
-          new AppError(
-            ErrorType.AUTH,
-            ErrorCode.UNAUTHORIZED,
-            "You are not authorized to access this project.",
-          ),
-        );
+        next(createUnauthorizedProjectAccessError());
         return;
       }
 

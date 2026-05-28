@@ -46,7 +46,31 @@ const backendEnvSchema = z.object({
 
   RATE_LIMIT_WINDOW_MS: z.string().optional(),
   RATE_LIMIT_MAX: z.string().optional(),
-  SHUTDOWN_FORCE_TIMEOUT_MS: z.string().optional()
+  SHUTDOWN_FORCE_TIMEOUT_MS: z.string().optional(),
+
+  READ_CACHE_TTL_MS: z
+    .string()
+    .optional()
+    .refine(
+      (val) => val === undefined || (Number.isInteger(Number(val)) && Number(val) > 0),
+      "READ_CACHE_TTL_MS must be a positive integer",
+    ),
+
+  READ_CACHE_MAX_ENTRIES: z
+    .string()
+    .optional()
+    .refine(
+      (val) => val === undefined || (Number.isInteger(Number(val)) && Number(val) > 0),
+      "READ_CACHE_MAX_ENTRIES must be a positive integer",
+    ),
+
+  DATABASE_POOL_MAX: z
+    .string()
+    .optional()
+    .refine(
+      (val) => val === undefined || (Number.isInteger(Number(val)) && Number(val) > 0),
+      "DATABASE_POOL_MAX must be a positive integer",
+    ),
 });
 
 export type BackendEnv = z.infer<typeof backendEnvSchema>;

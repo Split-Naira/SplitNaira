@@ -9,6 +9,8 @@ import {
 import { getEnv } from "../config/env.js";
 import { logger } from "./logger.js";
 import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
+import { logger } from "./logger.js";
+import { configureReadCache, getReadCache } from "./read-cache.js";
 
 export interface StellarConfig {
   horizonUrl: string;
@@ -113,6 +115,14 @@ export function loadStellarConfig(): StellarConfig {
   }
 
   const env = getEnv();
+  configureReadCache({
+    defaultTtlMs: env.READ_CACHE_TTL_MS
+      ? Number(env.READ_CACHE_TTL_MS)
+      : undefined,
+    maxEntries: env.READ_CACHE_MAX_ENTRIES
+      ? Number(env.READ_CACHE_MAX_ENTRIES)
+      : undefined,
+  });
 
   cachedConfig = {
     horizonUrl: env.HORIZON_URL,
@@ -135,68 +145,31 @@ export function getStellarRpcServer(): rpc.Server {
   return cachedRpcServer;
 }
 
-// ============================================================
-//  READ-RESULT CACHE
-//  TTL-based in-memory cache for read-only contract simulations.
-//  Invalidation rules:
-//   - Entries expire after `ttlMs` milliseconds (default 30 s).
-//   - Write operations (create, deposit, distribute, lock, etc.)
-//     must call `invalidateCache(key)` or `invalidateCacheByPrefix(prefix)`
-//     to evict stale entries immediately.
-//   - The cache is process-local; it is automatically warm up on the first
-//     read after a cold start or after an invalidation.
-// ============================================================
-
-interface CacheEntry<T> {
-  value: T;
-  expiresAt: number;
-}
-
-const _cache = new Map<string, CacheEntry<unknown>>();
-
-export const READ_CACHE_TTL_MS = 30_000; // 30 seconds default
+/** Default TTL for read-cache entries (override via `READ_CACHE_TTL_MS`). */
+export const READ_CACHE_TTL_MS = 30_000;
 
 export function getCached<T>(key: string): T | undefined {
-  const entry = _cache.get(key) as CacheEntry<T> | undefined;
-  if (!entry) {
-    return undefined;
-  }
-  if (Date.now() > entry.expiresAt) {
-    _cache.delete(key);
-    console.debug(`[cache] MISS (expired) key=${key}`);
-    return undefined;
-  }
-  console.debug(`[cache] HIT key=${key}`);
-  return entry.value;
+  return getReadCache().get<T>(key);
 }
 
-export function setCached<T>(key: string, value: T, ttlMs = READ_CACHE_TTL_MS): void {
-  _cache.set(key, { value, expiresAt: Date.now() + ttlMs });
-  console.debug(`[cache] SET key=${key} ttl=${ttlMs}ms`);
+export function setCached<T>(
+  key: string,
+  value: T,
+  ttlMs = READ_CACHE_TTL_MS,
+): void {
+  getReadCache().set(key, value, ttlMs);
 }
 
 export function invalidateCache(key: string): void {
-  const deleted = _cache.delete(key);
-  if (deleted) {
-    console.debug(`[cache] INVALIDATE key=${key}`);
-  }
+  getReadCache().delete(key);
 }
 
 export function invalidateCacheByPrefix(prefix: string): void {
-  let count = 0;
-  for (const key of _cache.keys()) {
-    if (key.startsWith(prefix)) {
-      _cache.delete(key);
-      count++;
-    }
-  }
-  if (count > 0) {
-    console.debug(`[cache] INVALIDATE prefix=${prefix} removed=${count}`);
-  }
+  getReadCache().deleteByPrefix(prefix);
 }
 
 export function getCacheStats(): { size: number; keys: string[] } {
-  return { size: _cache.size, keys: Array.from(_cache.keys()) };
+  return getReadCache().stats();
 }
 
 export interface SorobanReachabilityStatus {
