@@ -49,8 +49,17 @@ export function errorHandler(
     });
   }
 
-  // Fallback for generic errors
+  // Fallback for generic errors — capture 5xx in Sentry when DSN is configured
   logger.error("Unhandled error", { requestId, err: err.stack || err.message || err });
+  if (process.env.SENTRY_DSN) {
+    // Dynamic import avoids loading Sentry's OpenTelemetry instrumentation when DSN is absent
+    void import("@sentry/node").then((Sentry) => {
+      Sentry.withScope((scope) => {
+        scope.setTag("requestId", requestId);
+        Sentry.captureException(err);
+      });
+    });
+  }
 
   if (err instanceof RpcError) {
     return res.status(err.statusCode).json({

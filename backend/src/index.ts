@@ -127,9 +127,41 @@ app.get("/api/docs/", (_req, res) => {
 app.use(notFoundHandler);
 app.use(errorHandler);
 
+// Lazily initialise Sentry only when SENTRY_DSN is set. Dynamic import avoids
+// loading the @sentry/node OpenTelemetry instrumentation in test/CI environments
+// where no DSN is configured, which would otherwise patch http internals.
+async function initSentry(): Promise<void> {
+  if (!process.env.SENTRY_DSN) return;
+  const Sentry = await import("@sentry/node");
+  const scrubWallets = process.env.SENTRY_SCRUB_WALLET_ADDRESSES !== "false";
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? "development",
+    release: process.env.npm_package_version,
+    beforeSend(event) {
+      if (scrubWallets) {
+        const scrubbed = JSON.stringify(event).replace(
+          /\b[GC][A-Z2-7]{55}\b/g,
+          "[WALLET_REDACTED]"
+        );
+        return JSON.parse(scrubbed);
+      }
+      return event;
+    },
+  });
+}
+
+async function captureToSentry(err: unknown): Promise<void> {
+  if (!process.env.SENTRY_DSN) return;
+  const Sentry = await import("@sentry/node");
+  Sentry.captureException(err);
+}
+
 if (process.env.NODE_ENV !== "test") {
   const start = async () => {
     try {
+      await initSentry();
+
       if (process.env.NODE_ENV !== "production") {
         printEnvDiagnostics();
       }
@@ -171,14 +203,17 @@ if (process.env.NODE_ENV !== "test") {
       // Fatal error handlers
       process.on("unhandledRejection", (reason) => {
         logger.error("Unhandled promise rejection", { reason });
+        void captureToSentry(reason);
         process.exit(1);
       });
       process.on("uncaughtException", (err) => {
         logger.error("Uncaught exception", { error: err });
+        void captureToSentry(err);
         process.exit(1);
       });
     } catch (err) {
       logger.error("Failed to start server", { error: err });
+      void captureToSentry(err);
       process.exit(1);
     }
   };

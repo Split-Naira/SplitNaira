@@ -1,6 +1,7 @@
 "use client";
 
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import * as Sentry from "@sentry/nextjs";
 
 interface Props {
   children: ReactNode;
@@ -22,7 +23,13 @@ export class AppErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("Unhandled app error", error, errorInfo);
+    if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
+      Sentry.captureException(error, {
+        contexts: { react: { componentStack: errorInfo.componentStack ?? "" } },
+      });
+    } else {
+      console.error("Unhandled app error", error, errorInfo);
+    }
   }
 
   private handleReset = () => {
