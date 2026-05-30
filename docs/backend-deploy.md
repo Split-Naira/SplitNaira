@@ -62,3 +62,115 @@ The command reads `DATABASE_URL` plus the same Stellar environment variables use
 
 The endpoint returns `503` when any component is unavailable so Render/load balancers do not route traffic to an instance with missing config, an unreachable database, an unreachable Soroban RPC, or an invalid/unreachable contract.
 
+---
+
+## CORS Configuration
+
+`CORS_ORIGIN` controls which browser origins may call the API.
+
+| Environment | Required | Rules |
+|---|---|---|
+| Development | No | Defaults to `http://localhost:3000` |
+| Production | **Yes** | Must be set; wildcard `*` is rejected at startup |
+
+```bash
+# Single origin (Vercel preview URL)
+CORS_ORIGIN=https://splitnaira.vercel.app
+
+# Multiple origins — comma-separated (Vercel + custom domain)
+CORS_ORIGIN=https://splitnaira.vercel.app,https://app.splitnaira.com,https://splitnaira.com
+```
+
+If `CORS_ORIGIN` is missing or contains `*` in production the process will refuse to start with a descriptive error.
+
+---
+
+## Structured Logging
+
+Two log formats are supported, selected by `LOG_FORMAT`:
+
+| Value | Use case | Output |
+|---|---|---|
+| `pretty` (default) | Local development | Coloured human-readable lines |
+| `json` | Production / Render | Newline-delimited JSON for log drains |
+
+Set `LOG_FORMAT=json` in the Render environment dashboard.
+
+### JSON log fields
+
+Every JSON log entry includes:
+
+| Field | Type | Description |
+|---|---|---|
+| `timestamp` | ISO-8601 string | UTC log time |
+| `level` | string | `error` / `warn` / `info` / `http` / `debug` |
+| `message` | string | Human-readable summary |
+| `requestId` | string? | Correlation ID from `x-request-id` (present on request-scoped logs) |
+
+Additional fields depend on the call site (e.g. `method`, `path`, `errors` for response-validation failures).
+
+### Secrets scrub list
+
+The following field names are automatically redacted to `[REDACTED]` in every log entry regardless of nesting depth:
+
+`password`, `passwd`, `secret`, `token`, `authorization`, `cookie`, `private_key`, `mnemonic`, `seed`, `database_url`, `sentry_dsn`
+
+---
+
+## Error Monitoring (Sentry)
+
+Set `SENTRY_DSN` to activate backend error capture. The SDK is loaded lazily — omitting the variable has zero runtime cost.
+
+```bash
+SENTRY_DSN=https://<key>@o<org>.ingest.sentry.io/<project>
+SENTRY_ENVIRONMENT=production          # defaults to NODE_ENV
+# SENTRY_SCRUB_WALLET_ADDRESSES=true   # redacts Stellar addresses (default: true)
+```
+
+Captured events:
+- Unhandled promise rejections
+- Uncaught exceptions
+- Generic 5xx errors that reach the global error handler
+
+Stellar public keys (`G…`) and contract IDs (`C…`) are scrubbed from event payloads by default. Set `SENTRY_SCRUB_WALLET_ADDRESSES=false` to disable scrubbing if keys are needed for debugging.
+
+### Frontend Sentry
+
+Set `NEXT_PUBLIC_SENTRY_DSN` in Vercel or your hosting platform:
+
+```bash
+NEXT_PUBLIC_SENTRY_DSN=https://<key>@o<org>.ingest.sentry.io/<project>
+NEXT_PUBLIC_SENTRY_ENVIRONMENT=production
+```
+
+The `AppErrorBoundary` component forwards uncaught React render errors to Sentry when the DSN is present.
+
+---
+
+## Response Schema Validation
+
+`withResponseValidation` wraps route handlers and validates the outgoing JSON body against a Zod schema before it reaches the client.
+
+### Behaviour on mismatch
+
+| Mode | When active | Behaviour |
+|---|---|---|
+| Strict | `NODE_ENV=production` **or** `STRICT_RESPONSE_VALIDATION=true` | Returns HTTP 500; logs full diff |
+| Lenient | `NODE_ENV` ≠ production (unless flag overrides) | Forwards original body; logs diff |
+
+Override the default with:
+
+```bash
+# Force strict even in development (recommended for CI)
+STRICT_RESPONSE_VALIDATION=true
+
+# Disable strict in production (not recommended)
+STRICT_RESPONSE_VALIDATION=false
+```
+
+### Tradeoffs
+
+Strict mode prevents clients from receiving corrupt/partial data when the API contract drifts from what the server produces, catching issues at the API layer rather than in the frontend. The cost is that any schema mismatch becomes a 500 visible to callers — deploy with confidence by running the full test suite first.
+
+In lenient mode, mismatches are only visible in logs, making it safe to iterate on endpoints before full schema coverage is achieved.
+
