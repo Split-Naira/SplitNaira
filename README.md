@@ -6,6 +6,22 @@ Royalty splitting for Nigeria's creative economy, powered by Stellar and Soroban
 [![Built on Stellar](https://img.shields.io/badge/Built%20on-Stellar-7B61FF)](https://stellar.org)
 [![Soroban](https://img.shields.io/badge/Smart%20Contracts-Soroban-blueviolet)](https://soroban.stellar.org)
 [![Wave Program](https://img.shields.io/badge/Stellar-Wave%20Program-blue)](https://drips.network/wave/stellar)
+[![API Docs](https://img.shields.io/badge/API%20Docs-Swagger%20UI-85EA2D)](https://splitnaira-api.onrender.com/api/docs)
+
+## API Documentation
+
+Interactive API docs (Swagger UI) are served at `/api/docs` after every backend deploy.
+
+| Environment | URL |
+|-------------|-----|
+| Production | https://splitnaira-api.onrender.com/api/docs |
+| Local dev | http://localhost:3001/api/docs |
+
+The machine-readable spec is committed at [`docs/openapi.json`](docs/openapi.json) and regenerated via:
+
+```bash
+cd backend && npm run generate:openapi
+```
 
 ## Status
 

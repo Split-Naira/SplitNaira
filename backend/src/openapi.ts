@@ -468,13 +468,12 @@ const isDirectRun = process.argv[1] && (
 
 if (isDirectRun) {
   const spec = generateOpenApi();
-  const docsDir = path.join(process.cwd(), "openapi");
+
+  // Write docs/openapi.json — consumed by docsRouter at /api/docs
+  const docsDir = path.resolve(process.cwd(), "..", "docs");
   if (!fs.existsSync(docsDir)) {
     fs.mkdirSync(docsDir, { recursive: true });
   }
-  fs.writeFileSync(
-    path.join(docsDir, "openapi.yaml"),
-    yaml.stringify(spec)
-  );
-  logger.info("OpenAPI spec generated at docs/openapi.yaml");
+  fs.writeFileSync(path.join(docsDir, "openapi.json"), JSON.stringify(spec, null, 2));
+  logger.info("OpenAPI spec generated at docs/openapi.json");
 }

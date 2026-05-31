@@ -1,682 +1,251 @@
 {
-  "openapi": "3.0.1",
+  "openapi": "3.0.0",
   "info": {
-    "title": "SplitNaira API",
     "version": "0.1.0",
-    "description": "API for building unsigned Stellar/Soroban transactions and reading Split projects."
+    "title": "SplitNaira API",
+    "description": "Premium royalty management API on Stellar network."
   },
   "servers": [
     {
       "url": "http://localhost:3001"
     }
   ],
-  "tags": [
-    {
-      "name": "health"
-    },
-    {
-      "name": "splits"
-    }
-  ],
   "components": {
-    "securitySchemes": {},
     "schemas": {
-      "RequestIdError": {
+      "Project": {
         "type": "object",
-        "required": [
-          "error",
-          "message",
-          "requestId"
-        ],
         "properties": {
-          "error": {
-            "type": "string",
-            "example": "validation_error"
+          "projectId": {
+            "type": "string"
           },
-          "message": {
-            "type": "string",
-            "example": "Invalid request payload."
+          "title": {
+            "type": "string"
           },
-          "requestId": {
-            "type": "string",
-            "example": "c9d9f4d9-2c0a-4f7c-92cf-7d3db4f0d4b4"
+          "projectType": {
+            "type": "string"
           },
-          "details": {
-            "description": "Optional validation details; shape varies by endpoint.",
+          "owner": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          },
+          "balance": {
+            "type": "string"
+          },
+          "totalDistributed": {
+            "type": "string"
+          },
+          "locked": {
+            "type": "boolean"
+          },
+          "collaborators": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "address": {
+                  "type": "string"
+                },
+                "alias": {
+                  "type": "string"
+                },
+                "basisPoints": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "address",
+                "alias",
+                "basisPoints"
+              ]
+            }
+          }
+        },
+        "required": [
+          "projectId",
+          "title",
+          "projectType",
+          "owner",
+          "token",
+          "balance",
+          "totalDistributed",
+          "locked",
+          "collaborators"
+        ]
+      },
+      "XdrResponse": {
+        "type": "object",
+        "properties": {
+          "xdr": {
+            "type": "string"
+          },
+          "metadata": {
             "type": "object",
-            "additionalProperties": true
-          },
-          "status": {
-            "type": "string",
-            "example": "not_ready"
+            "properties": {
+              "contractId": {
+                "type": "string"
+              },
+              "networkPassphrase": {
+                "type": "string"
+              },
+              "sourceAccount": {
+                "type": "string"
+              },
+              "operation": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "contractId",
+              "networkPassphrase",
+              "sourceAccount",
+              "operation"
+            ]
           }
         },
-        "additionalProperties": false
-      },
-      "BuildTransactionMetadata": {
-        "type": "object",
-        "required": [
-          "contractId",
-          "networkPassphrase",
-          "sourceAccount",
-          "sequenceNumber",
-          "fee",
-          "operation"
-        ],
-        "properties": {
-          "contractId": {
-            "type": "string",
-            "example": "C1234abcd..."
-          },
-          "networkPassphrase": {
-            "type": "string",
-            "example": "Test SDF Network ; September 2015"
-          },
-          "sourceAccount": {
-            "type": "string",
-            "example": "GABCDEF12345..."
-          },
-          "sequenceNumber": {
-            "oneOf": [
-              { "type": "integer" },
-              { "type": "string" }
-            ],
-            "example": 123
-          },
-          "fee": {
-            "oneOf": [
-              { "type": "integer" },
-              { "type": "string" }
-            ],
-            "example": 100
-          },
-          "operation": {
-            "type": "string",
-            "description": "The operation being performed. Possible values: create_project, lock_project, update_collaborators, distribute, allow_token, disallow_token, pause_distributions, unpause_distributions",
-            "example": "create_project"
-          }
-        },
-        "additionalProperties": true
-      },
-      "BuildTransactionResponse": {
-        "type": "object",
         "required": [
           "xdr",
           "metadata"
-        ],
+        ]
+      },
+      "ClaimableResponse": {
+        "type": "object",
         "properties": {
-          "xdr": {
+          "projectId": {
             "type": "string",
-            "description": "Unsigned (prepared) transaction XDR; the caller must sign and submit."
+            "description": "The project ID"
           },
-          "metadata": {
-            "$ref": "#/components/schemas/BuildTransactionMetadata"
+          "collaborator": {
+            "type": "string",
+            "description": "Stellar address of the collaborator"
+          },
+          "claimable": {
+            "type": "string",
+            "description": "Amount available to claim, in stroops"
+          },
+          "claimed": {
+            "type": "string",
+            "description": "Amount already claimed, in stroops"
+          },
+          "total": {
+            "type": "string",
+            "description": "Total allocated (claimed + claimable), in stroops"
           }
         },
-        "additionalProperties": false
+        "required": [
+          "projectId",
+          "collaborator",
+          "claimable",
+          "claimed",
+          "total"
+        ]
       },
       "HealthResponse": {
         "type": "object",
-        "required": [
-          "status",
-          "uptime",
-          "timestamp"
-        ],
         "properties": {
-          "status": { "type": "string", "example": "ok" },
-          "uptime": { "type": "number", "example": 12.34 },
-          "timestamp": { "type": "string", "format": "date-time" }
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "not_ready"
+            ]
+          },
+          "uptime": {
+            "type": "number",
+            "description": "Server uptime in seconds"
+          },
+          "timestamp": {
+            "type": "string",
+            "description": "ISO 8601 timestamp"
+          }
         },
-        "additionalProperties": false
-      },
-      "ReadyResponse": {
-        "type": "object",
         "required": [
           "status"
-        ],
-        "properties": {
-          "status": { "type": "string", "example": "ready" }
-        },
-        "additionalProperties": false
-      },
-      "SplitCollaborator": {
-        "type": "object",
-        "required": [
-          "address",
-          "alias",
-          "basisPoints"
-        ],
-        "properties": {
-          "address": { "type": "string", "example": "GABCDEF12345..." },
-          "alias": { "type": "string", "example": "Burna B." },
-          "basisPoints": { "type": "integer", "example": 5000 }
-        },
-        "additionalProperties": false
-      },
-      "SplitProject": {
-        "type": "object",
-        "required": [
-          "projectId",
-          "title",
-          "projectType",
-          "token",
-          "owner",
-          "collaborators",
-          "locked",
-          "totalDistributed",
-          "distributionRound"
-        ],
-        "properties": {
-          "projectId": { "type": "string", "example": "afrobeats_001" },
-          "title": { "type": "string", "example": "Afrobeats Compilation" },
-          "projectType": { "type": "string", "example": "music" },
-          "token": { "type": "string", "example": "CDEF1234..." },
-          "owner": { "type": "string", "example": "GABCDEF12345..." },
-          "collaborators": {
-            "type": "array",
-            "items": { "$ref": "#/components/schemas/SplitCollaborator" },
-            "example": [
-              { "address": "GAAAA...", "alias": "Artist A", "basisPoints": 6000 },
-              { "address": "GBBBB...", "alias": "Artist B", "basisPoints": 4000 }
-            ]
-          },
-          "locked": { "type": "boolean", "example": false },
-          "totalDistributed": { "type": "string", "example": "0" },
-          "distributionRound": { "type": "integer", "example": 0 }
-        },
-        "additionalProperties": false
-      },
-      "CreateSplitCollaboratorInput": {
-        "type": "object",
-        "required": [
-          "address",
-          "alias",
-          "basisPoints"
-        ],
-        "properties": {
-          "address": { "type": "string", "example": "GABCDEF12345..." },
-          "alias": { "type": "string", "example": "Burna B." },
-          "basisPoints": { "type": "integer", "example": 5000 }
-        },
-        "additionalProperties": false
-      },
-      "CreateSplitRequest": {
-        "type": "object",
-        "required": [
-          "owner",
-          "projectId",
-          "title",
-          "projectType",
-          "token",
-          "collaborators"
-        ],
-        "properties": {
-          "owner": { "type": "string", "example": "GABCDEF12345..." },
-          "projectId": { "type": "string", "example": "afrobeats_001" },
-          "title": { "type": "string", "example": "Afrobeats Compilation" },
-          "projectType": { "type": "string", "example": "music" },
-          "token": { "type": "string", "example": "CDEF1234..." },
-          "collaborators": {
-            "type": "array",
-            "minItems": 2,
-            "items": { "$ref": "#/components/schemas/CreateSplitCollaboratorInput" },
-            "example": [
-              { "address": "GAAAA...", "alias": "Artist A", "basisPoints": 6000 },
-              { "address": "GBBBB...", "alias": "Artist B", "basisPoints": 4000 }
-            ]
-          }
-        },
-        "additionalProperties": false
-      },
-      "LockProjectRequest": {
-        "type": "object",
-        "required": [
-          "owner"
-        ],
-        "properties": {
-          "owner": { "type": "string", "example": "GABCDEF12345..." }
-        },
-        "additionalProperties": false
-      },
-      "UpdateCollaboratorsRequest": {
-        "type": "object",
-        "required": [
-          "owner",
-          "collaborators"
-        ],
-        "properties": {
-          "owner": { "type": "string", "example": "GABCDEF12345..." },
-          "collaborators": {
-            "type": "array",
-            "minItems": 2,
-            "items": { "$ref": "#/components/schemas/CreateSplitCollaboratorInput" },
-            "example": [
-              { "address": "GAAAA...", "alias": "Artist A", "basisPoints": 6000 },
-              { "address": "GBBBB...", "alias": "Artist B", "basisPoints": 4000 }
-            ]
-          }
-        },
-        "additionalProperties": false
-      },
-      "DistributeRequest": {
-        "type": "object",
-        "properties": {
-          "sourceAddress": { "type": "string", "example": "GABCDEF12345..." }
-        },
-        "additionalProperties": false
-      },
-      "AdminTokenRequest": {
-        "type": "object",
-        "required": ["admin", "token"],
-        "properties": {
-          "admin": { "type": "string", "example": "GADMIN12345..." },
-          "token": { "type": "string", "example": "CTOKEN1234..." }
-        },
-        "additionalProperties": false
-      },
-      "AdminPauseRequest": {
-        "type": "object",
-        "required": ["admin"],
-        "properties": {
-          "admin": { "type": "string", "example": "GADMIN12345..." }
-        },
-        "additionalProperties": false
-      },
-      "HistoryEvent": {
-        "oneOf": [
-          {
-            "type": "object",
-            "required": ["type", "round", "amount", "txHash", "ledgerCloseTime", "id"],
-            "properties": {
-              "type": { "type": "string", "enum": ["round"] },
-              "round": { "type": "integer", "example": 1 },
-              "amount": { "type": "string", "example": "1000000" },
-              "txHash": { "type": "string", "example": "abc123..." },
-              "ledgerCloseTime": { "type": "string", "format": "date-time" },
-              "id": { "type": "string", "example": "event123" }
-            },
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "required": ["type", "recipient", "amount", "txHash", "ledgerCloseTime", "id"],
-            "properties": {
-              "type": { "type": "string", "enum": ["payment"] },
-              "recipient": { "type": "string", "example": "GAAAA..." },
-              "amount": { "type": "string", "example": "500000" },
-              "txHash": { "type": "string", "example": "def456..." },
-              "ledgerCloseTime": { "type": "string", "format": "date-time" },
-              "id": { "type": "string", "example": "event456" }
-            },
-            "additionalProperties": false
-          }
         ]
       },
-      "HistoryResponse": {
+      "ReadinessResponse": {
         "type": "object",
-        "required": ["items"],
         "properties": {
-          "items": { "type": "array", "items": { "$ref": "#/components/schemas/HistoryEvent" } },
-          "nextCursor": { "type": "string", "nullable": true, "example": "cursor123" }
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "not_ready"
+            ]
+          },
+          "error": {
+            "type": "string",
+            "description": "Error code if not ready"
+          },
+          "message": {
+            "type": "string",
+            "description": "Error message if not ready"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of configuration issues"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "Request ID for tracing"
+          }
         },
-        "additionalProperties": false
+        "required": [
+          "status"
+        ]
       }
-    }
+    },
+    "parameters": {}
   },
   "paths": {
-    "/health": {
-      "get": {
-        "tags": [
-          "health"
-        ],
-        "summary": "Health check",
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/HealthResponse" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/health/live": {
-      "get": {
-        "tags": [
-          "health"
-        ],
-        "summary": "Liveness check",
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/health/ready": {
-      "get": {
-        "tags": [
-          "health"
-        ],
-        "summary": "Readiness check",
-        "responses": {
-          "200": {
-            "description": "Ready",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/ReadyResponse" }
-              }
-            }
-          },
-          "503": {
-            "description": "Not ready",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          }
-        }
-      }
-    },
     "/splits": {
-      "post": {
-        "tags": [
-          "splits"
-        ],
-        "summary": "Build unsigned transaction to create a split project",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/CreateSplitRequest" },
-              "example": {
-                "owner": "GABCDEF12345...",
-                "projectId": "afrobeats_001",
-                "title": "Afrobeats Compilation",
-                "projectType": "music",
-                "token": "CDEF1234...",
-                "collaborators": [
-                  { "address": "GAAAA...", "alias": "Artist A", "basisPoints": 6000 },
-                  { "address": "GBBBB...", "alias": "Artist B", "basisPoints": 4000 }
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Transaction built",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/splits/{projectId}": {
       "get": {
+        "summary": "List all split projects",
         "tags": [
-          "splits"
+          "Splits"
         ],
-        "summary": "Fetch split project by ID",
         "parameters": [
           {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
             "schema": {
-              "type": "string",
-              "example": "afrobeats_001"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Project found",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/SplitProject" }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "404": {
-            "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/splits/{projectId}/history": {
-      "get": {
-        "tags": [
-          "splits"
-        ],
-        "summary": "List split project history events with cursor pagination",
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "example": "afrobeats_001"
-            }
-          },
-          {
-            "name": "cursor",
-            "in": "query",
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0,
+              "default": 0
+            },
             "required": false,
+            "name": "start",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
             "schema": {
               "type": "string"
             },
-            "description": "Opaque cursor returned by previous page. Omit for the first page."
-          },
-          {
-            "name": "limit",
-            "in": "query",
             "required": false,
+            "name": "search",
+            "in": "query"
+          },
+          {
             "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 200,
-              "default": 100
+              "type": "string"
             },
-            "description": "Maximum number of events per page."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Events page",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "required": ["items"],
-                  "properties": {
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "additionalProperties": true
-                      }
-                    },
-                    "nextCursor": {
-                      "type": "string",
-                      "nullable": true,
-                      "description": "Cursor for the next page, or null if no more results."
-                    }
-                  },
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/splits/{projectId}/lock": {
-      "post": {
-        "tags": [
-          "splits"
-        ],
-        "summary": "Build unsigned transaction to lock a split project",
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "example": "afrobeats_001"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/LockProjectRequest" },
-              "example": {
-                "owner": "GABCDEF12345..."
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Transaction built",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/splits": {
-      "get": {
-        "tags": [
-          "splits"
-        ],
-        "summary": "List split projects",
-        "parameters": [
-          {
-            "name": "start",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "default": 0,
-              "example": 0
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "default": 10,
-              "minimum": 1,
-              "maximum": 100,
-              "example": 10
-            }
+            "required": false,
+            "name": "type",
+            "in": "query"
           }
         ],
         "responses": {
@@ -686,32 +255,312 @@
               "application/json": {
                 "schema": {
                   "type": "array",
-                  "items": { "$ref": "#/components/schemas/SplitProject" }
+                  "items": {
+                    "$ref": "#/components/schemas/Project"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a new split project",
+        "tags": [
+          "Splits"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "owner": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "owner"
+                  },
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32,
+                    "pattern": "^[a-zA-Z0-9_]+$"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "projectType": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32
+                  },
+                  "token": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "token"
+                  },
+                  "collaborators": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "address": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "alias": {
+                          "type": "string",
+                          "description": "Human-readable alias (e.g. \"Burna B.\")"
+                        },
+                        "basisPoints": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMinimum": true,
+                          "maximum": 10000
+                        }
+                      },
+                      "required": [
+                        "address",
+                        "alias",
+                        "basisPoints"
+                      ]
+                    },
+                    "minItems": 2
+                  }
+                },
+                "required": [
+                  "owner",
+                  "projectId",
+                  "title",
+                  "projectType",
+                  "token",
+                  "collaborators"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Unsigned transaction XDR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/XdrResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/splits/{projectId}": {
+      "get": {
+        "summary": "Get project details by ID",
+        "tags": [
+          "Splits"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32,
+              "pattern": "^[a-zA-Z0-9_]+$"
+            },
+            "required": true,
+            "name": "projectId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Project details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
                 }
               }
             }
           },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+          "404": {
+            "description": "Project not found"
+          }
+        }
+      }
+    },
+    "/splits/{projectId}/lock": {
+      "post": {
+        "summary": "Lock a project permanently",
+        "tags": [
+          "Splits"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32,
+              "pattern": "^[a-zA-Z0-9_]+$"
+            },
+            "required": true,
+            "name": "projectId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "owner": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "owner"
+                  }
+                },
+                "required": [
+                  "owner"
+                ]
               }
             }
-          },
-          "429": {
-            "description": "Rate limited",
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Unsigned transaction XDR",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+                "schema": {
+                  "$ref": "#/components/schemas/XdrResponse"
+                }
               }
             }
-          },
-          "500": {
-            "description": "Internal error",
+          }
+        }
+      }
+    },
+    "/splits/{projectId}/deposit": {
+      "post": {
+        "summary": "Deposit funds into a project",
+        "tags": [
+          "Splits"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32,
+              "pattern": "^[a-zA-Z0-9_]+$"
+            },
+            "required": true,
+            "name": "projectId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "from"
+                  },
+                  "amount": {
+                    "type": "number",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "description": "deposit amount in stroops"
+                  }
+                },
+                "required": [
+                  "from",
+                  "amount"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Unsigned transaction XDR",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+                "schema": {
+                  "$ref": "#/components/schemas/XdrResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/splits/{projectId}/metadata": {
+      "patch": {
+        "summary": "Update project metadata (title/category)",
+        "tags": [
+          "Splits"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32,
+              "pattern": "^[a-zA-Z0-9_]+$"
+            },
+            "required": true,
+            "name": "projectId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "owner": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "owner"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "projectType": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32
+                  }
+                },
+                "required": [
+                  "owner",
+                  "title",
+                  "projectType"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Unsigned transaction XDR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/XdrResponse"
+                }
               }
             }
           }
@@ -720,31 +569,66 @@
     },
     "/splits/{projectId}/collaborators": {
       "put": {
+        "summary": "Update project collaborators",
         "tags": [
-          "splits"
+          "Splits"
         ],
-        "summary": "Build unsigned transaction to update collaborators",
         "parameters": [
           {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
             "schema": {
               "type": "string",
-              "example": "afrobeats_001"
-            }
+              "minLength": 1,
+              "maxLength": 32,
+              "pattern": "^[a-zA-Z0-9_]+$"
+            },
+            "required": true,
+            "name": "projectId",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/UpdateCollaboratorsRequest" },
-              "example": {
-                "owner": "GABCDEF12345...",
-                "collaborators": [
-                  { "address": "GAAAA...", "alias": "Artist A", "basisPoints": 6000 },
-                  { "address": "GBBBB...", "alias": "Artist B", "basisPoints": 4000 }
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "owner": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "owner"
+                  },
+                  "collaborators": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "address": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "alias": {
+                          "type": "string",
+                          "description": "Human-readable alias (e.g. \"Burna B.\")"
+                        },
+                        "basisPoints": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMinimum": true,
+                          "maximum": 10000
+                        }
+                      },
+                      "required": [
+                        "address",
+                        "alias",
+                        "basisPoints"
+                      ]
+                    },
+                    "minItems": 2
+                  }
+                },
+                "required": [
+                  "owner",
+                  "collaborators"
                 ]
               }
             }
@@ -752,34 +636,12 @@
         },
         "responses": {
           "200": {
-            "description": "Transaction built",
+            "description": "Unsigned transaction XDR",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+                "schema": {
+                  "$ref": "#/components/schemas/XdrResponse"
+                }
               }
             }
           }
@@ -788,135 +650,46 @@
     },
     "/splits/{projectId}/distribute": {
       "post": {
+        "summary": "Distribute project funds to collaborators",
         "tags": [
-          "splits"
+          "Splits"
         ],
-        "summary": "Build unsigned transaction to distribute funds",
         "parameters": [
           {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
             "schema": {
               "type": "string",
-              "example": "afrobeats_001"
-            }
+              "minLength": 1,
+              "maxLength": 32,
+              "pattern": "^[a-zA-Z0-9_]+$"
+            },
+            "required": true,
+            "name": "projectId",
+            "in": "path"
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/DistributeRequest" },
-              "example": {
-                "sourceAddress": "GABCDEF12345..."
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sourceAddress": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Transaction built",
+            "description": "Unsigned transaction XDR",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/splits/{projectId}/history": {
-      "get": {
-        "tags": [
-          "splits"
-        ],
-        "summary": "Get distribution history",
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "example": "afrobeats_001"
-            }
-          },
-          {
-            "name": "cursor",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "default": "",
-              "example": ""
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "default": 100,
-              "minimum": 1,
-              "maximum": 200,
-              "example": 100
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "History",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/HistoryResponse" }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+                "schema": {
+                  "$ref": "#/components/schemas/XdrResponse"
+                }
               }
             }
           }
@@ -925,29 +698,32 @@
     },
     "/splits/{projectId}/claimable/{collaborator}": {
       "get": {
-        "tags": [
-          "splits"
-        ],
         "summary": "Get claimable payout information for a collaborator",
+        "tags": [
+          "Splits"
+        ],
         "parameters": [
           {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
             "schema": {
               "type": "string",
-              "example": "afrobeats_001"
-            }
+              "minLength": 1,
+              "maxLength": 32,
+              "pattern": "^[a-zA-Z0-9_]+$"
+            },
+            "required": true,
+            "name": "projectId",
+            "in": "path"
           },
           {
-            "name": "collaborator",
-            "in": "path",
-            "required": true,
             "schema": {
               "type": "string",
-              "example": "GACCOUNT...",
+              "minLength": 1,
               "description": "Stellar address of the collaborator"
-            }
+            },
+            "required": true,
+            "description": "Stellar address of the collaborator",
+            "name": "collaborator",
+            "in": "path"
           }
         ],
         "responses": {
@@ -956,247 +732,209 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "required": [
-                    "projectId",
-                    "collaborator",
-                    "claimable",
-                    "claimed",
-                    "total"
-                  ],
-                  "properties": {
-                    "projectId": {
-                      "type": "string",
-                      "example": "afrobeats_001"
-                    },
-                    "collaborator": {
-                      "type": "string",
-                      "example": "GACCOUNT...",
-                      "description": "Stellar address of the collaborator"
-                    },
-                    "claimable": {
-                      "type": "string",
-                      "example": "1000000",
-                      "description": "Amount claimable by the collaborator (in stroops)"
-                    },
-                    "claimed": {
-                      "type": "string",
-                      "example": "500000",
-                      "description": "Amount already claimed by the collaborator (in stroops)"
-                    },
-                    "total": {
-                      "type": "string",
-                      "example": "2000000",
-                      "description": "Total amount allocated to the collaborator (in stroops)"
-                    }
-                  }
+                  "$ref": "#/components/schemas/ClaimableResponse"
                 }
               }
             }
           },
           "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
+            "description": "Validation error — invalid projectId or collaborator address"
           },
           "404": {
-            "description": "Project not found or collaborator has no claimable info",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
+            "description": "Project not found or collaborator has no claimable info"
           },
           "500": {
-            "description": "Internal error",
+            "description": "Contract or server failure"
+          }
+        }
+      }
+    },
+    "/splits/{projectId}/history": {
+      "get": {
+        "summary": "Get project transaction history",
+        "tags": [
+          "Splits"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32,
+              "pattern": "^[a-zA-Z0-9_]+$"
+            },
+            "required": true,
+            "name": "projectId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "default": ""
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 100
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "History items",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "nullable": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ]
+                }
               }
             }
           }
         }
       }
     },
-    "/splits/admin/allow-token": {
-      "post": {
-        "tags": ["splits"],
-        "summary": "Build unsigned transaction to add a token to the allowlist",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/AdminTokenRequest" },
-              "example": {
-                "admin": "GADMIN12345...",
-                "token": "CTOKEN1234..."
-              }
-            }
-          }
-        },
+    "/health": {
+      "get": {
+        "summary": "Get overall health status",
+        "tags": [
+          "Health"
+        ],
         "responses": {
           "200": {
-            "description": "Transaction built",
+            "description": "Server health information",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
               }
             }
           }
         }
       }
     },
-    "/splits/admin/disallow-token": {
-      "post": {
-        "tags": ["splits"],
-        "summary": "Build unsigned transaction to remove a token from the allowlist",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/AdminTokenRequest" },
-              "example": {
-                "admin": "GADMIN12345...",
-                "token": "CTOKEN1234..."
-              }
-            }
-          }
-        },
+    "/health/live": {
+      "get": {
+        "summary": "Liveness check (Kubernetes compatible)",
+        "tags": [
+          "Health"
+        ],
         "responses": {
           "200": {
-            "description": "Transaction built",
+            "description": "Server is alive",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
               }
             }
           }
         }
       }
     },
-    "/splits/admin/pause-distributions": {
-      "post": {
-        "tags": ["splits"],
-        "summary": "Build unsigned transaction to pause distributions",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/AdminPauseRequest" },
-              "example": {
-                "admin": "GADMIN12345..."
-              }
-            }
-          }
-        },
+    "/health/ready": {
+      "get": {
+        "summary": "Readiness check (Kubernetes compatible)",
+        "tags": [
+          "Health"
+        ],
         "responses": {
           "200": {
-            "description": "Transaction built",
+            "description": "Server is ready to accept traffic",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ready"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
               }
             }
           },
-          "400": {
-            "description": "Validation error",
+          "503": {
+            "description": "Server is not ready (missing configuration)",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
               }
             }
           }
         }
       }
     },
-    "/splits/admin/unpause-distributions": {
-      "post": {
-        "tags": ["splits"],
-        "summary": "Build unsigned transaction to unpause distributions",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/AdminPauseRequest" },
-              "example": {
-                "admin": "GADMIN12345..."
-              }
-            }
-          }
-        },
+    "/": {
+      "get": {
+        "summary": "Get API information",
+        "tags": [
+          "System"
+        ],
         "responses": {
           "200": {
-            "description": "Transaction built",
+            "description": "API metadata",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "status",
+                    "version"
+                  ]
+                }
               }
             }
           }
@@ -1205,4 +943,3 @@
     }
   }
 }
-
