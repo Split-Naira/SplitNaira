@@ -143,6 +143,21 @@ Purpose:
 - Launch verification
 - Configuration auditing
 
+## Developer Setup
+
+npm install
+npm run verify:env
+npm run dev
+
+## Code Quality
+
+npm run lint
+npm run test
+
+## Bundle Analysis
+
+npm run analyze
+
 ## Documentation
 
 - [Deployment Runbook](./docs/deployment.md)
