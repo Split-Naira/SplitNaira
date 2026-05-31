@@ -48,6 +48,39 @@ This runbook describes the end-to-end release/upgrade path for the `contracts/` 
 4. Record contract ID and update frontend/backend env `.env` variables.
 
 ## 6. Smoke test on testnet
+
+### Automated smoke script (issue #361)
+
+Use `scripts/smoke-testnet.mjs` to exercise the full create → deposit → distribute
+lifecycle against the live testnet contract:
+
+```bash
+# Required env vars — never commit secrets
+export STELLAR_SECRET_KEY="S..."      # funded testnet keypair
+export CONTRACT_ID="C..."             # deployed contract ID
+
+node scripts/smoke-testnet.mjs
+# Exits 0 on success, 1 on any failure
+```
+
+The script:
+1. Registers a 2-collaborator split project (70% / 30%).
+2. Approves and deposits 1 XLM (configurable via `SMOKE_DEPOSIT_AMOUNT`).
+3. Calls `distribute` and verifies claimed balances match expected basis-point split.
+
+#### Manual-dispatch CI job
+
+Alternatively, trigger the smoke test via GitHub Actions without checking out locally:
+
+1. Go to **Actions → Contract Smoke Test (Testnet) → Run workflow**.
+2. Enter the deployed `CONTRACT_ID`.
+3. Optionally adjust `deposit_amount` (default 10 000 000 stroops = 1 XLM).
+4. Monitor the workflow log — it exits 0 only if all steps pass.
+
+> **Prerequisite:** The `testnet` GitHub Environment must have `STELLAR_TESTNET_SECRET_KEY`
+> set to a funded testnet keypair (Settings → Environments → testnet → Secrets).
+
+### Manual verification (fallback)
 - Execute `create_project`, `deposit`, `distribute` via integration or UI.
 - Verify event stream includes:
   - `project_created`
