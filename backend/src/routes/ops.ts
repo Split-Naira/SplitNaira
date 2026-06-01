@@ -34,11 +34,6 @@ export interface MainnetReadinessResponse {
   };
 }
 
-const REQUIRED_PRODUCTION_SECRETS = [
-  "MAINNET_CONTRACT_ID",
-  "RENDER_BACKEND_DEPLOY_HOOK_URL"
-];
-
 opsRouter.get("/mainnet-readiness", async (_req, res, next) => {
   const requestId = res.locals.requestId;
   const envDiagnostics = getEnvDiagnostics();
@@ -52,11 +47,6 @@ opsRouter.get("/mainnet-readiness", async (_req, res, next) => {
     ok: true,
     message: "cache_available",
     details: cacheStats
-  };
-
-  const productionSecrets = {
-    mainnetContractId: Boolean(process.env.MAINNET_CONTRACT_ID?.trim()),
-    renderBackendDeployHookUrl: Boolean(process.env.RENDER_BACKEND_DEPLOY_HOOK_URL?.trim())
   };
 
   const productionSecrets = {
@@ -98,9 +88,6 @@ opsRouter.get("/mainnet-readiness", async (_req, res, next) => {
       }
     };
   }
-
-  const isProduction = process.env.NODE_ENV === "production";
-  const productionReady = !isProduction || Object.values(productionSecrets).every(Boolean);
 
   const ready = envDiagnostics.ok && dbComponent.ok && productionReady;
 
