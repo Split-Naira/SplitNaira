@@ -2,7 +2,7 @@
   "schema": "https://splitnaira.dev/schemas/contract-interface.v1.json",
   "schemaVersion": 1,
   "generatedBy": "contracts/scripts/generate-interface.mjs",
-  "sourceHash": "e96ffc07d11d8860d9d11f88feb5d1e447a10d1be558269d6bb6bb5c3d19ba0b",
+  "sourceHash": "309c7ec1603f53118e8938a5435b1fbb6ba8f1f87d6b019122d5366ceca4cd50",
   "sources": [
     "contracts/Cargo.toml",
     "contracts/lib.rs",
@@ -709,6 +709,32 @@
         {
           "name": "new_owner",
           "type": "Address",
+          "doc": ""
+        }
+      ]
+    },
+    {
+      "name": "collaborators_updated",
+      "rustName": "CollaboratorsUpdated",
+      "topics": [
+        {
+          "position": 0,
+          "type": "Symbol",
+          "value": "collaborators_updated"
+        },
+        {
+          "position": 1,
+          "type": "from_field",
+          "field": "project_id"
+        }
+      ],
+      "data": {
+        "field": "project_id"
+      },
+      "fields": [
+        {
+          "name": "project_id",
+          "type": "Symbol",
           "doc": ""
         }
       ]

@@ -9,7 +9,7 @@
 
 import { getExplorerUrl, getExplorerLabel } from "@/lib/stellar";
 
-export type SorobanReceiptLifecycle = "confirming" | "success" | "failed";
+export type SorobanReceiptLifecycle = "confirming" | "success" | "failed" | "timeout";
 
 export interface TransactionReceipt {
   hash: string;
@@ -67,43 +67,57 @@ export function TransactionReceiptView({
       successSummary: (r: TransactionReceipt) =>
         `Configuration for ${r.projectId} is now immutable.`,
       confirmingSummary: "Waiting for the lock to finalize on ledger.",
-      failedSummary: "The lock transaction failed."
+      failedSummary: "The lock transaction failed.",
+      timeoutSummary: "The testnet is experiencing high latency. The lock transaction may still complete on-chain. Please verify on the explorer or try again."
     }
   }[receipt.action];
+
+  const timeoutSummaryDefault = "The testnet is experiencing high latency. The transaction may still complete on-chain. Please verify on the explorer or try again.";
 
   const isConfirming = receipt.lifecycle === "confirming";
   const isFailed = receipt.lifecycle === "failed";
   const isSuccess = receipt.lifecycle === "success";
+  const isTimeout = receipt.lifecycle === "timeout";
 
   const title = isFailed
     ? actionCopy.failedTitle
-    : isConfirming
-      ? actionCopy.confirmingTitle
-      : actionCopy.successTitle;
+    : isTimeout
+      ? "Transaction Timed Out"
+      : isConfirming
+        ? actionCopy.confirmingTitle
+        : actionCopy.successTitle;
 
   const summary = isFailed
     ? actionCopy.failedSummary
-    : isConfirming
-      ? actionCopy.confirmingSummary
-      : actionCopy.successSummary(receipt);
+    : isTimeout
+      ? (actionCopy as any).timeoutSummary || timeoutSummaryDefault
+      : isConfirming
+        ? actionCopy.confirmingSummary
+        : actionCopy.successSummary(receipt);
 
   const borderClass = isFailed
     ? "border-red-400/30 bg-red-500/5"
-    : isConfirming
-      ? "border-amber-400/25 bg-amber-500/5"
-      : "border-greenBright/20 bg-greenBright/5";
+    : isTimeout
+      ? "border-orange-400/30 bg-orange-500/5"
+      : isConfirming
+        ? "border-amber-400/25 bg-amber-500/5"
+        : "border-greenBright/20 bg-greenBright/5";
 
   const accentClass = isFailed
     ? "text-red-300"
-    : isConfirming
-      ? "text-amber-200"
-      : "text-greenBright";
+    : isTimeout
+      ? "text-orange-300"
+      : isConfirming
+        ? "text-amber-200"
+        : "text-greenBright";
 
   const iconBgClass = isFailed
     ? "bg-red-500/15"
-    : isConfirming
-      ? "bg-amber-500/15"
-      : "bg-greenBright/10";
+    : isTimeout
+      ? "bg-orange-500/15"
+      : isConfirming
+        ? "bg-amber-500/15"
+        : "bg-greenBright/10";
 
   const icons = {
     create: (
@@ -182,11 +196,18 @@ export function TransactionReceiptView({
               {receipt.failureReason}
             </p>
           )}
+          {isTimeout && (
+            <div className="pt-1">
+              <button onClick={() => window.location.reload()} className="text-[11px] font-medium text-orange-200 hover:text-white underline">
+                Refresh to Retry CTA
+              </button>
+            </div>
+          )}
           <div className="pt-2 space-y-1">
             <p className="font-mono text-[9px] text-muted break-all opacity-60">
               Tx: {receipt.hash}
             </p>
-            {(isSuccess || isConfirming) && (
+            {(isSuccess || isConfirming || isTimeout) && (
               <a
                 href={explorerUrl}
                 target="_blank"

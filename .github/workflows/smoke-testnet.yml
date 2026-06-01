@@ -1,0 +1,51 @@
+name: Contract Smoke Test (Testnet)
+
+# Issue #361: manual-dispatch smoke test — create → deposit → distribute
+# Run this after every WASM deploy to verify the live contract is healthy.
+
+on:
+  workflow_dispatch:
+    inputs:
+      contract_id:
+        description: "Deployed SplitNaira contract ID (C...)"
+        required: true
+        type: string
+      deposit_amount:
+        description: "Deposit amount in stroops (default 10000000 = 1 XLM)"
+        required: false
+        default: "10000000"
+        type: string
+      verbose:
+        description: "Enable verbose stellar CLI output"
+        required: false
+        default: "false"
+        type: boolean
+
+jobs:
+  smoke-test:
+    name: Smoke test on Testnet
+    runs-on: ubuntu-latest
+    environment: testnet   # uses STELLAR_SECRET_KEY from the testnet env
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Stellar CLI
+        run: |
+          curl -sSL https://github.com/stellar/stellar-cli/releases/latest/download/stellar-cli-x86_64-unknown-linux-gnu.tar.gz \
+            | tar -xz -C /usr/local/bin stellar
+          stellar --version
+
+      - name: Run smoke test
+        env:
+          STELLAR_SECRET_KEY: ${{ secrets.STELLAR_TESTNET_SECRET_KEY }}
+          CONTRACT_ID: ${{ inputs.contract_id }}
+          SMOKE_DEPOSIT_AMOUNT: ${{ inputs.deposit_amount }}
+          VERBOSE: ${{ inputs.verbose && '1' || '0' }}
+        run: node scripts/smoke-testnet.mjs

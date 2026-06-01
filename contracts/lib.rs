@@ -11,8 +11,10 @@ const PROJECT_ID_BUCKET_SIZE: u32 = 100;
 mod errors;
 mod events;
 use events::{
+    CollaboratorsUpdated, DepositReceived, DistributionComplete, MetadataUpdated,
+    OwnershipTransferred, PaymentSent, ProjectCreated, ProjectLocked, UnallocatedWithdrawn,
     DepositReceived, DistributionComplete, MetadataUpdated, OwnershipTransferred, PaymentSent,
-    ProjectCreated, ProjectLocked, UnallocatedWithdrawn,
+    ProjectCreated, ProjectLocked, UnallocatedWithdrawn, CollaboratorsUpdated,
 };
 #[cfg(test)]
 mod tests;
@@ -377,8 +379,13 @@ impl SplitNairaContract {
         project.collaborators = collaborators;
         env.storage()
             .persistent()
-            .set(&DataKey::Project(project_id), &project);
+            .set(&DataKey::Project(project_id.clone()), &project);
         Self::bump_project_ttl(&env, &project.project_id);
+
+        CollaboratorsUpdated {
+            project_id: project_id.clone(),
+        }
+        .publish(&env);
 
         Ok(())
     }
@@ -726,6 +733,12 @@ impl SplitNairaContract {
 
         if amount <= 0 {
             return Err(SplitError::InvalidAmount);
+        }
+
+        // Security hardening (Wave 5 / issue #401): prevent accidental self-transfer
+        // that would lock funds inside the contract indefinitely.
+        if to == env.current_contract_address() {
+            return Err(SplitError::InvalidRecipient);
         }
 
         let available = Self::get_unallocated_balance(env.clone(), token.clone())?;

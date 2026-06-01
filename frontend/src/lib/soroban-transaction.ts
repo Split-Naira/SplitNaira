@@ -1,11 +1,12 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { rpc, Transaction, type FeeBumpTransaction } from "@stellar/stellar-sdk";
 
 import { formatContractFailure } from "./contract-errors";
 import { getEnv } from "./env";
 
-const DEFAULT_POLL_ATTEMPTS = 90;
+const DEFAULT_POLL_ATTEMPTS = Number(getEnv().NEXT_PUBLIC_TX_POLL_TIMEOUT) || 90;
 
 /** Matches Soroban RPC `getTransaction` status strings (see @stellar/stellar-sdk rpc.Api.GetTransactionStatus). */
 const GET_TX = {
@@ -59,12 +60,32 @@ export async function submitSorobanTransactionAndPoll(
   const submit = await server.sendTransaction(transaction);
 
   if (submit.status === "ERROR" || submit.status === "TRY_AGAIN_LATER") {
-    throw new Error(submissionErrorMessage(submit));
+    const errorMsg = submissionErrorMessage(submit);
+    const err = new Error(errorMsg);
+    Sentry.captureException(err, {
+      tags: {
+        section: "soroban-transaction",
+        action: "submit",
+        status: submit.status,
+      },
+      extra: {
+        txHash: submit.hash,
+        errorResultXdr: submit.errorResult?.toXDR?.() ?? submit.errorResult,
+      }
+    });
+    throw err;
   }
 
   const hash = submit.hash;
   if (!hash) {
-    throw new Error("Submission did not return a transaction hash.");
+    const err = new Error("Submission did not return a transaction hash.");
+    Sentry.captureException(err, {
+      tags: {
+        section: "soroban-transaction",
+        action: "submit",
+      }
+    });
+    throw err;
   }
 
   options?.afterSubmitted?.(hash);
@@ -74,18 +95,44 @@ export async function submitSorobanTransactionAndPoll(
   });
 
   if (polled.status === GET_TX.NOT_FOUND) {
-    throw new Error(
+    const error = new Error(
       "Transaction was submitted but not confirmed in time. Check the explorer for the latest status."
     );
+    error.name = "TimeoutError";
+    throw error;
   }
 
   if (polled.status === GET_TX.FAILED) {
-    throw new Error(ledgerFailureMessage(polled));
+    const errorMsg = ledgerFailureMessage(polled);
+    const err = new Error(errorMsg);
+    Sentry.captureException(err, {
+      tags: {
+        section: "soroban-transaction",
+        action: "poll",
+        status: polled.status,
+      },
+      extra: {
+        txHash: hash,
+        resultXdr: polled.resultXdr?.toXDR?.() ?? polled.resultXdr,
+      }
+    });
+    throw err;
   }
 
   if (polled.status === GET_TX.SUCCESS) {
     return { hash };
   }
 
-  throw new Error(`Unexpected transaction status: ${String((polled as { status: string }).status)}`);
+  const err = new Error(`Unexpected transaction status: ${String((polled as { status: string }).status)}`);
+  Sentry.captureException(err, {
+    tags: {
+      section: "soroban-transaction",
+      action: "poll",
+      status: String((polled as { status: string }).status),
+    },
+    extra: {
+      txHash: hash,
+    }
+  });
+  throw err;
 }

@@ -77,8 +77,25 @@ healthRouter.get("/ready", async (_req, res, next) => {
   }
 
   try {
-    getDataSource();
-    components.db = { ok: true, message: "connected" };
+    const ds = getDataSource();
+    // Simple readiness check: execute a lightweight query to verify DB connectivity.
+    try {
+      // Use a deterministic column name so result parsing is consistent across PG versions
+      const rows = await ds.query('SELECT 1 AS one');
+      components.db = { ok: true, message: 'query_ok', rows: Array.isArray(rows) ? rows.length : undefined };
+    } catch (queryErr) {
+      const message = queryErr instanceof Error ? queryErr.message : String(queryErr);
+      components.db = { ok: false, message: `query_failed: ${message}` };
+      res.status(503).json({
+        status: "not_ready",
+        error: "database_unavailable",
+        message: "Database query failed; check DATABASE_URL and connectivity.",
+        components,
+        requestId,
+        details: { error: message }
+      });
+      return;
+    }
   } catch (dbError) {
     components.db = {
       ok: false,

@@ -52,4 +52,7 @@ pub enum SplitError {
 
     /// Distributions are currently paused by admin
     DistributionsPaused = 16,
+
+    /// Withdrawal recipient must not be the contract itself (Wave 5 security hardening)
+    InvalidRecipient = 17,
 }

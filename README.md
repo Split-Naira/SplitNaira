@@ -25,6 +25,23 @@ SplitNaira is in active development. This repo currently contains:
 
 ## Quick Start
 
+### Option 1: Docker Compose (Recommended for demos & pre-deploy)
+
+```bash
+# Copy the environment template
+cp .env.compose.example .env.local
+
+# Start the entire stack (Postgres + Backend + Frontend)
+docker compose up
+
+# Access the services:
+# - Frontend: http://localhost:3000
+# - Backend API: http://localhost:3001
+# - API Docs: http://localhost:3001/api/docs
+```
+
+### Option 2: Local Development
+
 ```bash
 # Install all dependencies
 npm run setup
@@ -45,7 +62,7 @@ Prerequisites:
 
 - Node.js >= 18
 - Rust (latest stable)
-- Docker (optional)
+- Docker (optional, but recommended for compose setup)
 
 ### Root Commands
 
@@ -67,6 +84,62 @@ Use npm scripts from the root to run commands across all projects:
 | `npm run test:contracts` | Run contract tests |
 | `npm run lint` | Lint all projects |
 | `npm run clean` | Clean build artifacts |
+
+### Docker Compose
+
+The `docker-compose.yml` provides a complete local stack for development and smoke testing:
+
+**Services:**
+- **Postgres** (`postgres:16-alpine`): Database with automatic initialization
+- **Backend** (Express + TypeScript): API server with health checks
+- **Frontend** (Next.js): Web application
+
+**Features:**
+- Postgres volume persistence
+- Service health checks with ordered startup
+- Environment variable templating via `.env.compose.example`
+- Bridge networking for inter-service communication
+- Production-ready multi-stage Docker builds
+
+**Quick Commands:**
+
+```bash
+# Start the stack
+docker compose up
+
+# Start in background
+docker compose up -d
+
+# View logs
+docker compose logs -f backend    # Backend logs
+docker compose logs -f frontend   # Frontend logs
+docker compose logs -f postgres   # Database logs
+
+# Stop services
+docker compose down
+
+# Reset database (remove volumes)
+docker compose down -v
+
+# Rebuild images
+docker compose up --build
+```
+
+**Environment Configuration:**
+
+Copy `.env.compose.example` to customize the stack:
+
+```bash
+cp .env.compose.example .env.local
+# Edit .env.local as needed
+docker compose --env-file .env.local up
+```
+
+**Accessing Services:**
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:3001
+- API Documentation: http://localhost:3001/api/docs
+- Database: localhost:5432 (user: `splitnaira`, password: `splitnaira`)
 
 ### Individual Project Commands
 

@@ -1,7 +1,9 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import type { SplitProject, Collaborator } from "./stellar";
 import { getEnv } from "./env";
+import { withRetry } from "./retry";
 
 export interface CreateSplitPayload {
   owner: string;
@@ -113,27 +115,45 @@ export class ApiClient {
     fallbackMessage: string,
     init?: RequestInit & { timeout?: number },
   ): Promise<T> {
-    const timeout = init?.timeout ?? this.defaultTimeout;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-
     try {
-      const response = await fetch(`${this.baseUrl}${path}`, {
-        ...init,
-        signal: controller.signal,
-      });
-      const body = (await response.json().catch(() => null)) as unknown;
-      if (!response.ok) {
-        throw new Error(this.toErrorMessage(response.status, body, fallbackMessage));
-      }
-      return body as T;
+      return await withRetry(async () => {
+        const timeout = init?.timeout ?? this.defaultTimeout;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+        try {
+          const response = await fetch(`${this.baseUrl}${path}`, {
+            ...init,
+            signal: controller.signal,
+          });
+          const body = (await response.json().catch(() => null)) as unknown;
+          if (!response.ok) {
+            throw new Error(this.toErrorMessage(response.status, body, fallbackMessage));
+          }
+          return body as T;
+        } catch (err) {
+          if (err instanceof DOMException && err.name === "AbortError") {
+            throw new Error(`Request timed out after ${timeout}ms: ${path}`);
+          }
+          throw err;
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      }, 3, 500);
     } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        throw new Error(`Request timed out after ${timeout}ms: ${path}`);
+      if (err instanceof Error) {
+        Sentry.captureException(err, {
+          tags: {
+            section: "api-client",
+            path,
+          },
+          extra: {
+            fallbackMessage,
+            init,
+          }
+        });
       }
       throw err;
-    } finally {
-      clearTimeout(timeoutId);
     }
   }
 

@@ -23,9 +23,22 @@ export function createDataSource(): DataSource {
     !databaseUrl.includes("sslmode=") &&
     !databaseUrl.includes("ssl=");
 
+  // Production guidance:
+  // - `DATABASE_POOL_MAX` controls the PG connection pool size (TypeORM -> pg `max`).
+  //   Set this based on your Postgres instance limits and expected concurrency.
+  //   A conservative default is 10; for Render or managed DBs, ensure the total
+  //   connections across app instances stays below the DB's max_connections.
+  // - SSL is automatically enabled for non-localhost hosts unless overridden
+  //   in the DATABASE_URL (sslmode/ssl). For strict environments set
+  //   `DATABASE_URL` with `sslmode=require` or configure a CA and set
+  //   `PGSSLMODE` accordingly.
   const poolMax = env.DATABASE_POOL_MAX
     ? Number(env.DATABASE_POOL_MAX)
     : 10;
+
+  // Additional pool tuning options exposed via env vars if needed
+  const poolIdleMs = env.DATABASE_POOL_IDLE_MS ? Number(env.DATABASE_POOL_IDLE_MS) : 30000;
+  const poolConnTimeoutMs = env.DATABASE_POOL_CONN_TIMEOUT_MS ? Number(env.DATABASE_POOL_CONN_TIMEOUT_MS) : 2000;
 
   return new DataSource({
     type: "postgres",
@@ -36,7 +49,12 @@ export function createDataSource(): DataSource {
     migrations: ["src/migrations/*.ts"],
     migrationsTableName: "migrations",
     extra: {
+      // `max` is the maximum number of clients in the pool.
       max: poolMax,
+      // Idle timeout (ms) before a client is closed
+      idleTimeoutMillis: poolIdleMs,
+      // How long to wait when connecting a new client
+      connectionTimeoutMillis: poolConnTimeoutMs
     },
     ssl: needsSsl
       ? {

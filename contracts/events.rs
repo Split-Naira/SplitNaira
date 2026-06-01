@@ -177,3 +177,25 @@ impl OwnershipTransferred {
         );
     }
 }
+
+/// Emitted when a project's collaborators are updated.
+///
+/// Topics:  ["collaborators_updated", project_id]
+/// Data:    project_id
+#[derive(Clone, Debug)]
+pub struct CollaboratorsUpdated {
+    pub project_id: Symbol,
+}
+
+impl CollaboratorsUpdated {
+    pub fn publish(&self, env: &Env) {
+        env.events().publish(
+            (
+                Symbol::new(env, "collaborators_updated"),
+                self.project_id.clone(),
+            ),
+            self.project_id.clone(),
+        );
+    }
+}
+

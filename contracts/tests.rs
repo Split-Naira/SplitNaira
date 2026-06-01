@@ -507,6 +507,139 @@ fn test_update_collaborators_fails_when_locked() {
 }
 
 #[test]
+fn test_update_collaborators_emits_event() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[6000u32, 4000u32]),
+    );
+
+    let project_id = Symbol::new(&env, "event_test");
+    client.create_project(
+        &owner,
+        &project_id,
+        &String::from_str(&env, "Event Test"),
+        &String::from_str(&env, "music"),
+        &token,
+        &collabs,
+    );
+
+    let updated_collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[5000u32, 5000u32]),
+    );
+
+    client.update_collaborators(
+        &project_id,
+        &owner,
+        &updated_collabs,
+    );
+
+    let events = env.events().all();
+    let last_event = events.last().unwrap();
+    assert_eq!(last_event.0, contract_id);
+    assert_eq!(last_event.1.get(0).unwrap(), Symbol::new(&env, "collaborators_updated").into_val(&env));
+    assert_eq!(last_event.1.get(1).unwrap(), project_id.into_val(&env));
+    assert_eq!(last_event.2, project_id.into_val(&env));
+}
+
+#[test]
+fn test_update_collaborators_fails_duplicate_collaborator() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[6000u32, 4000u32]),
+    );
+
+    let project_id = Symbol::new(&env, "dup_collab_test");
+    client.create_project(&owner, &project_id, &String::from_str(&env, "Dup Collab"), &String::from_str(&env, "music"), &token, &collabs);
+
+    let bad_collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), alice.clone()]),
+        Vec::from_slice(&env, &[5000u32, 5000u32]),
+    );
+
+    let result = client.try_update_collaborators(&project_id, &owner, &bad_collabs);
+    assert_eq!(result, Err(Ok(SplitError::DuplicateCollaborator)));
+}
+
+#[test]
+fn test_update_collaborators_fails_invalid_split() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[6000u32, 4000u32]),
+    );
+
+    let project_id = Symbol::new(&env, "invalid_split_test");
+    client.create_project(&owner, &project_id, &String::from_str(&env, "Invalid Split"), &String::from_str(&env, "music"), &token, &collabs);
+
+    let bad_collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[5000u32, 4000u32]),
+    );
+
+    let result = client.try_update_collaborators(&project_id, &owner, &bad_collabs);
+    assert_eq!(result, Err(Ok(SplitError::InvalidSplit)));
+}
+
+#[test]
+fn test_update_collaborators_fails_zero_share() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[6000u32, 4000u32]),
+    );
+
+    let project_id = Symbol::new(&env, "zero_share_test");
+    client.create_project(&owner, &project_id, &String::from_str(&env, "Zero Share"), &String::from_str(&env, "music"), &token, &collabs);
+
+    let bad_collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[0u32, 10000u32]),
+    );
+
+    let result = client.try_update_collaborators(&project_id, &owner, &bad_collabs);
+    assert_eq!(result, Err(Ok(SplitError::ZeroShare)));
+}
+
+#[test]
 fn test_lock_project_success() {
     let (env, _admin, token) = create_test_env();
     let contract_id = env.register_contract(None, SplitNairaContract);

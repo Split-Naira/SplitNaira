@@ -18,6 +18,20 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
+# Accept build-time environment variables for Next.js
+ARG NEXT_PUBLIC_API_BASE_URL=http://backend:3001
+ARG NEXT_PUBLIC_STELLAR_NETWORK=testnet
+ARG NEXT_PUBLIC_SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
+ARG NEXT_PUBLIC_HORIZON_URL=https://horizon-testnet.stellar.org
+ARG NEXT_PUBLIC_CONTRACT_ID=
+
+# Set environment variables for build
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_STELLAR_NETWORK=$NEXT_PUBLIC_STELLAR_NETWORK
+ENV NEXT_PUBLIC_SOROBAN_RPC_URL=$NEXT_PUBLIC_SOROBAN_RPC_URL
+ENV NEXT_PUBLIC_HORIZON_URL=$NEXT_PUBLIC_HORIZON_URL
+ENV NEXT_PUBLIC_CONTRACT_ID=$NEXT_PUBLIC_CONTRACT_ID
+
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 

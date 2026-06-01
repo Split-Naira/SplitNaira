@@ -20,6 +20,7 @@ Wave 5 delivers production-grade improvements across contracts, backend, and CI/
 | **Production Readiness Checklist** | ✅ Complete | Verified contract API, events, storage, compatibility |
 | **Deployment Safety Procedures** | ✅ Complete | Pre-deployment, zero-downtime, rollback, monitoring |
 | **Operational Runbooks** | ✅ Complete | Deploy, rollback, emergency recovery, log aggregation |
+| **Frontend Observability** | ✅ Complete | Sentry client/server/edge config, API client retry, Soroban transaction error logging, PII scrubbing, tests |
 
 ---
 
@@ -286,6 +287,32 @@ withdraw_unallocated(admin, token, to, amount)  // Recover
 - Majority of user registrations failing → Transaction issue
 - All distributions failing → Smart contract or RPC issue
 - API unresponsive → Database or dependency issue
+
+---
+
+## Frontend Observability (Wave 5)
+
+### Key Achievements
+
+**1. Isomorphic Telemetry Initialisation**
+- Configured Sentry client initialization across browser runtime (`sentry.client.config.ts`), Node server environment (`sentry.server.config.ts`), and Edge runtime (`sentry.edge.config.ts`).
+- Wrapped Next.js configuration (`next.config.mjs`) with `withSentryConfig` to enable static build adjustments and automatic source map uploads.
+
+**2. Privacy Guardrail (PII Redaction)**
+- Implemented global redaction of public Stellar keys (G...) and smart contract IDs (C...) within Sentry's `beforeSend` interceptor, substituting matched keys with `[WALLET_REDACTED]`.
+
+**3. API Network Resilience**
+- Integrated the `withRetry` helper into `ApiClient.requestJson`, making all read-only and contract-compilation endpoint calls resilient up to 3 attempts with exponential backoff.
+- Configured error aggregation to notify Sentry only upon final failure exhaustion to prevent alert pollution.
+
+**4. Soroban RPC Transaction Logging**
+- Instrumentated `submitSorobanTransactionAndPoll` to automatically capture and structure on-chain failures (e.g. transaction submission errors, contract panics, polling timeouts) in Sentry with rich execution context (transaction hash, status, error XDR).
+
+**5. Wallet Integration Observability**
+- Tracked wallet authentication (`connect` / `refresh`) client errors to monitor device or extension incompatibilities.
+
+**6. Verification & Coverage**
+- Added a full vitest suite (`observability.test.ts`) covering retry logic integration, Sentry exception captures, and Soroban polling failures.
 
 ---
 

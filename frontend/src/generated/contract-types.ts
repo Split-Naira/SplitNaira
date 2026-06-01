@@ -217,6 +217,10 @@ export interface Ownership_transferredEvent {
   new_owner: string;
 }
 
+export interface Collaborators_updatedEvent {
+  project_id: string;
+}
+
 // Error Types
 
 export const ContractErrors = {

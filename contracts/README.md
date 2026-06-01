@@ -238,6 +238,13 @@ Soroban event shape is `(topics, data)`. This contract uses `topics = (event_nam
   - Topics: `("ownership_transferred", "afrobeats_vol3")`
   - Data: `(G...PREVIOUS, G...NEW)`
 
+### `collaborators_updated`
+- Topics format: `("collaborators_updated", project_id)`
+- Data format: `project_id`
+- Example:
+  - Topics: `("collaborators_updated", "afrobeats_vol3")`
+  - Data: `"afrobeats_vol3"`
+
 ## Error Codes
 
 - `1` `ProjectExists`

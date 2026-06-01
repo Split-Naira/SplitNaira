@@ -8,6 +8,7 @@ import {
   useCallback,
   useRef,
 } from "react";
+import * as Sentry from "@sentry/nextjs";
 import {
   getWalletState,
   connectWallet,
@@ -95,6 +96,14 @@ export function useWalletState() {
       if (mountedRef.current)
         dispatch({ type: "SUCCESS", payload: walletState });
     } catch (err) {
+      if (err instanceof Error) {
+        Sentry.captureException(err, {
+          tags: {
+            section: "wallet-hook",
+            action: "refresh",
+          }
+        });
+      }
       if (mountedRef.current)
         dispatch({
           type: "ERROR",
@@ -110,6 +119,14 @@ export function useWalletState() {
       if (mountedRef.current)
         dispatch({ type: "SUCCESS", payload: walletState });
     } catch (err) {
+      if (err instanceof Error) {
+        Sentry.captureException(err, {
+          tags: {
+            section: "wallet-hook",
+            action: "connect",
+          }
+        });
+      }
       if (mountedRef.current)
         dispatch({
           type: "ERROR",
