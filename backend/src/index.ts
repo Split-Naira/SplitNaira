@@ -110,8 +110,7 @@ app.use("/health", healthRouter);
 if (isMetricsEnabled()) {
   app.use("/metrics", metricsRouter);
 }
-app.use("/splits", splitsRouter);
-app.use("/docs", docsRouter);
+app.use("/splits", splitsRouter);app.use("/ops", opsRouter);app.use("/docs", docsRouter);
 app.use("/users", usersRouter);
 app.use("/transactions", transactionsRouter);
 
