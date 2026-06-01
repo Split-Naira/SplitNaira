@@ -215,6 +215,16 @@ Purpose:
 - Deployment validation
 - Launch verification
 - Configuration auditing
+- Mainnet configuration and readiness audit before traffic cutover
+
+This endpoint performs a lightweight operational check that includes:
+
+- environment configuration validation
+- database connectivity verification
+- cache and runtime capacity metrics
+- production secret audit and contract ID consistency check
+
+Use it as a pre-deploy gate during release and rollback planning.
 
 ## Developer Setup
 

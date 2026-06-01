@@ -419,6 +419,71 @@ registry.registerPath({
   },
 });
 
+const MainnetReadinessResponseSchema = registry.register(
+  "MainnetReadinessResponse",
+  z.object({
+    status: z.enum(["ready", "not_ready"]),
+    requestId: z.string().optional(),
+    error: z.string().optional(),
+    message: z.string().optional(),
+    details: z.record(z.any()).optional(),
+    components: z.object({
+      env: z.object({
+        ok: z.boolean(),
+        message: z.string().optional(),
+        details: z.record(z.any()).optional()
+      }),
+      db: z.object({
+        ok: z.boolean(),
+        message: z.string().optional(),
+        details: z.record(z.any()).optional()
+      }),
+      cache: z.object({
+        ok: z.boolean(),
+        message: z.string().optional(),
+        details: z.record(z.any()).optional()
+      }),
+      deploy: z.object({
+        ok: z.boolean(),
+        message: z.string().optional(),
+        productionSecrets: z.object({
+          mainnetContractId: z.boolean(),
+          renderBackendDeployHookUrl: z.boolean()
+        }).optional(),
+        contractIdMatch: z.boolean().optional(),
+        databasePoolMax: z.number().optional(),
+        readCacheTtlMs: z.number().optional(),
+        readCacheMaxEntries: z.number().optional(),
+      })
+    })
+  })
+);
+
+registry.registerPath({
+  method: "get",
+  path: "/ops/mainnet-readiness",
+  summary: "Mainnet readiness validation for deployment and ops workflows",
+  tags: ["Operations"],
+  responses: {
+    200: {
+      description: "Mainnet readiness validation passed",
+      content: {
+        "application/json": {
+          schema: MainnetReadinessResponseSchema,
+        },
+      },
+    },
+    503: {
+      description: "Mainnet readiness validation failed",
+      content: {
+        "application/json": {
+          schema: MainnetReadinessResponseSchema,
+        },
+      },
+    },
+  },
+});
+
 // ─── Root Endpoint ────────────────────────────────────────────────────────────
 
 registry.registerPath({

@@ -74,6 +74,14 @@ The command reads `DATABASE_URL` plus the same Stellar environment variables use
 
 `GET /health/ready` returns component status for `db`, `rpc`, and `contract`.
 
+`GET /ops/mainnet-readiness` extends that coverage with deployment validation and ops auditing, including:
+
+- environment configuration diagnostics
+- database connectivity and query health
+- cache runtime metrics
+- production secret audits (`MAINNET_CONTRACT_ID`, `RENDER_BACKEND_DEPLOY_HOOK_URL`)
+- contract ID consistency with the current backend configuration
+
 The endpoint returns `503` when any component is unavailable so Render/load balancers do not route traffic to an instance with missing config, an unreachable database, an unreachable Soroban RPC, or an invalid/unreachable contract.
 
 ---

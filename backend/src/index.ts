@@ -6,6 +6,7 @@ import morgan from "morgan";
 import dotenv from "dotenv";
 import swaggerUi from "swagger-ui-express";
 import { healthRouter, markStartupComplete } from "./routes/health.js";
+import { opsRouter } from "./routes/ops.js";
 import { isMetricsEnabled, metricsRouter } from "./routes/metrics.js";
 import { splitsRouter } from "./routes/splits.js";
 import { docsRouter } from "./routes/docs.js";
@@ -109,8 +110,7 @@ app.use("/health", healthRouter);
 if (isMetricsEnabled()) {
   app.use("/metrics", metricsRouter);
 }
-app.use("/splits", splitsRouter);
-app.use("/docs", docsRouter);
+app.use("/splits", splitsRouter);app.use("/ops", opsRouter);app.use("/docs", docsRouter);
 app.use("/users", usersRouter);
 app.use("/transactions", transactionsRouter);
 

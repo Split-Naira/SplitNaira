@@ -90,7 +90,8 @@ vi.mock("../services/stellar.js", async (importOriginal) => {
 // Mock database service for health checks
 vi.mock("../services/database.js", () => ({
   getDataSource: vi.fn(() => ({
-    isInitialized: true
+    isInitialized: true,
+    query: vi.fn().mockResolvedValue([{ one: 1 }])
   })),
   initDatabase: vi.fn().mockResolvedValue({}),
   closeDatabase: vi.fn().mockResolvedValue({})
@@ -191,6 +192,42 @@ describe("Route Integration Tests", () => {
       const res = await request(app).get("/health/startup");
       expect(res.status).toBe(503);
       expect(res.body.status).toBe("starting");
+    });
+  });
+
+  describe("GET /ops/mainnet-readiness", () => {
+    it("should return 200 and ready status when dependencies are ok", async () => {
+      const res = await request(app).get("/ops/mainnet-readiness");
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe("ready");
+      expect(res.body.components.env.ok).toBe(true);
+      expect(res.body.components.db.ok).toBe(true);
+      expect(res.body.components.deploy.ok).toBe(true);
+    });
+
+    it("should return 503 when production secrets are missing in production", async () => {
+      const originalNodeEnv = process.env.NODE_ENV;
+      const originalCorsOrigin = process.env.CORS_ORIGIN;
+      const originalMainnetContractId = process.env.MAINNET_CONTRACT_ID;
+      const originalRenderHook = process.env.RENDER_BACKEND_DEPLOY_HOOK_URL;
+
+      process.env.NODE_ENV = "production";
+      process.env.CORS_ORIGIN = "https://app.splitnaira.com";
+      delete process.env.MAINNET_CONTRACT_ID;
+      delete process.env.RENDER_BACKEND_DEPLOY_HOOK_URL;
+
+      try {
+        const res = await request(app).get("/ops/mainnet-readiness");
+        expect(res.status).toBe(503);
+        expect(res.body.status).toBe("not_ready");
+        expect(res.body.components.deploy.productionSecrets.mainnetContractId).toBe(false);
+        expect(res.body.components.deploy.productionSecrets.renderBackendDeployHookUrl).toBe(false);
+      } finally {
+        process.env.NODE_ENV = originalNodeEnv;
+        process.env.CORS_ORIGIN = originalCorsOrigin;
+        process.env.MAINNET_CONTRACT_ID = originalMainnetContractId;
+        process.env.RENDER_BACKEND_DEPLOY_HOOK_URL = originalRenderHook;
+      }
     });
   });
 

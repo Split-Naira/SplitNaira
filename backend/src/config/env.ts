@@ -85,6 +85,29 @@ const backendEnvSchema = z.object({
       (val) => val === undefined || (Number.isInteger(Number(val)) && Number(val) > 0),
       "DATABASE_POOL_MAX must be a positive integer",
     ),
+
+  DATABASE_POOL_IDLE_MS: z
+    .string()
+    .optional()
+    .refine(
+      (val) => val === undefined || (Number.isInteger(Number(val)) && Number(val) > 0),
+      "DATABASE_POOL_IDLE_MS must be a positive integer",
+    ),
+
+  DATABASE_POOL_CONN_TIMEOUT_MS: z
+    .string()
+    .optional()
+    .refine(
+      (val) => val === undefined || (Number.isInteger(Number(val)) && Number(val) > 0),
+      "DATABASE_POOL_CONN_TIMEOUT_MS must be a positive integer",
+    ),
+
+  MAINNET_CONTRACT_ID: stellarContractIdSchema.optional(),
+
+  RENDER_BACKEND_DEPLOY_HOOK_URL: z
+    .string()
+    .url("RENDER_BACKEND_DEPLOY_HOOK_URL must be a valid URL")
+    .optional(),
 }).superRefine((data, ctx) => {
   if (data.NODE_ENV === "production") {
     if (!data.CORS_ORIGIN || data.CORS_ORIGIN.trim().length === 0) {
@@ -185,7 +208,14 @@ export function printEnvDiagnostics(): void {
     { key: "SOROBAN_RPC_URL", required: true },
     { key: "SOROBAN_NETWORK_PASSPHRASE", required: true },
     { key: "CONTRACT_ID", required: true },
-    { key: "SIMULATOR_ACCOUNT", required: true }
+    { key: "SIMULATOR_ACCOUNT", required: true },
+    { key: "MAINNET_CONTRACT_ID", required: false },
+    { key: "RENDER_BACKEND_DEPLOY_HOOK_URL", required: false },
+    { key: "DATABASE_POOL_MAX", required: false },
+    { key: "DATABASE_POOL_IDLE_MS", required: false },
+    { key: "DATABASE_POOL_CONN_TIMEOUT_MS", required: false },
+    { key: "READ_CACHE_TTL_MS", required: false },
+    { key: "READ_CACHE_MAX_ENTRIES", required: false }
   ];
 
   logger.info("[env] Environment diagnostics:");
