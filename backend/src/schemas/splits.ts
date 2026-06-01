@@ -40,6 +40,7 @@ export const safeTextField = z
 
 export const collaboratorSchema = CollaboratorSchema.omit({ basis_points: true }).extend({
   address: stellarAddressSchema,
+  alias: safeTextField.min(1, "alias is required").max(100, "alias must be at most 100 characters"),
   basisPoints: z
     .number()
     .int("basisPoints must be an integer")
@@ -55,8 +56,8 @@ export const createSplitSchema = z
       .min(1, "projectId is required")
       .max(32)
       .regex(/^[a-zA-Z0-9_]+$/, "projectId must be alphanumeric/underscore"),
-    title: z.string().min(1, "title is required").max(128),
-    projectType: z.string().min(1, "projectType is required").max(32),
+    title: safeTextField.min(1, "title is required").max(128, "title must be at most 128 characters"),
+    projectType: safeTextField.min(1, "projectType is required").max(32, "projectType must be at most 32 characters"),
     token: stellarAddressSchema.describe("token"),
     collaborators: z.array(collaboratorSchema).min(2, "at least 2 collaborators are required")
   })
@@ -107,8 +108,8 @@ export const depositSchema = z.object({
 
 export const updateMetadataSchema = z.object({
   owner: stellarAddressSchema.describe("owner"),
-  title: z.string().min(1, "title is required").max(128),
-  projectType: z.string().min(1, "projectType is required").max(32)
+  title: safeTextField.min(1, "title is required").max(128, "title must be at most 128 characters"),
+  projectType: safeTextField.min(1, "projectType is required").max(32, "projectType must be at most 32 characters")
 });
 
 export const updateCollaboratorsSchema = z
