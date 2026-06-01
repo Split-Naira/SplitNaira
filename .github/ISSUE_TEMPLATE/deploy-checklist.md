@@ -28,6 +28,7 @@ Link the PR this deploy is based on: <!-- #PR_NUMBER -->
 ### Observability
 - [ ] New error paths emit structured logs
 - [ ] Critical flows have success/failure metrics
+- [ ] Analytics/metrics endpoint validated by CI/CD smoke checks
 - [ ] Runbook updated if on-call response changes
 
 ### Release Readiness

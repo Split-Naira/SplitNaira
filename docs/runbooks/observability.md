@@ -46,6 +46,8 @@ BACKEND_URL=https://your-api.example.com node scripts/deploy-smoke-check.mjs
 
 Polls `/health/ready` every 10s for up to 5 minutes.
 
+When `BACKEND_METRICS_URL` is also configured, the smoke check validates the analytics/metrics exposition endpoint after readiness succeeds. This ensures the deployment is not only live, but also emitting the telemetry needed for Analytics & Insights.
+
 ## Incident Investigation
 
 1. Obtain `x-correlation-id` / `requestId` from the client or error response.

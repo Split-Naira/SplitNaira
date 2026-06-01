@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Extract release notes from CHANGELOG
+        id: changelog
+        run: |
+          tag=${GITHUB_REF#refs/tags/}
+          body=$(awk -v tag="$tag" '
+            $0 == "## [" tag "]" {copy=1; next}
+            copy && $0 ~ /^## \[/ {exit}
+            copy {print}
+          ' CHANGELOG.md)
+          if [ -z "$body" ]; then
+            echo "Change log entry not found for tag: $tag" >&2
+            exit 1
+          fi
+          echo "body<<EOF" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$body" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Create draft GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body: ${{ steps.changelog.outputs.body }}
+          draft: true
+          prerelease: false

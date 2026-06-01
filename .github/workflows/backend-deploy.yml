@@ -35,7 +35,10 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 20
+          cache: npm
       - run: npm ci --no-audit --no-fund
+      - name: Validate data integrity
+        run: cd .. && npm run verify:data-integrity
       - run: npm run lint
       - run: npm run build
       - run: npm run test
@@ -54,6 +57,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 20
+          cache: npm
       - run: npm ci --no-audit --no-fund
       - name: Validate deploy configuration
         run: npx tsx backend/src/utils/deploy-config.ts validate "$DEPLOY_TARGET_INPUT" "$DEPLOY_ENV_INPUT"
@@ -115,6 +119,8 @@ jobs:
         if: vars.BACKEND_SMOKE_URL != ''
         env:
           BACKEND_URL: ${{ vars.BACKEND_SMOKE_URL }}
+          BACKEND_METRICS_URL: ${{ vars.BACKEND_METRICS_URL }}
+          CHECK_METRICS: ${{ vars.BACKEND_METRICS_URL != '' && 'true' || 'false' }}
           SMOKE_TIMEOUT_MS: 300000
         run: node scripts/deploy-smoke-check.mjs
       - name: Skip smoke check when BACKEND_SMOKE_URL is unset

@@ -11,7 +11,8 @@ GitHub Actions must block merges when contract artifacts drift, when Rust format
 | `ci.yml` | PR + push to `main` | `data-integrity` → frontend, backend, contracts |
 | `frontend-ci.yml` | PR + push to `main` / `develop` | lint, test, build |
 | `contract-testnet-deploy.yml` | `contracts/**` on `main` | testnet WASM deploy + config commit |
-| `backend-deploy.yml` | backend release path | deploy config validation, Render deploy |
+| `backend-deploy.yml` | backend release path | deploy config validation, data integrity, Render deploy |
+| `mainnet-deploy.yml` | manual production release | deploy config validation, data integrity, backend lint/build/test |
 
 ## Data integrity job
 

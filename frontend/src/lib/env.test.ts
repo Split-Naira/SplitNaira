@@ -61,6 +61,25 @@ describe("validateEnv()", () => {
     expect(env.NEXT_PUBLIC_STELLAR_NETWORK).toBe("testnet");
   });
 
+  it("accepts legacy NEXT_PUBLIC_NETWORK as an alias for NEXT_PUBLIC_STELLAR_NETWORK", () => {
+    Object.assign(process.env, {
+      ...VALID_ENV,
+      NEXT_PUBLIC_STELLAR_NETWORK: undefined as unknown as string,
+      NEXT_PUBLIC_NETWORK: "mainnet",
+    });
+    const env = validateEnv();
+    expect(env.NEXT_PUBLIC_STELLAR_NETWORK).toBe("mainnet");
+  });
+
+  it("throws when NEXT_PUBLIC_NETWORK and NEXT_PUBLIC_STELLAR_NETWORK conflict", () => {
+    Object.assign(process.env, {
+      ...VALID_ENV,
+      NEXT_PUBLIC_STELLAR_NETWORK: "testnet",
+      NEXT_PUBLIC_NETWORK: "mainnet",
+    });
+    expect(() => validateEnv()).toThrowError(/Conflicting network configuration/);
+  });
+
   it("falls back to the testnet Soroban RPC URL when not set", () => {
     const { NEXT_PUBLIC_SOROBAN_RPC_URL: _omit, ...rest } = VALID_ENV;
     Object.assign(process.env, rest);

@@ -853,3 +853,60 @@ describe("cache stats endpoint", () => {
     expect(Array.isArray(res.body.keys)).toBe(true);
   });
 });
+
+// ============================================================
+// Wave 5: self-service claim endpoint
+// ============================================================
+
+describe("POST /splits/:projectId/claim", () => {
+  const VALID_CLAIMER = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+
+  beforeEach(() => {
+    getAccountMock.mockResolvedValue({ id: VALID_CLAIMER, sequence: "100" });
+    prepareTransactionMock.mockResolvedValue({
+      toXDR: () => "MOCKED_CLAIM_XDR",
+      sequence: "101",
+      fee: "100",
+    });
+  });
+
+  it("returns 200 with xdr when projectId and claimer are valid", async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post("/splits/test_project/claim")
+      .send({ claimer: VALID_CLAIMER })
+      .expect(200);
+
+    expect(res.body).toHaveProperty("xdr");
+  });
+
+  it("returns 400 when claimer is missing", async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post("/splits/test_project/claim")
+      .send({})
+      .expect(400);
+
+    expect(res.body.error).toBe("validation_error");
+  });
+
+  it("returns 400 when claimer is not a valid Stellar address", async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post("/splits/test_project/claim")
+      .send({ claimer: "not-a-stellar-address" })
+      .expect(400);
+
+    expect(res.body.error).toBe("validation_error");
+  });
+
+  it("returns 400 when projectId is invalid", async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post("/splits/!!bad!!/claim")
+      .send({ claimer: VALID_CLAIMER })
+      .expect(400);
+
+    expect(res.body.error).toBe("validation_error");
+  });
+});

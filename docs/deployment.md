@@ -58,6 +58,7 @@ rustup target add wasm32v1-none
 
 Copy `.env.example` to `.env` (or set these as secrets/config vars in your hosting platform) before deploying each service.
 See [docs/environments.md](./environments.md) for the full matrix and per-environment examples.
+See [docs/secrets.md](./secrets.md) for authoritative secret handling, rotation procedures, and the rule to never commit `.env` files.
 
 ### Backend (`backend/.env.example`)
 
@@ -146,6 +147,42 @@ stellar contract deploy \
 Record the contract ID printed by the deploy command. You will need it in the next steps.
 
 > See [contract-release-and-upgrade-runbook.md](./contract-release-and-upgrade-runbook.md) §5 for full contract deploy details and §7 for the upgrade path.
+
+### Step 3a — Bootstrap admin and allowlist standard testnet tokens
+
+After deploying the contract, set the contract admin and allowlist the documented standard testnet assets in one step.
+
+Standard testnet assets:
+- USD Coin (USDC): `CBLASIRZ7CUKC7S5IS3VSNMQGKZ5FTRWLHZZXH7H4YG6ZLRFPJF5H2LR`
+- Soroban Waved USD (wUSD): `CDLZJQG2OZZXZAU3YICESOJE73SOXREH74DRBEDAFTMPAQWX3JD3YQ`
+
+Run:
+
+```bash
+CONTRACT_ID=<contract id> ADMIN_SECRET=<admin secret> ./scripts/bootstrap-allowlist.sh
+```
+
+If `ADMIN_PUBLIC` cannot be derived automatically from `ADMIN_SECRET`, provide it explicitly:
+
+```bash
+ADMIN_PUBLIC=<admin public key> CONTRACT_ID=<contract id> ADMIN_SECRET=<admin secret> ./scripts/bootstrap-allowlist.sh
+```
+
+The script builds and signs `set_admin` and `allow_token` operations for the testnet tokens, and prints the transaction output for each operation.
+
+Verify the bootstrap result:
+
+```bash
+soroban contract invoke \
+  --id <contract id> \
+  --network testnet \
+  --network-passphrase "Test SDF Network ; September 2015" \
+  --rpc-url https://soroban-testnet.stellar.org \
+  --fn is_token_allowed \
+  --args address <token contract id>
+```
+
+Expected output for each allowlisted token is `true`.
 
 ### Step 4 — Configure backend environment
 

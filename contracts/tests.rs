@@ -1542,6 +1542,34 @@ fn test_pause_and_unpause_distributions() {
 }
 
 #[test]
+fn test_pause_and_unpause_emit_events() {
+    let (env, _admin, _token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    client.set_admin(&admin);
+
+    let before_count = env.events().all().len();
+
+    client.pause_distributions(&admin);
+    client.unpause_distributions(&admin);
+
+    let events = env.events().all();
+    assert!(events.len() >= before_count + 2);
+
+    let pause_event = events.get(before_count).unwrap();
+    assert_eq!(pause_event.0, contract_id);
+    assert_eq!(pause_event.1.get(0).unwrap(), Symbol::new(&env, "distributions_paused").into_val(&env));
+    assert_eq!(pause_event.1.get(1).unwrap(), admin.clone().into_val(&env));
+
+    let unpause_event = events.get(before_count + 1).unwrap();
+    assert_eq!(unpause_event.0, contract_id);
+    assert_eq!(unpause_event.1.get(0).unwrap(), Symbol::new(&env, "distributions_unpaused").into_val(&env));
+    assert_eq!(unpause_event.1.get(1).unwrap(), admin.clone().into_val(&env));
+}
+
+#[test]
 fn test_distribute_fails_when_paused() {
     let (env, _admin, token) = create_test_env();
     let contract_id = env.register_contract(None, SplitNairaContract);
@@ -2236,6 +2264,19 @@ fn test_withdraw_unallocated_fails_with_invalid_amount() {
     assert_eq!(result, Err(Ok(SplitError::InvalidAmount)));
 }
 
+#[test]
+fn test_withdraw_unallocated_fails_when_recipient_is_contract() {
+    let (env, _token_admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let contract_admin = Address::generate(&env);
+    client.set_admin(&contract_admin);
+
+    let result = client.try_withdraw_unallocated(&contract_admin, &token, &contract_id, &1_0000000i128);
+    assert_eq!(result, Err(Ok(SplitError::InvalidRecipient)));
+}
+
 // ============================================================
 //  END-TO-END PERMISSION & LOCK LIFECYCLE TESTS
 //
@@ -2756,4 +2797,219 @@ fn test_transfer_ownership_emits_event() {
     let before_count = env.events().all().len();
     client.transfer_project_ownership(&project_id, &owner, &new_owner);
     assert!(env.events().all().len() > before_count);
+}
+
+// ============================================================
+//  CLAIM TESTS (Wave 5 — User Onboarding #516)
+// ============================================================
+
+#[test]
+fn test_claim_transfers_proportional_share() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[6000u32, 4000u32]),
+    );
+    let project_id = Symbol::new(&env, "claim_test");
+    client.create_project(
+        &owner, &project_id,
+        &String::from_str(&env, "Claim Test"),
+        &String::from_str(&env, "music"),
+        &token, &collabs,
+    );
+
+    let deposit_amount: i128 = 10_000_000;
+    deposit_to_project(&env, &client, &token, &project_id, &owner, deposit_amount);
+
+    let bal_before = token::Client::new(&env, &token).balance(&alice);
+    let claimed = client.claim(&project_id, &alice);
+
+    // Alice has 60% of 10_000_000 = 6_000_000
+    assert_eq!(claimed, 6_000_000, "alice should receive 60% of deposit");
+    let bal_after = token::Client::new(&env, &token).balance(&alice);
+    assert_eq!(bal_after - bal_before, 6_000_000, "alice token balance must increase by claimed amount");
+}
+
+#[test]
+fn test_claim_reduces_project_balance() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[5000u32, 5000u32]),
+    );
+    let project_id = Symbol::new(&env, "claim_bal");
+    client.create_project(
+        &owner, &project_id,
+        &String::from_str(&env, "Balance Test"),
+        &String::from_str(&env, "film"),
+        &token, &collabs,
+    );
+
+    deposit_to_project(&env, &client, &token, &project_id, &owner, 8_000_000);
+
+    client.claim(&project_id, &alice);
+
+    // Remaining balance should be 4_000_000 (bob's half)
+    let remaining = client.get_balance(&project_id).unwrap();
+    assert_eq!(remaining, 4_000_000, "project balance must be reduced by alice's claimed share");
+}
+
+#[test]
+fn test_claim_updates_claimed_ledger() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[7000u32, 3000u32]),
+    );
+    let project_id = Symbol::new(&env, "claim_ledger");
+    client.create_project(
+        &owner, &project_id,
+        &String::from_str(&env, "Ledger Test"),
+        &String::from_str(&env, "podcast"),
+        &token, &collabs,
+    );
+
+    deposit_to_project(&env, &client, &token, &project_id, &owner, 10_000_000);
+    client.claim(&project_id, &alice);
+
+    let claimed_entry = client.get_claimed(&project_id, &alice);
+    assert_eq!(claimed_entry, 7_000_000, "claimed ledger must reflect alice's total claimed amount");
+}
+
+#[test]
+fn test_claim_returns_zero_when_no_balance() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[5000u32, 5000u32]),
+    );
+    let project_id = Symbol::new(&env, "claim_zero");
+    client.create_project(
+        &owner, &project_id,
+        &String::from_str(&env, "Zero Balance"),
+        &String::from_str(&env, "art"),
+        &token, &collabs,
+    );
+
+    // No deposit — balance is zero
+    let result = client.claim(&project_id, &alice);
+    assert_eq!(result, 0, "claim on empty balance must return 0 without error");
+}
+
+#[test]
+#[should_panic]
+fn test_claim_fails_for_non_collaborator() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let stranger = Address::generate(&env);
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[5000u32, 5000u32]),
+    );
+    let project_id = Symbol::new(&env, "claim_stranger");
+    client.create_project(
+        &owner, &project_id,
+        &String::from_str(&env, "Stranger Test"),
+        &String::from_str(&env, "book"),
+        &token, &collabs,
+    );
+
+    deposit_to_project(&env, &client, &token, &project_id, &owner, 1_000_000);
+    // Must panic with NotACollaborator
+    client.claim(&project_id, &stranger);
+}
+
+#[test]
+#[should_panic]
+fn test_claim_fails_when_distributions_paused() {
+    let (env, admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    client.set_admin(&admin);
+    client.pause_distributions(&admin);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[5000u32, 5000u32]),
+    );
+    let project_id = Symbol::new(&env, "claim_paused");
+    client.create_project(
+        &owner, &project_id,
+        &String::from_str(&env, "Paused Test"),
+        &String::from_str(&env, "music"),
+        &token, &collabs,
+    );
+
+    // Must panic with DistributionsPaused
+    client.claim(&project_id, &alice);
+}
+
+#[test]
+fn test_claim_emits_collaborator_claimed_event() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[5000u32, 5000u32]),
+    );
+    let project_id = Symbol::new(&env, "claim_event");
+    client.create_project(
+        &owner, &project_id,
+        &String::from_str(&env, "Event Test"),
+        &String::from_str(&env, "music"),
+        &token, &collabs,
+    );
+    deposit_to_project(&env, &client, &token, &project_id, &owner, 2_000_000);
+
+    let events_before = env.events().all().len();
+    client.claim(&project_id, &alice);
+    assert!(
+        env.events().all().len() > events_before,
+        "claim must emit at least one event"
+    );
 }

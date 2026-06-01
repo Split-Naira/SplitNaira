@@ -25,7 +25,7 @@ docker run -p 3000:3000 splitnaira-frontend
 ```bash
 docker run -p 3000:3000 \
   -e NEXT_PUBLIC_API_URL=https://api.splitnaira.com \
-  -e NEXT_PUBLIC_NETWORK=testnet \
+  -e NEXT_PUBLIC_STELLAR_NETWORK=testnet \
   splitnaira-frontend
 ```
 
@@ -51,7 +51,7 @@ services:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:3001
-      - NEXT_PUBLIC_NETWORK=testnet
+      - NEXT_PUBLIC_STELLAR_NETWORK=testnet
     restart: unless-stopped
 ```
 
@@ -79,7 +79,7 @@ This approach:
 The following environment variables can be configured:
 
 - `NEXT_PUBLIC_API_URL`: Backend API URL
-- `NEXT_PUBLIC_NETWORK`: Stellar network (testnet/mainnet)
+- `NEXT_PUBLIC_STELLAR_NETWORK`: Stellar network (testnet/mainnet)
 - `NEXT_PUBLIC_CONTRACT_ID`: Soroban contract ID
 - `PORT`: Port to run the server on (default: 3000)
 

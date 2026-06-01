@@ -171,6 +171,8 @@ jobs:
         if: vars.BACKEND_SMOKE_URL != ''
         env:
           BACKEND_URL: ${{ vars.BACKEND_SMOKE_URL }}
+          BACKEND_METRICS_URL: ${{ vars.BACKEND_METRICS_URL }}
+          CHECK_METRICS: ${{ vars.BACKEND_METRICS_URL != '' && 'true' || 'false' }}
           SMOKE_TIMEOUT_MS: 300000
         run: node scripts/deploy-smoke-check.mjs
 

@@ -29,6 +29,12 @@ const backendEnvSchema = z.object({
     .optional()
     .default("true"),
 
+  PAYMENTS_ADMIN_API_KEY: z.string().optional(),
+  PAYMENTS_ADMIN_WRITE_ENABLED: z
+    .enum(["true", "false"])
+    .optional()
+    .default("true"),
+
   STRICT_RESPONSE_VALIDATION: z
     .enum(["true", "false"])
     .optional()
@@ -85,6 +91,29 @@ const backendEnvSchema = z.object({
       (val) => val === undefined || (Number.isInteger(Number(val)) && Number(val) > 0),
       "DATABASE_POOL_MAX must be a positive integer",
     ),
+
+  DATABASE_POOL_IDLE_MS: z
+    .string()
+    .optional()
+    .refine(
+      (val) => val === undefined || (Number.isInteger(Number(val)) && Number(val) > 0),
+      "DATABASE_POOL_IDLE_MS must be a positive integer",
+    ),
+
+  DATABASE_POOL_CONN_TIMEOUT_MS: z
+    .string()
+    .optional()
+    .refine(
+      (val) => val === undefined || (Number.isInteger(Number(val)) && Number(val) > 0),
+      "DATABASE_POOL_CONN_TIMEOUT_MS must be a positive integer",
+    ),
+
+  MAINNET_CONTRACT_ID: stellarContractIdSchema.optional(),
+
+  RENDER_BACKEND_DEPLOY_HOOK_URL: z
+    .string()
+    .url("RENDER_BACKEND_DEPLOY_HOOK_URL must be a valid URL")
+    .optional(),
 }).superRefine((data, ctx) => {
   if (data.NODE_ENV === "production") {
     if (!data.CORS_ORIGIN || data.CORS_ORIGIN.trim().length === 0) {
@@ -104,6 +133,15 @@ const backendEnvSchema = z.object({
             "CORS_ORIGIN must not contain '*' in production. Specify explicit frontend origin(s).",
         });
       }
+    }
+
+    if (!data.PAYMENTS_ADMIN_API_KEY || data.PAYMENTS_ADMIN_API_KEY.trim().length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["PAYMENTS_ADMIN_API_KEY"],
+        message:
+          "PAYMENTS_ADMIN_API_KEY is required in production to protect /splits/admin wallet and payment operations.",
+      });
     }
   }
 });
@@ -179,13 +217,22 @@ export function printEnvDiagnostics(): void {
     { key: "LOG_FORMAT", required: false },
     { key: "SENTRY_DSN", required: false },
     { key: "SENTRY_ENVIRONMENT", required: false },
+    { key: "PAYMENTS_ADMIN_API_KEY", required: false },
+    { key: "PAYMENTS_ADMIN_WRITE_ENABLED", required: false },
     { key: "STRICT_RESPONSE_VALIDATION", required: false },
     { key: "DATABASE_URL", required: true },
     { key: "HORIZON_URL", required: true },
     { key: "SOROBAN_RPC_URL", required: true },
     { key: "SOROBAN_NETWORK_PASSPHRASE", required: true },
     { key: "CONTRACT_ID", required: true },
-    { key: "SIMULATOR_ACCOUNT", required: true }
+    { key: "SIMULATOR_ACCOUNT", required: true },
+    { key: "MAINNET_CONTRACT_ID", required: false },
+    { key: "RENDER_BACKEND_DEPLOY_HOOK_URL", required: false },
+    { key: "DATABASE_POOL_MAX", required: false },
+    { key: "DATABASE_POOL_IDLE_MS", required: false },
+    { key: "DATABASE_POOL_CONN_TIMEOUT_MS", required: false },
+    { key: "READ_CACHE_TTL_MS", required: false },
+    { key: "READ_CACHE_MAX_ENTRIES", required: false }
   ];
 
   logger.info("[env] Environment diagnostics:");

@@ -36,6 +36,7 @@ The API documentation is defined using Zod schemas and generated into an OpenAPI
 - **Input validation** — `validateRequest` middleware returns consistent 400 payloads
 - **Error handling** — centralized `AppError` mapping and RPC retry policy
 - **Rate limiting** — layered limits on all route groups
+- **Payments admin hardening** — `/splits/admin/*` can be protected with `PAYMENTS_ADMIN_API_KEY`, and write actions can be frozen instantly with `PAYMENTS_ADMIN_WRITE_ENABLED=false`
 
 See [`../docs/backend-release-ops-wave5.md`](../docs/backend-release-ops-wave5.md) for the implementation plan, deploy/rollback runbook, and CI commands.
 

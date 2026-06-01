@@ -55,4 +55,7 @@ pub enum SplitError {
 
     /// Withdrawal recipient must not be the contract itself (Wave 5 security hardening)
     InvalidRecipient = 17,
+
+    /// Address is not registered as a collaborator on this project
+    NotACollaborator = 18,
 }

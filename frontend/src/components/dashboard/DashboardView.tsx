@@ -1,6 +1,7 @@
 "use client";
 
 import { clsx } from "clsx";
+import { sanitizeText } from "@/lib/security";
 import type { SplitProject } from "@/lib/stellar";
 import type {
   TokenAllowlistState,
@@ -562,7 +563,7 @@ export function DashboardView({
               .map((p) => (
                 <div key={p.projectId} className="bg-white/5 rounded-2xl p-5 border border-white/5 flex justify-between items-center">
                   <div className="space-y-1">
-                    <p className="font-bold text-xs truncate max-w-[120px]">{p.title}</p>
+                    <p className="font-bold text-xs truncate max-w-[120px]">{sanitizeText(p.title)}</p>
                     <p className="text-[9px] text-muted uppercase tracking-widest">
                       {(p.collaborators.find((c) => c.address === wallet.address)?.basisPoints ?? 0) / 100}% Share
                     </p>
@@ -594,11 +595,11 @@ export function DashboardView({
               {dashboardData.map((p) => (
                 <tr key={p.projectId} className="group hover:bg-white/2 transition-colors">
                   <td className="py-4 pl-4">
-                    <p className="font-bold text-sm">{p.title}</p>
+                    <p className="font-bold text-sm">{sanitizeText(p.title)}</p>
                     <p className="text-[9px] font-mono text-muted">{p.projectId}</p>
                   </td>
                   <td className="py-4">
-                    <span className="rounded-full bg-white/5 px-2 py-0.5 text-[9px] font-bold uppercase">{p.projectType}</span>
+                    <span className="rounded-full bg-white/5 px-2 py-0.5 text-[9px] font-bold uppercase">{sanitizeText(p.projectType)}</span>
                   </td>
                   <td className="py-4 text-right font-mono text-xs text-greenBright/80">
                     {Number(p.balance).toLocaleString()}

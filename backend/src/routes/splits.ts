@@ -43,7 +43,8 @@ import {
   pauseDistributionsSchema,
   isTokenAllowedQuerySchema,
   unallocatedQuerySchema,
-  withdrawUnallocatedSchema
+  withdrawUnallocatedSchema,
+  claimSchema
 } from "../schemas/splits.js";
 
 import {
@@ -67,8 +68,10 @@ import {
   buildAllowTokenUnsignedXdr,
   buildDisallowTokenUnsignedXdr,
   buildWithdrawUnallocatedUnsignedXdr,
+  buildClaimUnsignedXdr,
   buildUnsignedContractCall
 } from "../services/splits.service.js";
+import { logger } from "../services/logger.js";
 
 // Re-export all schemas, contract helpers, and services for backwards compatibility
 export {
@@ -88,7 +91,8 @@ export {
   pauseDistributionsSchema,
   isTokenAllowedQuerySchema,
   unallocatedQuerySchema,
-  withdrawUnallocatedSchema
+  withdrawUnallocatedSchema,
+  claimSchema
 } from "../schemas/splits.js";
 
 export {
@@ -120,7 +124,8 @@ export {
   buildUnpauseDistributionsUnsignedXdr,
   buildAllowTokenUnsignedXdr,
   buildDisallowTokenUnsignedXdr,
-  buildWithdrawUnallocatedUnsignedXdr
+  buildWithdrawUnallocatedUnsignedXdr,
+  buildClaimUnsignedXdr
 } from "../services/splits.service.js";
 
 function sendValidationError(
@@ -148,7 +153,17 @@ function sendRpcError(res: Response, requestId: string, message: string, status 
 
 export const splitsRouter = Router();
 
-
+function logPaymentsAdminAction(
+  res: Response,
+  action: string,
+  details: Record<string, unknown>
+) {
+  logger.info("Payments admin action prepared", {
+    action,
+    requestId: res.locals.requestId,
+    ...details
+  });
+}
 
 splitsRouter.get("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -533,6 +548,10 @@ splitsRouter.post("/admin/allow-token", async (req: Request, res: Response, next
 
     try {
       const result = await buildAllowTokenUnsignedXdr(parsed.data);
+      logPaymentsAdminAction(res, "allow_token", {
+        admin: parsed.data.admin,
+        token: parsed.data.token
+      });
       return res.status(200).json(result);
     } catch (error) {
       if (error instanceof RequestValidationError) {
@@ -555,6 +574,10 @@ splitsRouter.post("/admin/disallow-token", async (req: Request, res: Response, n
 
     try {
       const result = await buildDisallowTokenUnsignedXdr(parsed.data);
+      logPaymentsAdminAction(res, "disallow_token", {
+        admin: parsed.data.admin,
+        token: parsed.data.token
+      });
       return res.status(200).json(result);
     } catch (error) {
       if (error instanceof RequestValidationError) {
@@ -577,6 +600,9 @@ splitsRouter.post("/admin/pause-distributions", async (req: Request, res: Respon
 
     try {
       const result = await buildPauseDistributionsUnsignedXdr(parsed.data);
+      logPaymentsAdminAction(res, "pause_distributions", {
+        admin: parsed.data.admin
+      });
       return res.status(200).json(result);
     } catch (error) {
       if (error instanceof RequestValidationError) {
@@ -599,6 +625,9 @@ splitsRouter.post("/admin/unpause-distributions", async (req: Request, res: Resp
 
     try {
       const result = await buildUnpauseDistributionsUnsignedXdr(parsed.data);
+      logPaymentsAdminAction(res, "unpause_distributions", {
+        admin: parsed.data.admin
+      });
       return res.status(200).json(result);
     } catch (error) {
       if (error instanceof RequestValidationError) {
@@ -820,6 +849,12 @@ splitsRouter.post("/admin/withdraw-unallocated", async (req: Request, res: Respo
 
     try {
       const result = await buildWithdrawUnallocatedUnsignedXdr(parsed.data);
+      logPaymentsAdminAction(res, "withdraw_unallocated", {
+        admin: parsed.data.admin,
+        token: parsed.data.token,
+        to: parsed.data.to,
+        amount: parsed.data.amount
+      });
       return res.status(200).json(result);
     } catch (error) {
       if (error instanceof RequestValidationError) {
@@ -832,6 +867,44 @@ splitsRouter.post("/admin/withdraw-unallocated", async (req: Request, res: Respo
   }
 });
 
+
+// ============================================================
+// Wave 5: self-service claim endpoint
+// ============================================================
+
+splitsRouter.post("/:projectId/claim", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const requestId = res.locals.requestId;
+
+    const parsedParams = projectIdParamSchema.safeParse(req.params.projectId);
+    const parsedBody = claimSchema.safeParse(req.body);
+
+    if (!parsedParams.success || !parsedBody.success) {
+      return sendValidationError(res, requestId, "Invalid request payload.", {
+        params: parsedParams.success ? null : parsedParams.error.flatten(),
+        body: parsedBody.success ? null : parsedBody.error.flatten()
+      });
+    }
+
+    try {
+      const result = await buildClaimUnsignedXdr({
+        projectId: parsedParams.data,
+        claimer: parsedBody.data.claimer
+      });
+      // Evict cached project state; balance will change after submission
+      invalidateCache(`project:${parsedParams.data}`);
+      invalidateCacheByPrefix("list_projects:");
+      return res.status(200).json(result);
+    } catch (error) {
+      if (error instanceof RequestValidationError) {
+        return sendValidationError(res, requestId, error.message);
+      }
+      throw error;
+    }
+  } catch (error) {
+    return next(error);
+  }
+});
 // ============================================================
 // Cache diagnostics (non-sensitive internal endpoint)
 // ============================================================

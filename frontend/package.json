@@ -22,7 +22,7 @@
     "next": "16.2.6",
     "next-intl": "^4.9.1",
     "react": "19.2.4",
-    "react-dom": "19.2.4",
+    "react-dom": "19.2.6",
     "react-hook-form": "^7.62.0",
     "rollup": "^4.60.2"
   },
@@ -36,17 +36,17 @@
     "@types/node": "25.5.0",
     "@types/react": "19.2.14",
     "@typescript-eslint/eslint-plugin": "8.60.0",
-    "@typescript-eslint/parser": "8.57.0",
+    "@typescript-eslint/parser": "8.60.0",
     "autoprefixer": "10.4.27",
     "eslint": "9.39.4",
     "eslint-plugin-jsx-a11y": "6.10.2",
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "7.0.1",
-    "globals": "16.4.0",
+    "globals": "17.6.0",
     "jsdom": "29.1.0",
     "postcss": "8.5.15",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",
-    "vitest": "4.1.1"
+    "vitest": "4.1.7"
   }
 }

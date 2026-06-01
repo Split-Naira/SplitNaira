@@ -6,7 +6,8 @@ This runbook outlines the steps to perform a safe rollback of infrastructure, ba
 If a backend deployment introduces critical failures (e.g., 5xx error spikes, memory leaks):
 
 1. **Identify Stable Commit**: Use GitHub or your CI/CD platform to identify the last known stable commit hash.
-2. **Revert Deployment**:
+2. **Freeze Wallet/Payments Admin Writes First**: Before swapping artifacts, set `PAYMENTS_ADMIN_WRITE_ENABLED=false` and restart or redeploy the backend so new `/splits/admin/*` write operations are rejected with `503 payments_admin_writes_disabled`.
+3. **Revert Deployment**:
    - If using containerized deployments (Docker/K8s), rollback to the previous stable image tag:
      ```bash
      kubectl rollout undo deployment/splitnaira-backend
@@ -18,6 +19,7 @@ If a backend deployment introduces critical failures (e.g., 5xx error spikes, me
      npm run build
      pm2 restart splitnaira-backend
      ```
+4. **Re-enable Writes After Verification**: Once the stable release is healthy and payout state is confirmed, restore `PAYMENTS_ADMIN_WRITE_ENABLED=true`.
 
 ## 2. Database Rollback
 If a migration corrupts data or causes schema mismatches:

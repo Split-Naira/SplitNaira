@@ -11,9 +11,10 @@ This project deploys the backend via GitHub Actions using Render deploy hooks.
   - Push to `main` (for merge-based CD via backend-deploy)
   - Manual run via `workflow_dispatch` (backend-deploy or mainnet-deploy)
 - Pipeline stages:
-  - `verify-backend`: install, lint, and build backend
+  - `verify-backend`: install, verify data integrity, lint, build, and test backend
   - `validate-deploy-config`: verify `deploy_environment` and production secrets before deployment
   - `deploy-backend`: trigger deployment target
+  - `verify-mainnet`: manual production path validates data integrity, lint, build, and tests
   - `deploy-mainnet`: explicit mainnet release path for production
 
 ## Deployment Target
@@ -36,12 +37,20 @@ Set these in GitHub repository settings under **Settings -> Secrets and variable
 - `MAINNET_CONTRACT_ID`
   - Value: Mainnet Soroban contract ID to validate production deploy readiness
 
+See [docs/secrets.md](./secrets.md) for full secret ownership, rotation procedures, and safe host-secret storage guidance.
+
 ## Optional Variables
 
 Set these in **Settings -> Secrets and variables -> Actions -> Variables**:
 
 - `BACKEND_DEPLOY_TARGET`
   - Default recommended value: `render`
+- `BACKEND_SMOKE_URL`
+  - Value: Base URL for post-deploy readiness smoke tests, such as `https://api-staging.example.com`
+- `BACKEND_METRICS_URL`
+  - Value: Optional metrics endpoint URL for CI/CD analytics validation, such as `https://api-staging.example.com/metrics`
+
+When `BACKEND_METRICS_URL` is configured, the post-deploy smoke check validates both `/health/ready` and the metrics exposition endpoint before the workflow succeeds.
 
 ## Notes
 
@@ -61,9 +70,43 @@ npm run migration:run
 
 The command reads `DATABASE_URL` plus the same Stellar environment variables used by the backend. CI validates that migrations apply on a clean PostgreSQL database before deployment.
 
+## Wallet & Payments Admin Controls
+
+`/splits/admin/*` now supports an environment-backed operator control plane for wallet and payout operations.
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `PAYMENTS_ADMIN_API_KEY` | Production: **Yes** | Shared secret required in the `x-admin-api-key` header for all `/splits/admin/*` requests |
+| `PAYMENTS_ADMIN_WRITE_ENABLED` | No (`true` by default) | Emergency switch for admin write routes such as pause/unpause, allowlist changes, and unallocated-withdrawal XDR generation |
+
+Recommended production configuration:
+
+```bash
+PAYMENTS_ADMIN_API_KEY=<long-random-secret-from-secret-manager>
+PAYMENTS_ADMIN_WRITE_ENABLED=true
+```
+
+### Emergency freeze / rollback-aware mode
+
+When a payout incident, contract anomaly, or rollback is in progress:
+
+```bash
+PAYMENTS_ADMIN_WRITE_ENABLED=false
+```
+
+With that flag set, backend admin reads remain available for diagnostics, while mutating `/splits/admin/*` routes return `503 payments_admin_writes_disabled`. This gives ops a fast way to stop new recovery/pause/allowlist actions without changing code.
+
 ## Readiness Checks
 
 `GET /health/ready` returns component status for `db`, `rpc`, and `contract`.
+
+`GET /ops/mainnet-readiness` extends that coverage with deployment validation and ops auditing, including:
+
+- environment configuration diagnostics
+- database connectivity and query health
+- cache runtime metrics
+- production secret audits (`MAINNET_CONTRACT_ID`, `RENDER_BACKEND_DEPLOY_HOOK_URL`)
+- contract ID consistency with the current backend configuration
 
 The endpoint returns `503` when any component is unavailable so Render/load balancers do not route traffic to an instance with missing config, an unreachable database, an unreachable Soroban RPC, or an invalid/unreachable contract.
 
@@ -178,4 +221,3 @@ STRICT_RESPONSE_VALIDATION=false
 Strict mode prevents clients from receiving corrupt/partial data when the API contract drifts from what the server produces, catching issues at the API layer rather than in the frontend. The cost is that any schema mismatch becomes a 500 visible to callers — deploy with confidence by running the full test suite first.
 
 In lenient mode, mismatches are only visible in logs, making it safe to iterate on endpoints before full schema coverage is achieved.
-

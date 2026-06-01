@@ -2,6 +2,22 @@ import { z } from "zod";
 import { CollaboratorSchema } from "../generated/contract-types.js";
 import { Address } from "@stellar/stellar-sdk";
 
+// Security: Safe text validator - prevents XSS by restricting to safe character ranges
+// Allows: alphanumeric, spaces, hyphens, underscores, periods, commas, ampersands
+const SAFE_TEXT_REGEX = /^[a-zA-Z0-9\s\-_.,'&()]*$/;
+const validateSafeText = (value: string) => {
+  if (!SAFE_TEXT_REGEX.test(value)) {
+    return false;
+  }
+  // Additional check: ensure no HTML/JS patterns
+  const lowerValue = value.toLowerCase();
+  const dangerousPatterns = [
+    '<script', 'onclick', 'onerror', 'onload', 'javascript:', 'on[a-z]+=',
+    'eval(', 'expression(', 'vbscript:', 'data:text/html'
+  ];
+  return !dangerousPatterns.some(pattern => lowerValue.includes(pattern));
+};
+
 // Strict Stellar address validator used across schemas
 export const stellarAddressSchema = z
   .string()
@@ -17,8 +33,14 @@ export const stellarAddressSchema = z
     }
   });
 
+// Safe text field validator - used for titles, types, and aliases
+export const safeTextField = z
+  .string()
+  .refine(validateSafeText, "contains unsafe characters or patterns");
+
 export const collaboratorSchema = CollaboratorSchema.omit({ basis_points: true }).extend({
   address: stellarAddressSchema,
+  alias: safeTextField.min(1, "alias is required").max(100, "alias must be at most 100 characters"),
   basisPoints: z
     .number()
     .int("basisPoints must be an integer")
@@ -34,8 +56,8 @@ export const createSplitSchema = z
       .min(1, "projectId is required")
       .max(32)
       .regex(/^[a-zA-Z0-9_]+$/, "projectId must be alphanumeric/underscore"),
-    title: z.string().min(1, "title is required").max(128),
-    projectType: z.string().min(1, "projectType is required").max(32),
+    title: safeTextField.min(1, "title is required").max(128, "title must be at most 128 characters"),
+    projectType: safeTextField.min(1, "projectType is required").max(32, "projectType must be at most 32 characters"),
     token: stellarAddressSchema.describe("token"),
     collaborators: z.array(collaboratorSchema).min(2, "at least 2 collaborators are required")
   })
@@ -86,8 +108,8 @@ export const depositSchema = z.object({
 
 export const updateMetadataSchema = z.object({
   owner: stellarAddressSchema.describe("owner"),
-  title: z.string().min(1, "title is required").max(128),
-  projectType: z.string().min(1, "projectType is required").max(32)
+  title: safeTextField.min(1, "title is required").max(128, "title must be at most 128 characters"),
+  projectType: safeTextField.min(1, "projectType is required").max(32, "projectType must be at most 32 characters")
 });
 
 export const updateCollaboratorsSchema = z
@@ -168,4 +190,9 @@ export const withdrawUnallocatedSchema = z.object({
     .number()
     .positive("amount must be greater than 0")
     .describe("amount in stroops to recover")
+});
+
+// Wave 5: self-service claim schema
+export const claimSchema = z.object({
+  claimer: stellarAddressSchema.describe("collaborator address performing the claim")
 });

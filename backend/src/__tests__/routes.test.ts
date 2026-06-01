@@ -1,7 +1,8 @@
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import { app } from "../index.js";
 import { checkSorobanReachability } from "../services/stellar.js";
+import { clearEnvCache } from "../config/env.js";
 
 vi.mock("@stellar/stellar-sdk", () => {
   return {
@@ -90,13 +91,17 @@ vi.mock("../services/stellar.js", async (importOriginal) => {
 // Mock database service for health checks
 vi.mock("../services/database.js", () => ({
   getDataSource: vi.fn(() => ({
-    isInitialized: true
+    isInitialized: true,
+    query: vi.fn().mockResolvedValue([{ one: 1 }])
   })),
   initDatabase: vi.fn().mockResolvedValue({}),
   closeDatabase: vi.fn().mockResolvedValue({})
 }));
 
 describe("Route Integration Tests", () => {
+  const originalAdminApiKey = process.env.PAYMENTS_ADMIN_API_KEY;
+  const originalAdminWriteEnabled = process.env.PAYMENTS_ADMIN_WRITE_ENABLED;
+
   beforeAll(() => {
     process.env.DATABASE_URL = "https://example.com/postgres";
     process.env.SIMULATOR_ACCOUNT = "GD5T6IPRNCKFOHQ3STZ5BTEYI5V6U5U6U5U6U5U6U5U6U5U6U5U6U5U6";
@@ -104,6 +109,27 @@ describe("Route Integration Tests", () => {
     process.env.HORIZON_URL = "https://horizon-testnet.stellar.org";
     process.env.SOROBAN_RPC_URL = "https://soroban-testnet.stellar.org";
     process.env.SOROBAN_NETWORK_PASSPHRASE = "test";
+  });
+
+  beforeEach(() => {
+    clearEnvCache();
+    delete process.env.PAYMENTS_ADMIN_API_KEY;
+    delete process.env.PAYMENTS_ADMIN_WRITE_ENABLED;
+  });
+
+  afterEach(() => {
+    clearEnvCache();
+    if (originalAdminApiKey === undefined) {
+      delete process.env.PAYMENTS_ADMIN_API_KEY;
+    } else {
+      process.env.PAYMENTS_ADMIN_API_KEY = originalAdminApiKey;
+    }
+
+    if (originalAdminWriteEnabled === undefined) {
+      delete process.env.PAYMENTS_ADMIN_WRITE_ENABLED;
+    } else {
+      process.env.PAYMENTS_ADMIN_WRITE_ENABLED = originalAdminWriteEnabled;
+    }
   });
 
   describe("GET /", () => {
@@ -194,6 +220,42 @@ describe("Route Integration Tests", () => {
     });
   });
 
+  describe("GET /ops/mainnet-readiness", () => {
+    it("should return 200 and ready status when dependencies are ok", async () => {
+      const res = await request(app).get("/ops/mainnet-readiness");
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe("ready");
+      expect(res.body.components.env.ok).toBe(true);
+      expect(res.body.components.db.ok).toBe(true);
+      expect(res.body.components.deploy.ok).toBe(true);
+    });
+
+    it("should return 503 when production secrets are missing in production", async () => {
+      const originalNodeEnv = process.env.NODE_ENV;
+      const originalCorsOrigin = process.env.CORS_ORIGIN;
+      const originalMainnetContractId = process.env.MAINNET_CONTRACT_ID;
+      const originalRenderHook = process.env.RENDER_BACKEND_DEPLOY_HOOK_URL;
+
+      process.env.NODE_ENV = "production";
+      process.env.CORS_ORIGIN = "https://app.splitnaira.com";
+      delete process.env.MAINNET_CONTRACT_ID;
+      delete process.env.RENDER_BACKEND_DEPLOY_HOOK_URL;
+
+      try {
+        const res = await request(app).get("/ops/mainnet-readiness");
+        expect(res.status).toBe(503);
+        expect(res.body.status).toBe("not_ready");
+        expect(res.body.components.deploy.productionSecrets.mainnetContractId).toBe(false);
+        expect(res.body.components.deploy.productionSecrets.renderBackendDeployHookUrl).toBe(false);
+      } finally {
+        process.env.NODE_ENV = originalNodeEnv;
+        process.env.CORS_ORIGIN = originalCorsOrigin;
+        process.env.MAINNET_CONTRACT_ID = originalMainnetContractId;
+        process.env.RENDER_BACKEND_DEPLOY_HOOK_URL = originalRenderHook;
+      }
+    });
+  });
+
   describe("Error Handling & Request ID", () => {
     it("should propagate x-correlation-id in validation error responses", async () => {
       const res = await request(app)
@@ -218,6 +280,48 @@ describe("Route Integration Tests", () => {
       const res = await request(app).get("/unknown-route");
       expect(res.status).toBe(404);
       expect(res.body.error).toBe("not_found");
+    });
+  });
+
+  describe("Payments admin controls", () => {
+    it("requires x-admin-api-key when PAYMENTS_ADMIN_API_KEY is configured", async () => {
+      process.env.PAYMENTS_ADMIN_API_KEY = "ops-key";
+      clearEnvCache();
+
+      const res = await request(app).get("/splits/admin/status");
+
+      expect(res.status).toBe(401);
+      expect(res.body.error).toBe("admin_auth_required");
+    });
+
+    it("allows admin reads with a valid x-admin-api-key", async () => {
+      process.env.PAYMENTS_ADMIN_API_KEY = "ops-key";
+      clearEnvCache();
+
+      const res = await request(app)
+        .get("/splits/admin/status")
+        .set("x-admin-api-key", "ops-key");
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty("admin");
+      expect(res.body).toHaveProperty("isPaused");
+    });
+
+    it("blocks admin writes when PAYMENTS_ADMIN_WRITE_ENABLED is false", async () => {
+      process.env.PAYMENTS_ADMIN_API_KEY = "ops-key";
+      process.env.PAYMENTS_ADMIN_WRITE_ENABLED = "false";
+      clearEnvCache();
+
+      const res = await request(app)
+        .post("/splits/admin/pause-distributions")
+        .set("x-admin-api-key", "ops-key")
+        .send({
+          admin: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
+        });
+
+      expect(res.status).toBe(503);
+      expect(res.body.error).toBe("payments_admin_writes_disabled");
+      expect(res.body.details.rollbackAware).toBe(true);
     });
   });
 });

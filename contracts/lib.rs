@@ -11,10 +11,18 @@ const PROJECT_ID_BUCKET_SIZE: u32 = 100;
 mod errors;
 mod events;
 use events::{
-    CollaboratorsUpdated, DepositReceived, DistributionComplete, MetadataUpdated,
-    OwnershipTransferred, PaymentSent, ProjectCreated, ProjectLocked, UnallocatedWithdrawn,
-    DepositReceived, DistributionComplete, MetadataUpdated, OwnershipTransferred, PaymentSent,
-    ProjectCreated, ProjectLocked, UnallocatedWithdrawn, CollaboratorsUpdated,
+    CollaboratorsUpdated,
+    DepositReceived,
+    DistributionComplete,
+    DistributionsPaused,
+    DistributionsUnpaused,
+    MetadataUpdated,
+    OwnershipTransferred,
+    PaymentSent,
+    ProjectCreated,
+    ProjectLocked,
+  CollaboratorClaimed,
+    UnallocatedWithdrawn,
 };
 #[cfg(test)]
 mod tests;
@@ -150,6 +158,8 @@ impl SplitNairaContract {
         env.storage()
             .persistent()
             .set(&DataKey::DistributionsPaused, &true);
+
+        DistributionsPaused { admin: admin.clone() }.publish(&env);
         Ok(())
     }
 
@@ -160,6 +170,8 @@ impl SplitNairaContract {
         env.storage()
             .persistent()
             .set(&DataKey::DistributionsPaused, &false);
+
+        DistributionsUnpaused { admin: admin.clone() }.publish(&env);
         Ok(())
     }
 
@@ -616,6 +628,104 @@ impl SplitNairaContract {
         }
 
         Ok(())
+    }
+
+    // ----------------------------------------------------------
+    // SELF-SERVICE CLAIM (User Onboarding — Wave 5)
+    // ----------------------------------------------------------
+
+    /// Allows an individual collaborator to pull their proportional share of
+    /// the current project balance without requiring a full `distribute` call.
+    ///
+    /// This is the pull-based counterpart to the push-based `distribute`.
+    /// It is the primary onboarding path for new collaborators who want to
+    /// claim earnings at their own cadence.
+    ///
+    /// # Behaviour
+    /// - If `claimer` is not a collaborator on the project, returns `NotACollaborator`.
+    /// - If the project balance is zero, returns `Ok(0)` (no error, nothing transferred).
+    /// - Otherwise transfers `floor(balance × basis_points / 10_000)` tokens to
+    ///   `claimer`, reduces `ProjectBalance` by that amount, and updates the
+    ///   per-address `Claimed` ledger entry.
+    /// - Emits a `CollaboratorClaimed` event on every non-zero transfer.
+    ///
+    /// # Errors
+    /// * `SplitError::NotFound`          — project does not exist
+    /// * `SplitError::NotACollaborator`  — claimer is not a collaborator
+    /// * `SplitError::DistributionsPaused` — global pause is active
+    pub fn claim(
+        env: Env,
+        project_id: Symbol,
+        claimer: Address,
+    ) -> Result<i128, SplitError> {
+        claimer.require_auth();
+
+        let paused: bool = env
+            .storage()
+            .persistent()
+            .get::<DataKey, bool>(&DataKey::DistributionsPaused)
+            .unwrap_or(false);
+        if paused {
+            return Err(SplitError::DistributionsPaused);
+        }
+
+        let project = Self::get_project_or_err(&env, &project_id)?;
+
+        // Locate the claimer in the collaborator list
+        let mut claimer_bps: Option<u32> = None;
+        for collab in project.collaborators.iter() {
+            if collab.address == claimer {
+                claimer_bps = Some(collab.basis_points);
+                break;
+            }
+        }
+        let basis_points = claimer_bps.ok_or(SplitError::NotACollaborator)?;
+
+        let balance: i128 = env
+            .storage()
+            .persistent()
+            .get::<DataKey, i128>(&DataKey::ProjectBalance(project_id.clone()))
+            .unwrap_or(0);
+
+        if balance <= 0 {
+            return Ok(0);
+        }
+
+        let amount = (balance * basis_points as i128) / 10_000;
+        if amount <= 0 {
+            return Ok(0);
+        }
+
+        // Reduce project balance
+        env.storage()
+            .persistent()
+            .set(&DataKey::ProjectBalance(project_id.clone()), &(balance - amount));
+
+        // Update per-address claimed ledger
+        let prev_claimed: i128 = env
+            .storage()
+            .persistent()
+            .get::<DataKey, i128>(&DataKey::Claimed(project_id.clone(), claimer.clone()))
+            .unwrap_or(0);
+        env.storage().persistent().set(
+            &DataKey::Claimed(project_id.clone(), claimer.clone()),
+            &(prev_claimed + amount),
+        );
+        Self::bump_claimed_ttl(&env, &project_id, &claimer);
+        Self::bump_project_ttl(&env, &project_id);
+
+        // Transfer tokens to claimer
+        let token_client = token::Client::new(&env, &project.token);
+        token_client.transfer(&env.current_contract_address(), &claimer, &amount);
+
+        CollaboratorClaimed {
+            project_id: project_id.clone(),
+            claimer: claimer.clone(),
+            amount,
+        }
+        .publish(&env);
+
+        Ok(amount)
     }
 
     // ----------------------------------------------------------

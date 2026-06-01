@@ -141,6 +141,8 @@ docker compose --env-file .env.local up
 - API Documentation: http://localhost:3001/api/docs
 - Database: localhost:5432 (user: `splitnaira`, password: `splitnaira`)
 
+For production wallet and payment operations, configure `PAYMENTS_ADMIN_API_KEY` on the backend before exposing `/splits/admin/*`. If payout-impacting admin actions need to be frozen during an incident or rollback, set `PAYMENTS_ADMIN_WRITE_ENABLED=false` and redeploy or restart the backend with the updated environment.
+
 ### Individual Project Commands
 
 #### Frontend
@@ -215,6 +217,16 @@ Purpose:
 - Deployment validation
 - Launch verification
 - Configuration auditing
+- Mainnet configuration and readiness audit before traffic cutover
+
+This endpoint performs a lightweight operational check that includes:
+
+- environment configuration validation
+- database connectivity verification
+- cache and runtime capacity metrics
+- production secret audit and contract ID consistency check
+
+Use it as a pre-deploy gate during release and rollback planning.
 
 ## Developer Setup
 
@@ -243,6 +255,22 @@ npm run analyze
 - [Mainnet Launch Runbook](./docs/runbooks/mainnet-launch.md)
 - [User Onboarding Runbook](./docs/runbooks/user-onboarding.md)
 - [API Evolution Runbook](./docs/runbooks/api-evolution.md)
+- [Changelog](./CHANGELOG.md)
+
+## Release Versioning
+
+SplitNaira uses `v0.x.y` git tags for release traceability. A tag identifies the exact source state for backend, frontend, and smart contract code.
+
+- Draft GitHub Releases are created automatically when a `v0.x.y` tag is pushed, using the release notes from `CHANGELOG.md`.
+- The contract WASM built from the tagged commit is the versioned smart contract artifact. The canonical build output is:
+  - `contracts/target/wasm32v1-none/release/splitnaira_contract.wasm`
+  - `contracts/target/wasm32v1-none/release/release-info.json`
+- `CONTRACT_ID` is the deployed contract address for the target network; it is recorded separately from the repo release tag.
+- Keep `CHANGELOG.md` up to date before tagging a release so GitHub Releases reflect the correct notes.
+
+## Notes
+
+The release tag maps source, artifact, and deployment metadata together. When deploying a tagged release, ensure the contract WASM and the runtime environment are built from the same tag.
 
 ### Data integrity & release ops
 
@@ -283,6 +311,11 @@ The `ApiClient` (`frontend/src/lib/api-client.ts`) provides:
 - **Response mapping** — `mapProjectToCamelCase` handles both camelCase and snake_case backend responses for safe field-naming migrations.
 
 See [API Evolution Runbook](./docs/runbooks/api-evolution.md) for change procedures.
+- `backend-deploy.yml` now validates production deploy configuration, data integrity, and backend build/test before triggering Render.
+- `mainnet-deploy.yml` now runs an explicit manual production release gate with deploy config validation, data integrity, backend lint, build, and tests.
+- A new CI/CD incident management runbook documents incident triage, smoke-check failure handling, rollback, and recovery.
+- CI pipelines use concurrency groups to cancel stale runs and keep mainline validation fast.
+- Operational rollback guidance is documented in `docs/runbooks/ci-data-integrity.md`, `docs/runbooks/incident-management.md`, and `docs/deployment.md`.
 
 ## License
 

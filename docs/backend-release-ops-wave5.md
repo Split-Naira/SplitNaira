@@ -2,7 +2,7 @@
 
 ## Overview
 
-Wave 5 release-operations work improves deploy readiness for the SplitNaira backend: atomic user registration, structured logging on critical paths, validation middleware repair, and operational runbook material for safe rollout and rollback.
+Wave 5 release-operations work improves deploy readiness for the SplitNaira backend: atomic user registration, structured logging on critical paths, validation middleware repair, payments-admin route hardening, and operational runbook material for safe rollout and rollback.
 
 ## Implementation plan
 
@@ -10,6 +10,8 @@ Wave 5 release-operations work improves deploy readiness for the SplitNaira back
 |----------|------|-------|
 | Critical | Fix `validateRequest` middleware responses | `backend/src/middleware/validate.ts` |
 | Critical | Add `withTransaction()` and wrap user registration | `backend/src/services/database.ts`, `backend/src/routes/users.ts` |
+| Critical | Protect wallet/payment admin routes with `PAYMENTS_ADMIN_API_KEY` | `backend/src/index.ts`, `backend/src/middleware/payments-admin.ts` |
+| High | Add rollback-aware write freeze for `/splits/admin/*` | `backend/src/index.ts`, `backend/src/config/env.ts` |
 | High | Route errors through Winston `logger` (error handler, RPC retries, payout backfill) | `middleware/error.ts`, `services/stellar.ts`, `services/PayoutHistoryService.ts`, etc. |
 | High | Repair incomplete validation/RPC error responses blocking builds | `backend/src/routes/splits.ts` |
 | Medium | Transaction + RPC retry tests | `services/database.test.ts`, `__tests__/users.test.ts`, `services/stellar.ts` |
@@ -65,6 +67,7 @@ npm run build -w backend
 
 - `/health` success rate
 - User registration 4xx/5xx rates
+- `/splits/admin/*` 401/503 rates
 - Winston log volume and error spikes
 - Postgres connection pool metrics
 
@@ -81,6 +84,10 @@ User registration is atomic: duplicate detection and insert share one transactio
 ### Validation / RPC responses
 
 Incomplete `res.status().json({ error: , ... })` placeholders in splits routes were replaced with consistent `validation_error` / `rpc_error` payloads so the API compiles and returns predictable 400/502 bodies.
+
+### Payments admin safety
+
+Production deployments now require `PAYMENTS_ADMIN_API_KEY` for `/splits/admin/*`, and payout-impacting admin writes can be frozen instantly with `PAYMENTS_ADMIN_WRITE_ENABLED=false` while leaving read-only diagnostics available during rollback.
 
 ## Local CI (matches `.github/workflows/ci.yml` backend job)
 

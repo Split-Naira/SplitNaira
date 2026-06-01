@@ -78,8 +78,18 @@ export type FrontendEnv = z.infer<typeof frontendEnvSchema>;
  * so misconfiguration is caught at startup rather than buried in a runtime error.
  */
 export function validateEnv(): FrontendEnv {
+  const rawStellarNetwork = process.env.NEXT_PUBLIC_STELLAR_NETWORK;
+  const legacyNetwork = process.env.NEXT_PUBLIC_NETWORK;
+
+  if (rawStellarNetwork && legacyNetwork && rawStellarNetwork !== legacyNetwork) {
+    throw new Error(
+      `[env] Conflicting network configuration: NEXT_PUBLIC_STELLAR_NETWORK="${rawStellarNetwork}" and ` +
+      `NEXT_PUBLIC_NETWORK="${legacyNetwork}". Use only NEXT_PUBLIC_STELLAR_NETWORK.`,
+    );
+  }
+
   const result = frontendEnvSchema.safeParse({
-    NEXT_PUBLIC_STELLAR_NETWORK: process.env.NEXT_PUBLIC_STELLAR_NETWORK,
+    NEXT_PUBLIC_STELLAR_NETWORK: rawStellarNetwork ?? legacyNetwork,
     NEXT_PUBLIC_SOROBAN_RPC_URL: process.env.NEXT_PUBLIC_SOROBAN_RPC_URL,
     NEXT_PUBLIC_HORIZON_URL: process.env.NEXT_PUBLIC_HORIZON_URL,
     NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL,

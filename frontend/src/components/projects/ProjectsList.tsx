@@ -1,6 +1,7 @@
 "use client";
 
 import { clsx } from "clsx";
+import { sanitizeText } from "@/lib/security";
 import type { SplitProject } from "@/lib/stellar";
 import type { ProjectHistoryItem, AdminStatusState } from "@/lib/api";
 import type { WalletState } from "@/lib/wallet";
@@ -98,7 +99,7 @@ export function ProjectsList({
                   }}
                   className="glass-card rounded-[2.5rem] p-8 text-left hover:bg-white/5 transition-all"
                 >
-                  <h3 className="font-display text-xl mb-1">{p.title}</h3>
+                  <h3 className="font-display text-xl mb-1">{sanitizeText(p.title)}</h3>
                   <p className="font-mono text-[10px] text-muted mb-4">{p.projectId}</p>
                   <div className="flex justify-between border-t border-white/5 pt-4">
                     <span className="text-xl font-display text-greenBright">
@@ -163,9 +164,9 @@ export function ProjectsList({
             <div className="flex flex-wrap items-center justify-between gap-6 border-b border-white/5 pb-8">
               <div className="space-y-1">
                 <div className="flex items-center gap-3">
-                  <h2 className="font-display text-3xl tracking-tight">{fetchedProject.title}</h2>
+                  <h2 className="font-display text-3xl tracking-tight">{sanitizeText(fetchedProject.title)}</h2>
                   <span className="rounded-full bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-muted border border-white/5">
-                    {fetchedProject.projectType}
+                    {sanitizeText(fetchedProject.projectType)}
                   </span>
                 </div>
                 <p className="font-mono text-xs text-muted opacity-60 break-all">{fetchedProject.projectId}</p>
@@ -188,7 +189,7 @@ export function ProjectsList({
                   {fetchedProject.collaborators.map((collab, idx) => (
                     <div key={idx} className="flex justify-between items-center rounded-2xl bg-white/2 p-4 text-sm border border-white/5 hover:bg-white/4 transition-colors">
                       <div className="space-y-0.5">
-                        <p className="font-bold">{collab.alias}</p>
+                        <p className="font-bold">{sanitizeText(collab.alias)}</p>
                         <p className="font-mono text-[10px] text-muted opacity-60 truncate max-w-[150px]">{collab.address}</p>
                       </div>
                       <span className="font-mono font-bold text-greenBright/80">

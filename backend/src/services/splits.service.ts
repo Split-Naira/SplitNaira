@@ -624,3 +624,34 @@ export async function buildWithdrawUnallocatedUnsignedXdr(input: WithdrawUnalloc
     }
   };
 }
+
+// ============================================================
+// Wave 5: self-service claim
+// ============================================================
+
+export interface ClaimRequest {
+  projectId: string;
+  claimer: string;
+}
+
+/**
+ * Builds an unsigned XDR transaction for the `claim` contract function.
+ *
+ * The `claim` function is the pull-based counterpart to `distribute`:
+ * a collaborator calls it to withdraw their proportional share of the
+ * current project balance at their own cadence.
+ */
+export async function buildClaimUnsignedXdr(input: ClaimRequest) {
+  const { parseStellarAddress } = await import("./contract-helpers.js");
+  parseStellarAddress(input.claimer, "claimer address");
+
+  return buildUnsignedContractCall({
+    sourceAddress: input.claimer,
+    sourceRoleLabel: "claimer",
+    operation: "claim",
+    args: [
+      nativeToScVal(input.projectId, { type: "symbol" }),
+      Address.fromString(input.claimer).toScVal()
+    ]
+  });
+}

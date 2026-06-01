@@ -146,6 +146,31 @@ describe("validateEnv()", () => {
 
     expect(() => validateEnv()).toThrowError(/CONTRACT_ID/);
   });
+
+  it("requires PAYMENTS_ADMIN_API_KEY in production", () => {
+    Object.assign(process.env, {
+      ...VALID_ENV,
+      NODE_ENV: "production",
+      CORS_ORIGIN: "https://app.splitnaira.com"
+    });
+    delete process.env.PAYMENTS_ADMIN_API_KEY;
+
+    expect(() => validateEnv()).toThrowError(/PAYMENTS_ADMIN_API_KEY/);
+  });
+
+  it("accepts payments admin controls when configured", () => {
+    Object.assign(process.env, {
+      ...VALID_ENV,
+      NODE_ENV: "production",
+      CORS_ORIGIN: "https://app.splitnaira.com",
+      PAYMENTS_ADMIN_API_KEY: "super-secret-admin-key",
+      PAYMENTS_ADMIN_WRITE_ENABLED: "false"
+    });
+
+    const env = validateEnv();
+    expect(env.PAYMENTS_ADMIN_API_KEY).toBe("super-secret-admin-key");
+    expect(env.PAYMENTS_ADMIN_WRITE_ENABLED).toBe("false");
+  });
 });
 
 // ─── getEnv() ─────────────────────────────────────────────────────────────────
