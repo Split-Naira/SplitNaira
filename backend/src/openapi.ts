@@ -424,6 +424,9 @@ const MainnetReadinessResponseSchema = registry.register(
   z.object({
     status: z.enum(["ready", "not_ready"]),
     requestId: z.string().optional(),
+    error: z.string().optional(),
+    message: z.string().optional(),
+    details: z.record(z.any()).optional(),
     components: z.object({
       env: z.object({
         ok: z.boolean(),

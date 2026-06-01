@@ -14,6 +14,9 @@ interface ReadinessComponent {
 export interface MainnetReadinessResponse {
   status: "ready" | "not_ready";
   requestId?: string;
+  error?: string;
+  message?: string;
+  details?: Record<string, unknown>;
   components: {
     env: ReadinessComponent;
     db: ReadinessComponent;
