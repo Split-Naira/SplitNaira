@@ -39,10 +39,51 @@ The API documentation is defined using Zod schemas and generated into an OpenAPI
 - **Rate limiting** — layered limits on all route groups
 - **Payments admin hardening** — `/splits/admin/*` can be protected with `PAYMENTS_ADMIN_API_KEY`, and write actions can be frozen instantly with `PAYMENTS_ADMIN_WRITE_ENABLED=false`
 
-See [`../docs/backend-release-ops-wave5.md`](../docs/backend-release-ops-wave5.md) for the implementation plan, deploy/rollback runbook, and CI commands.
+The backend includes comprehensive production-grade hardening:
+
+- **Database transaction safety** — Critical operations (`withTransaction()`) with automatic rollback prevent data corruption
+- **Structured logging** — Winston logger with `requestId` correlation across all requests
+- **Input validation** — Zod schemas on all routes with consistent 400 error responses
+- **Error handling** — Centralized `AppError` mapping with user-friendly remediation hints
+- **Rate limiting** — Layered per-endpoint limits (global, read, write, admin)
+- **Response validation** — Middleware validates all JSON responses match schemas
+- **Security headers** — Helmet.js for CSP, HSTS, X-Frame-Options, etc.
+- **Payments admin hardening** — `/splits/admin/*` protected by `PAYMENTS_ADMIN_API_KEY`; writes toggleable via `PAYMENTS_ADMIN_WRITE_ENABLED`
+
+**Documentation**:
+- [`../docs/PLATFORM_HARDENING_IMPLEMENTATION.md`](../docs/PLATFORM_HARDENING_IMPLEMENTATION.md) — implementation details, monitoring, and rollback
+- [`../docs/PLATFORM_HARDENING_DEPLOYMENT_CHECKLIST.md`](../docs/PLATFORM_HARDENING_DEPLOYMENT_CHECKLIST.md) — operator checklist for safe deployment
+- [`../docs/backend-release-ops-wave5.md`](../docs/backend-release-ops-wave5.md) — deployment procedures and CI commands
+
+### Transaction Safety Example
+
+All database writes use `withTransaction()` for atomicity:
+
+```typescript
+const user = await withTransaction(async (queryRunner) => {
+  const repo = queryRunner.manager.getRepository(User);
+  const existing = await repo.findOne({ where: { walletAddress } });
+  if (existing) throw new Error("User exists");
+  
+  const newUser = repo.create({ walletAddress, email });
+  return await repo.save(newUser);
+});
+// Automatically rolled back on error — no orphaned records
+```
+
+### Testing
+
+Run tests to verify hardening:
+
+```bash
+npm test -- error-scenarios.test.ts    # Validation & error handling
+npm test -- transaction-safety.test.ts # Database transaction rollback
+npm test                                # All tests
+```
 
 ## Structure
 - `src/index.ts` - App entry
 - `src/routes` - HTTP routes
 - `src/services` - Stellar/Soroban integrations
-- `src/middleware` - Error handling
+- `src/middleware` - Error handling, validation, rate limiting
+- `src/__tests__` - Comprehensive test suites including error scenarios

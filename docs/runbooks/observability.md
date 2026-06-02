@@ -32,6 +32,8 @@ Exposed series:
 - `splitnaira_process_heap_bytes`
 - `splitnaira_info{version="..."}`
 
+Contract-level telemetry is also available through on-chain event topics emitted by the SplitNaira contract. Analytics consumers should combine backend metrics with contract event streams for richer Insights.
+
 Scrape from internal network only; do not expose publicly without auth.
 
 ## Correlation IDs

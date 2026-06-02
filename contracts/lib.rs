@@ -104,6 +104,8 @@ pub enum DataKey {
     AllowedTokenList,
     /// Allowlisted token contract address marker
     AllowedToken(Address),
+    /// Cached total of all project balances for a given token
+    AccountedTokenBalance(Address),
     /// Global flag to pause all distributions (emergency stop)
     DistributionsPaused,
 }
@@ -475,6 +477,7 @@ impl SplitNairaContract {
             .persistent()
             .set(&DataKey::ProjectBalance(project_id.clone()), &new_balance);
         Self::bump_project_ttl(&env, &project_id);
+        Self::adjust_accounted_token_balance(&env, &project.token, amount)?;
 
         DepositReceived {
             project_id: project_id.clone(),
@@ -581,6 +584,7 @@ impl SplitNairaContract {
             &DataKey::ProjectBalance(project_id.clone()),
             &remaining_balance,
         );
+        Self::adjust_accounted_token_balance(&env, &project.token, -total_sent)?;
 
         project.total_distributed += total_sent;
         project.distribution_round += 1;
@@ -700,6 +704,15 @@ impl SplitNairaContract {
         env.storage()
             .persistent()
             .set(&DataKey::ProjectBalance(project_id.clone()), &(balance - amount));
+        Self::adjust_accounted_token_balance(&env, &project.token, -amount)?;
+
+        // Record the payout in the project distribution totals.
+        let mut updated_project = project.clone();
+        updated_project.total_distributed += amount;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Project(project_id.clone()), &updated_project);
+        Self::bump_project_ttl(&env, &project_id);
 
         // Update per-address claimed ledger
         let prev_claimed: i128 = env
@@ -712,7 +725,6 @@ impl SplitNairaContract {
             &(prev_claimed + amount),
         );
         Self::bump_claimed_ttl(&env, &project_id, &claimer);
-        Self::bump_project_ttl(&env, &project_id);
 
         // Transfer tokens to claimer
         let token_client = token::Client::new(&env, &project.token);
@@ -824,7 +836,7 @@ impl SplitNairaContract {
         let token_client = token::Client::new(&env, &token);
         let contract_token_balance = token_client.balance(&contract_address);
 
-        let accounted = Self::sum_project_balances_for_token(&env, &token)?;
+        let accounted = Self::get_accounted_balance(&env, &token)?;
         Ok(contract_token_balance - accounted)
     }
 
@@ -1247,6 +1259,29 @@ impl SplitNairaContract {
                 .get::<DataKey, Vec<Symbol>>(&DataKey::ProjectIds)
                 .unwrap_or(Vec::new(env))
         }
+    }
+
+    fn get_accounted_balance(env: &Env, token: &Address) -> Result<i128, SplitError> {
+        if let Some(cached) = env
+            .storage()
+            .persistent()
+            .get::<DataKey, i128>(&DataKey::AccountedTokenBalance(token.clone()))
+        {
+            return Ok(cached);
+        }
+        Self::sum_project_balances_for_token(env, token)
+    }
+
+    fn adjust_accounted_token_balance(
+        env: &Env,
+        token: &Address,
+        delta: i128,
+    ) -> Result<(), SplitError> {
+        let key = DataKey::AccountedTokenBalance(token.clone());
+        let prev: i128 = env.storage().persistent().get::<DataKey, i128>(&key).unwrap_or(0);
+        let next = prev.checked_add(delta).ok_or(SplitError::ArithmeticOverflow)?;
+        env.storage().persistent().set(&key, &next);
+        Ok(())
     }
 
     fn sum_project_balances_for_token(env: &Env, token: &Address) -> Result<i128, SplitError> {
