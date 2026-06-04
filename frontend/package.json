@@ -21,7 +21,7 @@
     "lucide-react": "^0.536.0",
     "next": "16.2.6",
     "next-intl": "^4.9.1",
-    "react": "19.2.4",
+    "react": "19.2.7",
     "react-dom": "19.2.6",
     "react-hook-form": "^7.62.0",
     "rollup": "^4.60.2"
@@ -34,7 +34,7 @@
     "@testing-library/react": "16.3.2",
     "@testing-library/user-event": "14.6.1",
     "@types/node": "25.5.0",
-    "@types/react": "19.2.14",
+    "@types/react": "19.2.16",
     "@typescript-eslint/eslint-plugin": "8.60.0",
     "@typescript-eslint/parser": "8.60.0",
     "autoprefixer": "10.4.27",
