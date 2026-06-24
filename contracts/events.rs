@@ -265,3 +265,25 @@ impl CollaboratorClaimed {
         );
     }
 }
+
+/// Emitted when splits are updated while a project still has undistributed balance.
+///
+/// Topics:  ["splits_updated_with_pending_balance", project_id]
+/// Data:    (pending_balance in stroops)
+#[derive(Clone, Debug)]
+pub struct SplitsUpdatedWithPendingBalance {
+    pub project_id: Symbol,
+    pub pending_balance: i128,
+}
+
+impl SplitsUpdatedWithPendingBalance {
+    pub fn publish(&self, env: &Env) {
+        env.events().publish(
+            (
+                Symbol::new(env, "splits_updated_with_pending_balance"),
+                self.project_id.clone(),
+            ),
+            self.pending_balance,
+        );
+    }
+}

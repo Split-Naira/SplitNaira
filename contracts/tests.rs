@@ -401,6 +401,38 @@ fn test_get_allowed_tokens_returns_paginated_allowlist() {
     );
 }
 
+#[test]
+fn test_create_project_too_many_collaborators() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    
+    let mut addresses = Vec::new(&env);
+    let mut bps = Vec::new(&env);
+    // 51 collaborators
+    for _ in 0..51 {
+        addresses.push_back(Address::generate(&env));
+        bps.push_back(0u32); // temporarily 0, total 10000 later
+    }
+    // Set first one to 10000 to pass InvalidSplit if it ever reached there
+    bps.set(0, 10000u32);
+
+    let collabs = make_collaborators(&env, addresses, bps);
+
+    let result = client.try_create_project(
+        &owner,
+        &Symbol::new(&env, "too_many_collabs"),
+        &String::from_str(&env, "Too Many"),
+        &String::from_str(&env, "music"),
+        &token,
+        &collabs,
+    );
+
+    assert_eq!(result, Err(Ok(SplitError::TooManyCollaborators)));
+}
+
 // ============================================================
 //  UPDATE + LOCK TESTS
 // ============================================================
@@ -637,6 +669,54 @@ fn test_update_collaborators_fails_zero_share() {
 
     let result = client.try_update_collaborators(&project_id, &owner, &bad_collabs);
     assert_eq!(result, Err(Ok(SplitError::ZeroShare)));
+}
+
+#[test]
+fn test_update_collaborators_with_pending_balance_emits_warning() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    let funder = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let carol = Address::generate(&env);
+
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[6000u32, 4000u32]),
+    );
+
+    let project_id = Symbol::new(&env, "warn_balance");
+    client.create_project(&owner, &project_id, &String::from_str(&env, "Warn Balance"), &String::from_str(&env, "music"), &token, &collabs);
+
+    // Deposit funds to make project balance > 0
+    deposit_to_project(&env, &client, &token, &project_id, &funder, 1_000_0000000i128);
+
+    let updated_collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone(), carol.clone()]),
+        Vec::from_slice(&env, &[5000u32, 3000u32, 2000u32]),
+    );
+
+    client.update_collaborators(&project_id, &owner, &updated_collabs);
+
+    // Verify warning event was emitted
+    let events = env.events().all();
+    let mut warning_emitted = false;
+    for event in events.iter() {
+        if let Ok(topic) = Symbol::try_from_val(&env, &event.1.get(0).unwrap()) {
+            if topic == Symbol::new(&env, "splits_updated_with_pending_balance") {
+                warning_emitted = true;
+                assert_eq!(event.1.get(1).unwrap(), project_id.into_val(&env));
+                let balance_val: i128 = event.2.into_val(&env);
+                assert_eq!(balance_val, 1_000_0000000i128);
+            }
+        }
+    }
+    assert!(warning_emitted, "Warning event was not emitted");
 }
 
 #[test]

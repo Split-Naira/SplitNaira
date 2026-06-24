@@ -23,6 +23,7 @@ use events::{
     ProjectLocked,
   CollaboratorClaimed,
     UnallocatedWithdrawn,
+    SplitsUpdatedWithPendingBalance,
 };
 #[cfg(test)]
 mod tests;
@@ -33,6 +34,9 @@ use errors::SplitError;
 // created, mutated, distributed, or read.
 const PROJECT_TTL_THRESHOLD_LEDGERS: u32 = 50_000;
 const PROJECT_TTL_BUMP_LEDGERS: u32 = 100_000;
+
+/// Maximum number of collaborators allowed in a single project
+const MAX_COLLABORATORS: u32 = 50;
 
 // ============================================================
 //  DATA TYPES
@@ -371,6 +375,10 @@ impl SplitNairaContract {
 
     /// Updates collaborator addresses and basis point splits for an existing project.
     /// Only the project owner can update, and only while the project is unlocked.
+    /// 
+    /// Note: Changing splits applies immediately and affects both future deposits 
+    /// and any undistributed pending balance. If updated while the project balance 
+    /// is > 0, a `SplitsUpdatedWithPendingBalance` warning event is emitted.
     pub fn update_collaborators(
         env: Env,
         project_id: Symbol,
@@ -389,6 +397,20 @@ impl SplitNairaContract {
         }
 
         Self::validate_collaborators(&env, &collaborators)?;
+
+        let balance: i128 = env
+            .storage()
+            .persistent()
+            .get::<DataKey, i128>(&DataKey::ProjectBalance(project_id.clone()))
+            .unwrap_or(0);
+        
+        if balance > 0 {
+            SplitsUpdatedWithPendingBalance {
+                project_id: project_id.clone(),
+                pending_balance: balance,
+            }
+            .publish(&env);
+        }
 
         project.collaborators = collaborators;
         env.storage()
@@ -1156,6 +1178,10 @@ impl SplitNairaContract {
     ) -> Result<(), SplitError> {
         if collaborators.len() < 2 {
             return Err(SplitError::TooFewCollaborators);
+        }
+
+        if collaborators.len() > MAX_COLLABORATORS {
+            return Err(SplitError::TooManyCollaborators);
         }
 
         let mut total_bp: u32 = 0;
