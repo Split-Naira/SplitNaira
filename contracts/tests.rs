@@ -690,7 +690,14 @@ fn test_update_collaborators_with_pending_balance_emits_warning() {
     );
 
     let project_id = Symbol::new(&env, "warn_balance");
-    client.create_project(&owner, &project_id, &String::from_str(&env, "Warn Balance"), &String::from_str(&env, "music"), &token, &collabs);
+    client.create_project(
+        &owner,
+        &project_id,
+        &String::from_str(&env, "Warn Balance"),
+        &String::from_str(&env, "music"),
+        &token,
+        &collabs,
+    );
 
     // Deposit funds to make project balance > 0
     deposit_to_project(&env, &client, &token, &project_id, &funder, 1_000_0000000i128);

@@ -25,7 +25,10 @@ export const CONTRACT_ERROR_MESSAGES: Record<ContractErrorCode, string> = {
   [ContractErrors.InsufficientUnallocated]:
     "Withdrawal exceeds unallocated contract balance for this token.",
   [ContractErrors.DistributionsPaused]:
-    "Distributions are paused by the contract admin. Deposits still work; try again after unpause."
+    "Distributions are paused by the contract admin. Deposits still work; try again after unpause.",
+  [ContractErrors.InvalidRecipient]: "Withdrawal recipient must not be the contract itself.",
+  [ContractErrors.NotACollaborator]: "Address is not registered as a collaborator on this project.",
+  [ContractErrors.TooManyCollaborators]: "Project has exceeded the maximum allowed number of collaborators."
 };
 
 const ERROR_CODE_BY_NAME = Object.fromEntries(
