@@ -6,7 +6,7 @@ type Props = {
     name: string;
     email: string;
   };
-  onSave?: (data: any) => Promise<void>;
+  onSave?: (data: Record<string, unknown>) => Promise<void>;
 };
 
 export default function AccountSettings({ user, onSave }: Props) {
@@ -20,7 +20,7 @@ export default function AccountSettings({ user, onSave }: Props) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const handleChange = (key: string, value: any) => {
+  const handleChange = (key: string, value: string | boolean) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -31,8 +31,8 @@ export default function AccountSettings({ user, onSave }: Props) {
     try {
       await onSave?.(form);
       setMessage("Settings saved successfully");
-    } catch (err: any) {
-      setMessage(err.message || "Failed to save settings");
+    } catch (err: unknown) {
+      setMessage(err instanceof Error ? err.message : "Failed to save settings");
     } finally {
       setLoading(false);
     }
@@ -46,31 +46,37 @@ export default function AccountSettings({ user, onSave }: Props) {
       <div className="settings-section">
         <h3>Profile</h3>
 
-        <label>Name</label>
-        <input
-          type="text"
-          value={form.name}
-          onChange={(e) => handleChange("name", e.target.value)}
-        />
+        <label>
+          Name
+          <input
+            type="text"
+            value={form.name}
+            onChange={(e) => handleChange("name", e.target.value)}
+          />
+        </label>
 
-        <label>Email</label>
-        <input
-          type="email"
-          value={form.email}
-          onChange={(e) => handleChange("email", e.target.value)}
-        />
+        <label>
+          Email
+          <input
+            type="email"
+            value={form.email}
+            onChange={(e) => handleChange("email", e.target.value)}
+          />
+        </label>
       </div>
 
       {/* Password Section */}
       <div className="settings-section">
         <h3>Security</h3>
 
-        <label>New Password</label>
-        <input
-          type="password"
-          value={form.password}
-          onChange={(e) => handleChange("password", e.target.value)}
-        />
+        <label>
+          New Password
+          <input
+            type="password"
+            value={form.password}
+            onChange={(e) => handleChange("password", e.target.value)}
+          />
+        </label>
       </div>
 
       {/* Preferences */}
