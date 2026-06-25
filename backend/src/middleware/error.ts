@@ -31,7 +31,7 @@ export function errorHandler(
 ) {
   const requestId = res.locals.requestId;
 
-  if (err && typeof err === "object" && "errors" in err && Array.isArray((err as ZodError).errors)) {
+  if (err && typeof err === "object" && (err.name === "ZodError" || ("issues" in err && Array.isArray((err as ZodError).issues)))) {
     return res.status(400).json({
       ...formatZodError(err as unknown as ZodError),
       requestId,
