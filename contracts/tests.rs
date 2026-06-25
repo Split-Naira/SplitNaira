@@ -1204,6 +1204,82 @@ fn test_list_projects_pagination() {
 }
 
 #[test]
+fn test_basis_points_invariant_table() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+
+    // Each tuple is (basis_points_slice, expected_error_opt, duplicate_addresses_flag)
+    const CASES: &[(&[u32], Option<SplitError>, bool)] = &[
+        (&[5000, 5000], None, false), // simple 50/50
+        (&[0, 0], Some(SplitError::ZeroShare), false), // all zeros -> ZeroShare
+        (&[10000], Some(SplitError::TooFewCollaborators), false), // single collaborator -> TooFew
+        (&[6000, 3000], Some(SplitError::InvalidSplit), false), // sums to 9000
+        (&[6000, 4001], Some(SplitError::InvalidSplit), false), // 10001
+        (&[3333, 3333, 3334], None, false), // three-way equal-ish -> OK
+        (&[10000, 0], Some(SplitError::ZeroShare), false), // zero share present
+        (&[5000, 5000, 0], Some(SplitError::ZeroShare), false), // zero among many
+        (&[1, 9999], None, false), // edge exact 10000
+        (&[2, 9999], Some(SplitError::InvalidSplit), false), // 10001
+        (&[2500, 2500, 2500, 2500], None, false), // four equal -> OK
+        (&[5001, 4999], None, false), // OK
+        (&[5001, 4998], Some(SplitError::InvalidSplit), false), // 9999
+        (&[4294967295u32, 1u32], Some(SplitError::ArithmeticOverflow), false), // u32 max overflow
+        (&[4294967295u32, 4294967295u32], Some(SplitError::ArithmeticOverflow), false), // double max
+        (&[10000, 0, 0], Some(SplitError::ZeroShare), false),
+        (&[4000, 4000, 2000], None, false), // OK
+        (&[4000, 4000, 1999], Some(SplitError::InvalidSplit), false),
+        (&[5000, 4000, 1000], None, false), // OK
+        (&[5000, 4000, 999], Some(SplitError::InvalidSplit), false),
+        (&[5000, 5000, 0, 0], Some(SplitError::ZeroShare), false),
+        (&[1234, 8766], None, false), // random exact 10000
+        // duplicate-address case: should return DuplicateCollaborator
+        (&[5000, 5000], Some(SplitError::DuplicateCollaborator), true),
+    ];
+
+    for (i, (bps_slice, expected_err, dup_flag)) in CASES.iter().enumerate() {
+        // build a Rust Vec<Address> with either unique or duplicated addresses
+        let mut rust_addrs: alloc::vec::Vec<Address> = alloc::vec::Vec::new();
+        let mut first_addr: Option<Address> = None;
+        for j in 0..bps_slice.len() {
+            if *dup_flag && j > 0 {
+                // reuse first address to trigger DuplicateCollaborator
+                rust_addrs.push(first_addr.clone().unwrap());
+            } else {
+                let a = Address::generate(&env);
+                if j == 0 {
+                    first_addr = Some(a.clone());
+                }
+                rust_addrs.push(a);
+            }
+        }
+
+        let addresses = Vec::from_slice(&env, &rust_addrs);
+        let bps = Vec::from_slice(&env, bps_slice);
+
+        let collabs = make_collaborators(&env, addresses, bps);
+
+        let project_id = Symbol::new(&env, &format!("bps_case_{}", i));
+
+        let result = client.try_create_project(
+            &owner,
+            &project_id,
+            &String::from_str(&env, "BPS Case"),
+            &String::from_str(&env, "test"),
+            &token,
+            &collabs,
+        );
+
+        match expected_err {
+            None => assert_eq!(result, Ok(()), "case {} expected success but got {:?}", i, result),
+            Some(err) => assert_eq!(result, Err(Ok(*err)), "case {} expected {:?} but got {:?}", i, err, result),
+        }
+    }
+}
+
+#[test]
 fn test_list_projects_bounds() {
     let (env, _admin, token) = create_test_env();
     let contract_id = env.register_contract(None, SplitNairaContract);
