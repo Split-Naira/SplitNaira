@@ -151,7 +151,15 @@ function sendRpcError(res: Response, requestId: string, message: string, status 
   });
 }
 
+import { SplitsController } from "../controllers/splits.controller.js";
+
 export const splitsRouter = Router();
+const ctrl = new SplitsController();
+
+splitsRouter.get("/", ctrl.listProjects.bind(ctrl));
+splitsRouter.get("/:projectId", ctrl.getProject.bind(ctrl));
+splitsRouter.post("/:projectId/lock", ctrl.lockProject.bind(ctrl));
+splitsRouter.post("/:projectId/deposit", ctrl.deposit.bind(ctrl));
 
 function logPaymentsAdminAction(
   res: Response,

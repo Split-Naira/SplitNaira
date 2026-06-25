@@ -1,7 +1,18 @@
 import type { NextFunction, Request, Response } from "express";
+import type { ZodError } from "zod";
 import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
 import { logger } from "../services/logger.js";
 import { RpcError } from "../services/stellar.js";
+
+function formatZodError(err: ZodError) {
+  const flattened = err.flatten();
+  return {
+    code: "VALIDATION_ERROR",
+    error: "validation_error",
+    message: "Invalid request payload.",
+    details: { fieldErrors: flattened.fieldErrors, formErrors: flattened.formErrors },
+  };
+}
 
 export function notFoundHandler(_req: Request, res: Response) {
   res.status(404).json({
@@ -20,7 +31,13 @@ export function errorHandler(
 ) {
   const requestId = res.locals.requestId;
 
-  // Use property check instead of instanceof for better compatibility with different module instances/mocks
+  if (err && typeof err === "object" && "errors" in err && Array.isArray((err as ZodError).errors)) {
+    return res.status(400).json({
+      ...formatZodError(err as unknown as ZodError),
+      requestId,
+    });
+  }
+
   const isAppError = err && typeof err === "object" && "type" in err && "code" in err;
 
   if (isAppError) {
@@ -32,7 +49,6 @@ export function errorHandler(
           ? 400
           : 500;
 
-    // Log structured error
     logger.error("Application error", {
       requestId,
       type: err.type,
@@ -43,16 +59,15 @@ export function errorHandler(
 
     return res.status(status).json({
       error: err.code.toLowerCase(),
+      code: err.code,
       message: err.message,
       requestId,
       details: err.details || { remediation: err.remediation }
     });
   }
 
-  // Fallback for generic errors — capture 5xx in Sentry when DSN is configured
   logger.error("Unhandled error", { requestId, err: err.stack || err.message || err });
   if (process.env.SENTRY_DSN) {
-    // Dynamic import avoids loading Sentry's OpenTelemetry instrumentation when DSN is absent
     void import("@sentry/node").then((Sentry) => {
       Sentry.withScope((scope) => {
         scope.setTag("requestId", requestId);

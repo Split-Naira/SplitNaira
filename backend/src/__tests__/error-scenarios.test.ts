@@ -7,10 +7,10 @@
  * handles failures gracefully without data corruption.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import { app } from "../index.js";
-import { getDataSource } from "../services/database.js";
+
 
 // Mock stellar services
 const mockGetStellarRpcServer = vi.fn();
@@ -156,7 +156,7 @@ describe("Error Scenarios - Rate Limiting", () => {
       }
 
       // Should eventually hit 429 (Too Many Requests) due to global limiter
-      const has429 = results.some(status => status === 429);
+      const _has429 = results.some(status => status === 429);
       const has200 = results.some(status => status === 200);
 
       expect(has200).toBe(true); // Some requests succeed

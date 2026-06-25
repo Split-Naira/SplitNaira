@@ -211,10 +211,7 @@ pub struct DistributionsPaused {
 impl DistributionsPaused {
     pub fn publish(&self, env: &Env) {
         env.events().publish(
-            (
-                Symbol::new(env, "distributions_paused"),
-                self.admin.clone(),
-            ),
+            (Symbol::new(env, "distributions_paused"), self.admin.clone()),
             (),
         );
     }
@@ -241,8 +238,6 @@ impl DistributionsUnpaused {
     }
 }
 
-
-
 /// Emitted when a collaborator self-service claims their proportional share.
 ///
 /// Topics:  ["collaborator_claimed", project_id]
@@ -252,16 +247,66 @@ pub struct CollaboratorClaimed {
     pub project_id: Symbol,
     pub claimer: Address,
     pub amount: i128,
+    pub distribution_round: u32,
 }
 
 impl CollaboratorClaimed {
     pub fn publish(&self, env: &Env) {
         env.events().publish(
+            (Symbol::new(env, "collaborator_claimed"), self.project_id.clone()),
+            (self.claimer.clone(), self.amount, self.distribution_round),
+        );
+    }
+}
+
+/// Emitted when splits are updated while a project still has undistributed balance.
+///
+/// Topics:  ["splits_updated_with_pending_balance", project_id]
+/// Data:    (pending_balance in stroops)
+#[derive(Clone, Debug)]
+pub struct SplitsUpdatedWithPendingBalance {
+    pub project_id: Symbol,
+    pub pending_balance: i128,
+}
+
+impl SplitsUpdatedWithPendingBalance {
+    pub fn publish(&self, env: &Env) {
+        env.events().publish(
             (
-                Symbol::new(env, "collaborator_claimed"),
+                Symbol::new(env, "splits_updated_with_pending_balance"),
                 self.project_id.clone(),
             ),
-            (self.claimer.clone(), self.amount),
+            self.pending_balance,
+        );
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TokenAllowed {
+    pub token: Address,
+    pub admin: Address,
+}
+
+impl TokenAllowed {
+    pub fn publish(&self, env: &Env) {
+        env.events().publish(
+            (Symbol::new(env, "token_allowed"), self.token.clone()),
+            self.admin.clone(),
+        );
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TokenDisallowed {
+    pub token: Address,
+    pub admin: Address,
+}
+
+impl TokenDisallowed {
+    pub fn publish(&self, env: &Env) {
+        env.events().publish(
+            (Symbol::new(env, "token_disallowed"), self.token.clone()),
+            self.admin.clone(),
         );
     }
 }

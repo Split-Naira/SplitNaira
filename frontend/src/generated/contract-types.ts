@@ -100,6 +100,11 @@ export type Batch_distributeArgs = {
   project_ids: Array<string>;
 };
 
+export type ClaimArgs = {
+  project_id: string;
+  claimer: string;
+};
+
 export type Get_projectArgs = {
   project_id: string;
 };
@@ -221,6 +226,25 @@ export interface Collaborators_updatedEvent {
   project_id: string;
 }
 
+export interface Distributions_pausedEvent {
+  admin: string;
+}
+
+export interface Distributions_unpausedEvent {
+  admin: string;
+}
+
+export interface Collaborator_claimedEvent {
+  project_id: string;
+  claimer: string;
+  amount: string;
+}
+
+export interface Splits_updated_with_pending_balanceEvent {
+  project_id: string;
+  pending_balance: string;
+}
+
 // Error Types
 
 export const ContractErrors = {
@@ -240,6 +264,9 @@ export const ContractErrors = {
   ArithmeticOverflow: 14,
   InsufficientUnallocated: 15,
   DistributionsPaused: 16,
+  InvalidRecipient: 17,
+  NotACollaborator: 18,
+  TooManyCollaborators: 19,
 } as const;
 
 export type ContractErrorCode = typeof ContractErrors[keyof typeof ContractErrors];

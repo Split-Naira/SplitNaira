@@ -2,6 +2,7 @@ import { Router } from "express";
 import { getEnvDiagnostics } from "../config/env.js";
 import { getDataSource } from "../services/database.js";
 import { getCacheStats } from "../services/stellar.js";
+import { getServiceHealth } from "../services/EventListenerService.js";
 
 export const opsRouter = Router();
 
@@ -33,6 +34,13 @@ export interface MainnetReadinessResponse {
     };
   };
 }
+
+opsRouter.get("/status", (_req, res) => {
+  res.json({
+    eventListener: getServiceHealth(),
+    database: { connected: getDataSource().isInitialized },
+  });
+});
 
 opsRouter.get("/mainnet-readiness", async (_req, res) => {
   const requestId = res.locals.requestId;

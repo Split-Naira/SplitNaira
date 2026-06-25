@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { StrKey } from "@stellar/stellar-sdk";
 
 // Stellar address validator
 export const stellarAddressSchema = z
   .string()
   .min(1, "wallet address is required")
-  .regex(/^G[A-Z2-7]{55}$/, {
+  .refine((val) => StrKey.isValidEd25519PublicKey(val), {
     message: "Must be a valid Stellar account ID (G…)",
   });
 

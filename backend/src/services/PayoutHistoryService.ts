@@ -82,6 +82,34 @@ export function createPayoutHistoryService(_config?: Partial<PayoutIndexConfig>)
       }
     },
 
+    async getPayoutsWithCount(filters) {
+      try {
+        const repo = getDataSource().getRepository(TransactionRecord);
+        const query = repo.createQueryBuilder("transaction");
+
+        if (filters?.recipient) {
+          query.andWhere("transaction.recipient = :recipient", { recipient: filters.recipient });
+        }
+        if (filters?.status) {
+          query.andWhere("transaction.status = :status", { status: filters.status });
+        }
+        if (filters?.startDate !== undefined) {
+          query.andWhere("transaction.timestamp >= :startDate", { startDate: filters.startDate });
+        }
+        if (filters?.endDate !== undefined) {
+          query.andWhere("transaction.timestamp <= :endDate", { endDate: filters.endDate });
+        }
+
+        query.orderBy("transaction.timestamp", "DESC");
+
+        const [records, total] = await query.getManyAndCount();
+        return { records: records as PayoutRecord[], total };
+      } catch (error) {
+        logger.error("Error fetching payouts with count from database", { error });
+        return { records: [], total: 0 };
+      }
+    },
+
     async getPayoutById(id) {
       try {
         const repo = getDataSource().getRepository(TransactionRecord);

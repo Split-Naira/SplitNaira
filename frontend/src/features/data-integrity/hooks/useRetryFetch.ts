@@ -14,5 +14,5 @@ export function useRetryFetch(retries = 3) {
     }
 
     throw lastError;
-  }, []);
+  }, [retries]);
 }

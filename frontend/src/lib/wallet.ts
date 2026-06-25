@@ -1,10 +1,7 @@
 "use client";
 
 import { StellarWalletsKit } from "@creit.tech/stellar-wallets-kit";
-import { FreighterModule } from "@creit.tech/stellar-wallets-kit/modules/freighter";
-import { AlbedoModule } from "@creit.tech/stellar-wallets-kit/modules/albedo";
-import { RabetModule } from "@creit.tech/stellar-wallets-kit/modules/rabet";
-import { xBullModule } from "@creit.tech/stellar-wallets-kit/modules/xbull";
+
 
 export { createSorobanRpcServer, submitSorobanTransactionAndPoll } from "./soroban-transaction";
 
@@ -14,22 +11,7 @@ export interface WalletState {
   network: string | null;
 }
 
-let kit: StellarWalletsKit | null = null;
 
-function getKit(): StellarWalletsKit {
-  if (!kit) {
-    StellarWalletsKit.init({
-      modules: [
-        new FreighterModule(),
-        new AlbedoModule(),
-        new RabetModule(),
-        new xBullModule(),
-      ],
-    });
-    kit = StellarWalletsKit as unknown as StellarWalletsKit;
-  }
-  return StellarWalletsKit as unknown as StellarWalletsKit;
-}
 
 function parseNetwork(network: string): string {
   const n = network.toLowerCase();
@@ -48,7 +30,7 @@ export async function getWalletState(): Promise<WalletState> {
       ? await StellarWalletsKit.getNetwork()
       : null;
     const resolvedNetwork = typeof rawNetwork === "object" && rawNetwork !== null
-      ? (rawNetwork as any).network
+      ? (rawNetwork as Record<string, unknown>).network
       : rawNetwork;
     return {
       connected: true,
@@ -62,13 +44,13 @@ export async function getWalletState(): Promise<WalletState> {
 
 export async function connectWallet(network?: string): Promise<WalletState> {
   const targetNetwork = network ?? "TESTNET";
-  StellarWalletsKit.setNetwork(targetNetwork as any);
+  StellarWalletsKit.setNetwork(targetNetwork as unknown as Parameters<typeof StellarWalletsKit.setNetwork>[0]);
   const { address } = await StellarWalletsKit.authModal();
   const rawNetwork = StellarWalletsKit.getNetwork
     ? await StellarWalletsKit.getNetwork()
     : targetNetwork;
   const resolvedNetwork = typeof rawNetwork === "object" && rawNetwork !== null
-    ? (rawNetwork as any).network
+    ? (rawNetwork as Record<string, unknown>).network
     : rawNetwork;
   return {
     connected: true,

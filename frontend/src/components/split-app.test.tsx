@@ -65,6 +65,7 @@ vi.mock("@/lib/wallet", () => {
 });
 
 vi.mock("@/hooks/useWallet", () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const React = require("react");
   const WalletContext = React.createContext(null);
   return {
@@ -73,7 +74,9 @@ vi.mock("@/hooks/useWallet", () => {
       try {
         const val = mocks.mockUseWallet();
         if (val) return val;
-      } catch (e) {}
+      } catch (err) {
+        void err;
+      }
       return {
         wallet: null,
         loading: false,
@@ -90,11 +93,7 @@ vi.mock("@/hooks/useWallet", () => {
 vi.mock("@/lib/api", () => ({
   getAllSplits: mocks.mockGetAllSplits,
   listProjects: vi.fn().mockImplementation(async (...args) => {
-    try {
-      await mocks.mockGetSplit("dummy-id");
-    } catch (err) {
-      throw err;
-    }
+    await mocks.mockGetSplit("dummy-id");
     return mocks.mockGetAllSplits(...args);
   }),
   getClaimable: mocks.mockGetClaimable,

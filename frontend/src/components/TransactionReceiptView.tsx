@@ -90,7 +90,7 @@ export function TransactionReceiptView({
   const summary = isFailed
     ? actionCopy.failedSummary
     : isTimeout
-      ? (actionCopy as any).timeoutSummary || timeoutSummaryDefault
+      ? ('timeoutSummary' in actionCopy ? (actionCopy as Record<string, string>).timeoutSummary : undefined) || timeoutSummaryDefault
       : isConfirming
         ? actionCopy.confirmingSummary
         : actionCopy.successSummary(receipt);

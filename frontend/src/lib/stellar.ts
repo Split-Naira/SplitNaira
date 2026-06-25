@@ -20,7 +20,7 @@ export interface SplitProject {
 }
 
 // Extended type for frontend backward compatibility
-export interface SplitProjectWithBalance extends SplitProject {}
+export type SplitProjectWithBalance = SplitProject;
 
 export function getHorizonUrl(network: StellarNetwork) {
   return network === "mainnet"

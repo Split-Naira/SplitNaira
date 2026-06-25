@@ -1,0 +1,17 @@
+This PR addresses two critical issues regarding project bounds and transparency in the SplitNaira smart contract.  
+  
+Closes #667  
+Closes #683  
+  
+### 1. Maximum Collaborator Bound (#667)  
+Adds a MAX_COLLABORATORS constant capped at 50 to prevent unbounded loops from exhausting Soroban compute instructions during distribution.  
+- Enforces the limit in alidate_collaborators.  
+- Introduces SplitError::TooManyCollaborators.  
+- Includes unit tests validating the upper bound rejection.  
+  
+### 2. Warning on Split Updates with Pending Balance (#683)  
+Improves transparency by emitting a SplitsUpdatedWithPendingBalance event whenever a project owner updates collaborator splits while the project has an undistributed, non-zero balance.  
+- Adds SplitsUpdatedWithPendingBalance event definition.  
+- Conditionally publishes the event during update_collaborators.  
+- Updates contract documentation to clarify that new splits apply immediately to future and existing undistributed funds.  
+- Includes unit tests to verify the event is emitted accurately. 

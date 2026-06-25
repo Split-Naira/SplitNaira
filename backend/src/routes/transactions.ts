@@ -41,8 +41,7 @@ transactionsRouter.get("/history", async (req: Request, res: Response, next: Nex
       requestId
     });
 
-    // Fetch payouts from the history service
-    const payouts = await payoutHistoryService.getPayouts({
+    const { records, total } = await payoutHistoryService.getPayoutsWithCount({
       recipient: walletAddress,
       startDate,
       endDate,
@@ -51,17 +50,9 @@ transactionsRouter.get("/history", async (req: Request, res: Response, next: Nex
       offset
     });
 
-    // Get total count for pagination (without limit/offset)
-    const allPayouts = await payoutHistoryService.getPayouts({
-      recipient: walletAddress,
-      startDate,
-      endDate,
-      status
-    });
-
     return res.status(200).json({
-      transactions: payouts,
-      total: allPayouts.length,
+      transactions: records,
+      total,
       limit,
       offset
     });

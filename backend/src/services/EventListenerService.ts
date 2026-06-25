@@ -41,6 +41,14 @@ export function stopEventListenerService() {
   }
 }
 
+export function getServiceHealth() {
+  return {
+    running: pollInterval !== null,
+    isPolling,
+    cursor,
+  };
+}
+
 export async function pollEvents() {
   if (isPolling) return;
   isPolling = true;

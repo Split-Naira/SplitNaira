@@ -95,8 +95,8 @@ jobs:
       - name: Run user onboarding tests
         run: >
           npx vitest run
-          backend/src/__tests__/users.test.ts
-          backend/src/services/auth.test.ts
+          src/__tests__/users.test.ts
+          src/services/auth.test.ts
           --reporter=verbose
         working-directory: backend
 
@@ -174,7 +174,7 @@ jobs:
       - name: Run user schema and auth unit tests
         run: >
           npx vitest run
-          backend/src/__tests__/users.test.ts
+          src/__tests__/users.test.ts
           --reporter=verbose
         working-directory: backend
         env:

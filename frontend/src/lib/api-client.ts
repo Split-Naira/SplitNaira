@@ -194,7 +194,7 @@ export class ApiClient {
             return body as T;
           } catch (err) {
             if (err instanceof DOMException && err.name === "AbortError") {
-              throw new Error(`Request timed out after ${timeout}ms: ${path}`);
+              throw new Error(`Request timed out after ${timeout}ms: ${path}`, { cause: err });
             }
             throw err;
           } finally {
@@ -391,7 +391,7 @@ export class ApiClient {
   }
 
   async getSplit(projectId: string): Promise<SplitProject> {
-    const raw = await this.requestJson<any>(
+    const raw = await this.requestJson<Record<string, unknown>>(
       `/splits/${encodeURIComponent(projectId)}`,
       "Failed to fetch split project",
     );
@@ -399,7 +399,7 @@ export class ApiClient {
   }
 
   async getAllSplits(): Promise<SplitProject[]> {
-    const raws = await this.requestJson<any[]>(
+    const raws = await this.requestJson<Record<string, unknown>[]>(
       "/splits",
       "Failed to fetch projects",
     );
@@ -415,7 +415,7 @@ export class ApiClient {
     if (params?.search !== undefined && params.search) query.set("search", params.search);
     if (params?.type !== undefined && params.type) query.set("type", params.type);
     const suffix = query.toString() ? `?${query.toString()}` : "";
-    const raws = await this.requestJson<any[]>(
+    const raws = await this.requestJson<Record<string, unknown>[]>(
       `/splits${suffix}`,
       "Failed to fetch projects",
     );
@@ -486,8 +486,8 @@ export class ApiClient {
   }
 }
 
-function mapProjectToCamelCase(p: any): SplitProject {
-  if (!p) return p;
+function mapProjectToCamelCase(p: Record<string, unknown>): SplitProject {
+  if (!p) return p as unknown as SplitProject;
   return {
     projectId: p.projectId ?? p.project_id ?? "",
     title: p.title ?? "",
@@ -498,10 +498,10 @@ function mapProjectToCamelCase(p: any): SplitProject {
     balance: p.balance ?? "0",
     totalDistributed: p.totalDistributed ?? p.total_distributed ?? "0",
     distributionRound: p.distributionRound ?? p.distribution_round ?? 0,
-    collaborators: (p.collaborators ?? []).map((c: any) => ({
-      address: c.address ?? "",
-      alias: c.alias ?? "",
-      basisPoints: c.basisPoints ?? c.basis_points ?? 0,
+    collaborators: ((p.collaborators as Record<string, unknown>[]) ?? []).map((c) => ({
+      address: (c.address as string) ?? "",
+      alias: (c.alias as string) ?? "",
+      basisPoints: (c.basisPoints as number) ?? (c.basis_points as number) ?? 0,
     })),
   };
 }

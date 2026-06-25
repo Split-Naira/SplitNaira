@@ -1,41 +1,40 @@
-{
-  "name": "splitnaira-workspace",
-  "version": "1.0.0",
-  "private": true,
-  "description": "SplitNaira - Royalty splitting for Nigeria's creative economy",
-  "scripts": {
-    "setup": "npm install && cd frontend && npm install && cd ../backend && npm install && cd ../contracts && cargo build",
-    "dev": "npm run dev:frontend & npm run dev:backend",
-    "dev:frontend": "cd frontend && npm run dev",
-    "dev:backend": "cd backend && npm run dev",
-    "build": "npm run build:frontend && npm run build:backend && npm run build:contracts",
-    "build:frontend": "cd frontend && npm run build",
-    "build:backend": "cd backend && npm run build",
-    "build:contracts": "cd contracts && cargo build && cd .. && npm run generate:contract-interface && npm run generate:contract-types",
-    "test": "npm run test:frontend && npm run test:backend && npm run test:contracts",
-    "test:frontend": "cd frontend && npm run test",
-    "test:backend": "cd backend && npm run test",
-    "test:contracts": "cd contracts && cargo test",
-    "generate:contract-interface": "node contracts/scripts/generate-interface.mjs",
-    "generate:contract-types": "node scripts/generate-contract-types.mjs",
-    "verify:data-integrity": "node scripts/verify-data-integrity.mjs",
-    "refresh:project-ttl": "node scripts/refresh-project-ttl.mjs",
-    "smoke:testnet": "node scripts/smoke-testnet.mjs",
-    "lint": "npm run lint:frontend && npm run lint:backend",
-    "lint:frontend": "cd frontend && npm run lint",
-    "lint:backend": "cd backend && npm run lint",
-    "clean": "rm -rf frontend/build backend/dist && cd contracts && cargo clean"
-  },
-  "workspaces": [
-    "frontend",
-    "backend"
-  ],
-  "devDependencies": {
-    "npm-run-all": "^4.1.5",
-    "zod": "^4.3.6"
-  },
-  "engines": {
-    "node": ">=18",
-    "npm": ">=8"
-  }
+﻿{
+    "name":  "splitnaira-workspace",
+    "version":  "1.0.0",
+    "private":  true,
+    "description":  "SplitNaira - Royalty splitting for Nigeria\u0027s creative economy",
+    "scripts":  {
+                    "setup":  "npm install \u0026\u0026 cd frontend \u0026\u0026 npm install \u0026\u0026 cd ../backend \u0026\u0026 npm install \u0026\u0026 cd ../contracts \u0026\u0026 cargo build",
+                    "dev":  "npm run dev:frontend \u0026 npm run dev:backend",
+                    "dev:frontend":  "cd frontend \u0026\u0026 npm run dev",
+                    "dev:backend":  "cd backend \u0026\u0026 npm run dev",
+                    "build":  "npm run build:frontend \u0026\u0026 npm run build:backend \u0026\u0026 npm run build:contracts",
+                    "build:frontend":  "cd frontend \u0026\u0026 npm run build",
+                    "build:backend":  "cd backend \u0026\u0026 npm run build",
+                    "build:contracts":  "cd contracts \u0026\u0026 cargo build \u0026\u0026 cd .. \u0026\u0026 npm run generate:contract-interface \u0026\u0026 npm run generate:contract-types",
+                    "test":  "npm run test:frontend \u0026\u0026 npm run test:backend \u0026\u0026 npm run test:contracts",
+                    "test:frontend":  "cd frontend \u0026\u0026 npm run test",
+                    "test:backend":  "cd backend \u0026\u0026 npm run test",
+                    "generate:contract-interface":  "node contracts/scripts/generate-interface.mjs",
+                    "generate:contract-types":  "node scripts/generate-contract-types.mjs",
+                    "verify:data-integrity":  "node scripts/verify-data-integrity.mjs",
+                    "lint":  "npm run lint:frontend \u0026\u0026 npm run lint:backend",
+                    "lint:frontend":  "cd frontend \u0026\u0026 npm run lint",
+                    "lint:backend":  "cd backend \u0026\u0026 npm run lint",
+                    "clean":  "rm -rf frontend/build backend/dist \u0026\u0026 cd contracts \u0026\u0026 cargo clean",
+                    "test:contracts":  "cd contracts \u0026\u0026 cargo test",
+                    "test:all":  "npm run test:contracts \u0026\u0026 npm run test:backend \u0026\u0026 npm run test:frontend"
+                },
+    "workspaces":  [
+                       "frontend",
+                       "backend"
+                   ],
+    "devDependencies":  {
+                            "npm-run-all":  "^4.1.5",
+                            "zod":  "^4.3.6"
+                        },
+    "engines":  {
+                    "node":  "\u003e=18",
+                    "npm":  "\u003e=8"
+                }
 }

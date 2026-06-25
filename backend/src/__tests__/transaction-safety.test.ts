@@ -200,7 +200,7 @@ describe("Transaction Safety - Error Types", () => {
 
   it("should preserve error stack trace through transaction", async () => {
     const originalError = new Error("Original error with stack");
-    const originalStack = originalError.stack;
+    // unused originalStack removed
 
     try {
       await withTransaction(async () => {

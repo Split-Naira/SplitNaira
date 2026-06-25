@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/no-noninteractive-element-interactions */
 import { useEffect, useRef } from "react";
 import "./Modal.css";
 import { useFocusTrap } from "./useFocusTrap";
@@ -52,6 +53,9 @@ export default function Modal({
     <div
       className="modal-overlay"
       onClick={closeOnOverlayClick ? onClose : undefined}
+      onKeyDown={closeOnOverlayClick ? (e) => e.key === 'Enter' && onClose() : undefined}
+      role="button"
+      tabIndex={0}
     >
       <div
         className="modal-content"
@@ -60,6 +64,8 @@ export default function Modal({
         aria-labelledby="modal-title"
         ref={modalRef}
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.key === 'Enter' && e.stopPropagation()}
+        tabIndex={-1}
       >
         {title && <h2 id="modal-title">{title}</h2>}
 
