@@ -5,6 +5,8 @@ import { User } from "../entities/User.js";
 import { userRegistrationSchema, stellarAddressSchema } from "../schemas/user.schemas.js";
 import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
 import { logger } from "../services/logger.js";
+import { signToken } from "../services/jwt.js";
+import { authJwtMiddleware } from "../middleware/auth-jwt.js";
 
 export const usersRouter = Router();
 
@@ -107,6 +109,34 @@ usersRouter.post("/login", async (req: Request, res: Response, next: NextFunctio
       requestId
     });
 
+    return res.status(200).json({
+      id: user.id,
+      walletAddress: user.walletAddress,
+      email: user.email,
+      alias: user.alias,
+      role: user.role,
+      isActive: user.isActive,
+      createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt.toISOString(),
+      token: signToken(user.walletAddress)
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * GET /users/me
+ * Get the authenticated user's profile
+ */
+usersRouter.get("/me", authJwtMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { walletAddress } = (req as any).user;
+    const userRepository = getDataSource().getRepository(User);
+    const user = await userRepository.findOne({ where: { walletAddress } });
+    if (!user) {
+      throw new AppError(ErrorType.RPC, ErrorCode.NOT_FOUND, "User not found.");
+    }
     return res.status(200).json({
       id: user.id,
       walletAddress: user.walletAddress,
