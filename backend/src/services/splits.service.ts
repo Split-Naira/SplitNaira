@@ -321,6 +321,15 @@ export async function buildLockProjectUnsignedXdr(input: LockProjectRequest) {
 }
 
 export async function buildDepositUnsignedXdr(input: DepositRequest) {
+  const project = await fetchProjectById(input.projectId);
+  if (!project) {
+    throw new RequestValidationError("Project not found");
+  }
+  const projectRecord = project as Record<string, unknown>;
+  if (projectRecord.token !== input.token) {
+    throw new RequestValidationError("Token address does not match project token address");
+  }
+
   const config = loadStellarConfig();
   const server = getStellarRpcServer();
 

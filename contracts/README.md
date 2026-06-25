@@ -1,5 +1,21 @@
 # SplitNaira Soroban Contract Spec
 
+## Soroban SDK Version Policy
+
+`contracts/Cargo.toml` pins `soroban-sdk` to an exact version (e.g. `=20.5.0`).
+
+**Why:** Soroban minor and patch releases can change storage cost models, instruction
+limits, or XDR encoding in ways that silently break deployed contracts.
+
+**To upgrade the SDK:**
+1. Update both `[dependencies]` and `[dev-dependencies]` entries in `Cargo.toml` to the new exact version.
+2. Run `cargo update -p soroban-sdk` to refresh `Cargo.lock`.
+3. Run `cargo test --locked` and confirm all tests pass.
+4. Deploy to testnet and run the smoke-test suite.
+5. Update this section with the new pinned version and the date tested.
+
+Current pinned version: **20.5.0** (last verified testnet deploy: 2026-06-24)
+
 This document defines the public interface exposed by `SplitNairaContract` in `contracts/lib.rs`.
 
 ## Data Model
@@ -263,3 +279,6 @@ Soroban event shape is `(topics, data)`. This contract uses `topics = (event_nam
 - `14` `ArithmeticOverflow`
 - `15` `InsufficientUnallocated`
 - `16` `DistributionsPaused`
+- `17` `InvalidRecipient`
+- `18` `NotACollaborator`
+- `19` `TooManyCollaborators`

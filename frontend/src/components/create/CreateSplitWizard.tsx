@@ -6,7 +6,6 @@ import { StrKey } from "@stellar/stellar-sdk";
 import type { SplitProject } from "@/lib/stellar";
 import type { WalletState } from "@/lib/wallet";
 import { TokenSelector } from "../TypeSelector";
-import { Input } from "../Input";
 import { TransactionReceiptView, type TransactionReceipt } from "../TransactionReceiptView";
 
 interface CreateCollaboratorInput {

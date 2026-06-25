@@ -249,6 +249,7 @@ export function ManageSplitView({
                         <a
                           href={getExplorerUrl(item.txHash, wallet.network)}
                           target="_blank"
+                          rel="noopener noreferrer"
                           className="text-[9px] font-bold text-greenBright/40 hover:text-greenBright uppercase"
                         >
                           Verify →

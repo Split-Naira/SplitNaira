@@ -58,4 +58,7 @@ pub enum SplitError {
 
     /// Address is not registered as a collaborator on this project
     NotACollaborator = 18,
+
+    /// Project has exceeded the maximum allowed number of collaborators
+    TooManyCollaborators = 19,
 }

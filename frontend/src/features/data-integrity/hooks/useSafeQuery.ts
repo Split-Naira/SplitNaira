@@ -9,7 +9,7 @@ export interface SafeQueryResult<T> {
   retry: () => void;
 }
 
-export function useSafeQuery<T = any>(url: string): SafeQueryResult<T> {
+export function useSafeQuery<T = unknown>(url: string): SafeQueryResult<T> {
   const [data, setData] = useState<T | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isStale, setIsStale] = useState(false);

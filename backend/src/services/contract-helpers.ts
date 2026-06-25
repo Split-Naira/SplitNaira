@@ -18,6 +18,7 @@ export interface DepositRequest {
   projectId: string;
   from: string;
   amount: number;
+  token: string;
 }
 
 export interface AdminTokenRequest {
@@ -26,6 +27,12 @@ export interface AdminTokenRequest {
 }
 
 export function toCollaboratorScVal(collaborator: z.infer<typeof collaboratorSchema>) {
+  // The 100-character limit aligns with the on-chain constant (CON-025)
+  // to prevent silent truncation or XDR encoding errors.
+  if (collaborator.alias.length > 100) {
+    throw new Error("Alias too long");
+  }
+
   return xdr.ScVal.scvMap([
     new xdr.ScMapEntry({
       key: nativeToScVal("address", { type: "symbol" }),

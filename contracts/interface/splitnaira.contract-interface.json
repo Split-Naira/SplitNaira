@@ -2,7 +2,7 @@
   "schema": "https://splitnaira.dev/schemas/contract-interface.v1.json",
   "schemaVersion": 1,
   "generatedBy": "contracts/scripts/generate-interface.mjs",
-  "sourceHash": "309c7ec1603f53118e8938a5435b1fbb6ba8f1f87d6b019122d5366ceca4cd50",
+  "sourceHash": "74855563a26ad64517249855cfe2c6c5b21e55311128fbf13465f7fbae946979",
   "sources": [
     "contracts/Cargo.toml",
     "contracts/lib.rs",
@@ -183,6 +183,21 @@
         }
       ],
       "returnType": "Result<(), SplitError>",
+      "mutability": "write"
+    },
+    {
+      "name": "claim",
+      "args": [
+        {
+          "name": "project_id",
+          "type": "Symbol"
+        },
+        {
+          "name": "claimer",
+          "type": "Address"
+        }
+      ],
+      "returnType": "Result<i128, SplitError>",
       "mutability": "write"
     },
     {
@@ -738,6 +753,128 @@
           "doc": ""
         }
       ]
+    },
+    {
+      "name": "distributions_paused",
+      "rustName": "DistributionsPaused",
+      "topics": [
+        {
+          "position": 0,
+          "type": "Symbol",
+          "value": "distributions_paused"
+        },
+        {
+          "position": 1,
+          "type": "from_field",
+          "field": "admin"
+        }
+      ],
+      "data": {
+        "tupleFields": []
+      },
+      "fields": [
+        {
+          "name": "admin",
+          "type": "Address",
+          "doc": ""
+        }
+      ]
+    },
+    {
+      "name": "distributions_unpaused",
+      "rustName": "DistributionsUnpaused",
+      "topics": [
+        {
+          "position": 0,
+          "type": "Symbol",
+          "value": "distributions_unpaused"
+        },
+        {
+          "position": 1,
+          "type": "from_field",
+          "field": "admin"
+        }
+      ],
+      "data": {
+        "tupleFields": []
+      },
+      "fields": [
+        {
+          "name": "admin",
+          "type": "Address",
+          "doc": ""
+        }
+      ]
+    },
+    {
+      "name": "collaborator_claimed",
+      "rustName": "CollaboratorClaimed",
+      "topics": [
+        {
+          "position": 0,
+          "type": "Symbol",
+          "value": "collaborator_claimed"
+        },
+        {
+          "position": 1,
+          "type": "from_field",
+          "field": "project_id"
+        }
+      ],
+      "data": {
+        "tupleFields": [
+          "claimer",
+          "amount"
+        ]
+      },
+      "fields": [
+        {
+          "name": "project_id",
+          "type": "Symbol",
+          "doc": ""
+        },
+        {
+          "name": "claimer",
+          "type": "Address",
+          "doc": ""
+        },
+        {
+          "name": "amount",
+          "type": "i128",
+          "doc": ""
+        }
+      ]
+    },
+    {
+      "name": "splits_updated_with_pending_balance",
+      "rustName": "SplitsUpdatedWithPendingBalance",
+      "topics": [
+        {
+          "position": 0,
+          "type": "Symbol",
+          "value": "splits_updated_with_pending_balance"
+        },
+        {
+          "position": 1,
+          "type": "from_field",
+          "field": "project_id"
+        }
+      ],
+      "data": {
+        "field": "pending_balance"
+      },
+      "fields": [
+        {
+          "name": "project_id",
+          "type": "Symbol",
+          "doc": ""
+        },
+        {
+          "name": "pending_balance",
+          "type": "i128",
+          "doc": ""
+        }
+      ]
     }
   ],
   "types": {
@@ -896,6 +1033,13 @@
           "doc": "Allowlisted token contract address marker"
         },
         {
+          "name": "AccountedTokenBalance",
+          "fields": [
+            "Address"
+          ],
+          "doc": "Cached total of all project balances for a given token"
+        },
+        {
           "name": "DistributionsPaused",
           "fields": [],
           "doc": "Global flag to pause all distributions (emergency stop)"
@@ -983,6 +1127,21 @@
       "name": "DistributionsPaused",
       "code": 16,
       "doc": "Distributions are currently paused by admin"
+    },
+    {
+      "name": "InvalidRecipient",
+      "code": 17,
+      "doc": "Withdrawal recipient must not be the contract itself (Wave 5 security hardening)"
+    },
+    {
+      "name": "NotACollaborator",
+      "code": 18,
+      "doc": "Address is not registered as a collaborator on this project"
+    },
+    {
+      "name": "TooManyCollaborators",
+      "code": 19,
+      "doc": "Project has exceeded the maximum allowed number of collaborators"
     }
   ]
 }
