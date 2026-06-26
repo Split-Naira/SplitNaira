@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { errorHandler, notFoundHandler } from "../middleware/error.js";
 import { requestIdMiddleware } from "../middleware/request-id.js";
+import { signToken } from "../services/jwt.js";
 
 const findOneMock = vi.fn();
 const createMock = vi.fn();
@@ -109,24 +110,24 @@ describe("User Registration API", () => {
       const response = await request(app)
         .post("/users/register")
         .send({
-          walletAddress: "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+          walletAddress: "GBIRMAYQUTHQC762ZTJTNXWDSHSDGN64ZXPXJ6XRLWJCAF6TS4Z7J7IO"
         });
 
       expect(response.status).toBe(201);
       expect(response.body).toHaveProperty("id");
-      expect(response.body.walletAddress).toBe("GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB");
+      expect(response.body.walletAddress).toBe("GBIRMAYQUTHQC762ZTJTNXWDSHSDGN64ZXPXJ6XRLWJCAF6TS4Z7J7IO");
     });
 
     it("should reject duplicate wallet address", async () => {
       findOneMock.mockResolvedValue({
         id: "existing-user",
-        walletAddress: "GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+        walletAddress: "GAFY5DYD3EEUWPHL2JHAWFOLKEI2IAQRAVW4Y3L6DLJQOXG2TAJMU7GC"
       });
       const app = createApp();
 
       const response = await request(app)
         .post("/users/register")
-        .send({ walletAddress: "GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC" });
+        .send({ walletAddress: "GAFY5DYD3EEUWPHL2JHAWFOLKEI2IAQRAVW4Y3L6DLJQOXG2TAJMU7GC" });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBeDefined();
@@ -151,7 +152,7 @@ describe("User Registration API", () => {
       const response = await request(app)
         .post("/users/register")
         .send({
-          walletAddress: "GDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+          walletAddress: "GAT5GUL7A3BQSOHTPV32ARPLCJFDTICSV3IAT4EAQ5UWTSNE5XNX4Q33",
           email: "invalid-email"
         });
 
@@ -162,7 +163,7 @@ describe("User Registration API", () => {
 
   describe("GET /users/:walletAddress", () => {
     it("should retrieve user by wallet address", async () => {
-      const walletAddress = "GEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE";
+      const walletAddress = "GCNSJNUEJLYRS7FXIWVDUABVBP5PQHCWW6M7IQIBA66C5LCY2RAZ5LBI";
       findOneMock.mockResolvedValue({
         id: "22222222-2222-4222-8222-222222222222",
         walletAddress,
@@ -204,7 +205,7 @@ describe("User Registration API", () => {
 
   describe("POST /users/login", () => {
     it("should log in an existing user with valid wallet address", async () => {
-      const walletAddress = "GEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE";
+      const walletAddress = "GCNSJNUEJLYRS7FXIWVDUABVBP5PQHCWW6M7IQIBA66C5LCY2RAZ5LBI";
       findOneMock.mockResolvedValue({
         id: "22222222-2222-4222-8222-222222222222",
         walletAddress,
@@ -283,5 +284,70 @@ describe("User Registration API", () => {
       expect(commitMock).toHaveBeenCalled();
     });
 
+  });
+
+  describe("PATCH /users/me", () => {
+    it("should successfully update user profile and return updatedAt !== createdAt", async () => {
+      const walletAddress = "GCNSJNUEJLYRS7FXIWVDUABVBP5PQHCWW6M7IQIBA66C5LCY2RAZ5LBI";
+      const createdAt = new Date("2026-06-25T12:00:00.000Z");
+      const updatedAtBefore = new Date("2026-06-25T12:00:00.000Z");
+      const updatedAtAfter = new Date("2026-06-25T13:00:00.000Z");
+
+      findOneMock.mockResolvedValue({
+        id: "22222222-2222-4222-8222-222222222222",
+        walletAddress,
+        email: "old@example.com",
+        alias: "OldAlias",
+        role: "user",
+        isActive: true,
+        createdAt,
+        updatedAt: updatedAtBefore
+      });
+
+      saveMock.mockResolvedValue({
+        id: "22222222-2222-4222-8222-222222222222",
+        walletAddress,
+        email: "new@example.com",
+        alias: "NewAlias",
+        role: "user",
+        isActive: true,
+        createdAt,
+        updatedAt: updatedAtAfter
+      });
+
+      const app = createApp();
+      const token = signToken(walletAddress);
+
+      const response = await request(app)
+        .patch("/users/me")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          email: "new@example.com",
+          alias: "NewAlias"
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.email).toBe("new@example.com");
+      expect(response.body.alias).toBe("NewAlias");
+      expect(response.body.createdAt).toBe(createdAt.toISOString());
+      expect(response.body.updatedAt).toBe(updatedAtAfter.toISOString());
+      expect(response.body.updatedAt).not.toBe(response.body.createdAt);
+    });
+
+    it("should reject invalid email format in PATCH request", async () => {
+      const walletAddress = "GCNSJNUEJLYRS7FXIWVDUABVBP5PQHCWW6M7IQIBA66C5LCY2RAZ5LBI";
+      const app = createApp();
+      const token = signToken(walletAddress);
+
+      const response = await request(app)
+        .patch("/users/me")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          email: "invalid-email"
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe("validation_error");
+    });
   });
 });

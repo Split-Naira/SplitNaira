@@ -153,6 +153,47 @@ usersRouter.get("/me", authJwtMiddleware, async (req: Request, res: Response, ne
 });
 
 /**
+ * PATCH /users/me
+ * Update the authenticated user's profile
+ */
+usersRouter.patch("/me", authJwtMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { walletAddress } = (req as Request & { user: { walletAddress: string } }).user;
+    const updateSchema = z.object({
+      email: z.string().email("Invalid email format").optional(),
+      alias: z.string().min(1, "Alias is required").max(64, "Alias must be at most 64 characters").optional()
+    });
+
+    const updates = updateSchema.parse(req.body);
+    const savedUser = await withTransaction(async (queryRunner) => {
+      const userRepository = queryRunner.manager.getRepository(User);
+      const user = await userRepository.findOne({ where: { walletAddress } });
+      if (!user) {
+        throw new AppError(ErrorType.RPC, ErrorCode.NOT_FOUND, "User not found.");
+      }
+
+      if (updates.email !== undefined) user.email = updates.email;
+      if (updates.alias !== undefined) user.alias = updates.alias;
+
+      return await userRepository.save(user);
+    });
+
+    return res.status(200).json({
+      id: savedUser.id,
+      walletAddress: savedUser.walletAddress,
+      email: savedUser.email,
+      alias: savedUser.alias,
+      role: savedUser.role,
+      isActive: savedUser.isActive,
+      createdAt: savedUser.createdAt.toISOString(),
+      updatedAt: savedUser.updatedAt.toISOString()
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
  * GET /users/:walletAddress
  * Get user by wallet address
  */
