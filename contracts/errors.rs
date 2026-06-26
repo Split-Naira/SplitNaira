@@ -1,64 +1,115 @@
 use soroban_sdk::contracterror;
 
-/// All possible errors the SplitNaira contract can return.
+/// Errors returned by the SplitNaira smart contract.
+///
+/// ## Important
+/// Error codes are part of the contract's public interface.
+/// Once deployed, **do not modify existing numeric values**.
+/// New errors should always be appended to preserve backward compatibility.
 #[contracterror]
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(u32)]
 pub enum SplitError {
-    /// Project ID already exists on-chain
+    // ---------------------------------------------------------------------
+    // Project Errors
+    // ---------------------------------------------------------------------
+
+    /// A project with the specified ID already exists.
     ProjectExists = 1,
 
-    /// Project ID not found
+    /// The requested project could not be found.
     NotFound = 2,
 
-    /// Caller is not the project owner
-    Unauthorized = 3,
-
-    /// Basis points do not sum to exactly 10,000
-    InvalidSplit = 4,
-
-    /// Fewer than 2 collaborators provided
-    TooFewCollaborators = 5,
-
-    /// A collaborator was assigned 0 basis points
-    ZeroShare = 6,
-
-    /// Target project holds no balance to distribute
-    NoBalance = 7,
-
-    /// Project is already locked and cannot be modified
+    /// The project is permanently locked.
     AlreadyLocked = 8,
 
-    /// Project is locked; splits cannot be updated
+    /// The project is locked and cannot be modified.
     ProjectLocked = 9,
 
-    /// Duplicate collaborator address detected in split definition
-    DuplicateCollaborator = 10,
+    // ---------------------------------------------------------------------
+    // Authorization Errors
+    // ---------------------------------------------------------------------
 
-    /// Deposit or transfer amount is invalid
-    InvalidAmount = 11,
+    /// Caller is not authorized to perform this action.
+    Unauthorized = 3,
 
-    /// Token is not included in the configured allowlist
-    TokenNotAllowed = 12,
-
-    /// Contract admin is not configured yet
-    AdminNotSet = 13,
-
-    /// Arithmetic overflow while aggregating balances or basis points
-    ArithmeticOverflow = 14,
-
-    /// Requested unallocated withdrawal exceeds available amount
-    InsufficientUnallocated = 15,
-
-    /// Distributions are currently paused by admin
-    DistributionsPaused = 16,
-
-    /// Withdrawal recipient must not be the contract itself (Wave 5 security hardening)
-    InvalidRecipient = 17,
-
-    /// Address is not registered as a collaborator on this project
+    /// Address is not a registered collaborator.
     NotACollaborator = 18,
 
-    /// Project has exceeded the maximum allowed number of collaborators
+    // ---------------------------------------------------------------------
+    // Validation Errors
+    // ---------------------------------------------------------------------
+
+    /// Collaborator basis points must total exactly 10,000.
+    InvalidSplit = 4,
+
+    /// At least two collaborators are required.
+    TooFewCollaborators = 5,
+
+    /// Collaborator share cannot be zero.
+    ZeroShare = 6,
+
+    /// Duplicate collaborator address detected.
+    DuplicateCollaborator = 10,
+
+    /// Deposit or transfer amount is invalid.
+    InvalidAmount = 11,
+
+    /// Recipient address is invalid.
+    ///
+    /// Prevents sending funds to the contract itself.
+    InvalidRecipient = 17,
+
+    /// Maximum collaborator limit exceeded.
     TooManyCollaborators = 19,
+
+    // ---------------------------------------------------------------------
+    // Token & Balance Errors
+    // ---------------------------------------------------------------------
+
+    /// Project has no balance available for distribution.
+    NoBalance = 7,
+
+    /// Token is not included in the configured allowlist.
+    TokenNotAllowed = 12,
+
+    /// Requested withdrawal exceeds available unallocated funds.
+    InsufficientUnallocated = 15,
+
+    // ---------------------------------------------------------------------
+    // Administrative Errors
+    // ---------------------------------------------------------------------
+
+    /// Contract administrator has not been configured.
+    AdminNotSet = 13,
+
+    /// Distributions have been paused by the administrator.
+    DistributionsPaused = 16,
+
+    // ---------------------------------------------------------------------
+    // Arithmetic Errors
+    // ---------------------------------------------------------------------
+
+    /// Arithmetic overflow occurred.
+    ArithmeticOverflow = 14,
+}
+
+impl SplitError {
+    /// Returns the numeric error code exposed by the contract.
+    #[inline]
+    pub const fn code(self) -> u32 {
+        self as u32
+    }
+
+    /// Returns whether retrying the operation could succeed without
+    /// changing the contract state.
+    #[inline]
+    pub const fn is_retryable(self) -> bool {
+        matches!(
+            self,
+            SplitError::NoBalance
+                | SplitError::DistributionsPaused
+                | SplitError::InsufficientUnallocated
+        )
+    }
 }
