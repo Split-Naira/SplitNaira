@@ -226,6 +226,17 @@ Soroban contracts handle real financial value. All contract contributions must:
    - Events emitted for all critical state changes
 4. Be deployed and **tested on Stellar Testnet** before mainnet consideration
 5. Include **inline documentation** on all public functions
+6. Regenerate committed contract interface artifacts after any contract surface change:
+
+```bash
+# From the repository root (recommended)
+npm run generate:contract-types
+
+# Or from contracts/ via Make
+make -C contracts generate
+```
+
+This runs `contracts/scripts/generate-interface.mjs` to refresh `contracts/interface/splitnaira.contract-interface.json`, then updates `frontend/src/generated/contract-types.ts` and `backend/src/generated/contract-types.ts`. Commit the regenerated files with the contract change. CI runs `npm run verify:data-integrity` to ensure the artifacts stay in sync.
 
 ```rust
 /// Distributes accumulated revenue to all registered collaborators

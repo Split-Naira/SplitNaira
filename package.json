@@ -16,7 +16,7 @@
                     "test:frontend":  "cd frontend \u0026\u0026 npm run test",
                     "test:backend":  "cd backend \u0026\u0026 npm run test",
                     "generate:contract-interface":  "node contracts/scripts/generate-interface.mjs",
-                    "generate:contract-types":  "node scripts/generate-contract-types.mjs",
+                    "generate:contract-types":  "npm run generate:contract-interface && node scripts/generate-contract-types.mjs",
                     "verify:data-integrity":  "node scripts/verify-data-integrity.mjs",
                     "lint":  "npm run lint:frontend \u0026\u0026 npm run lint:backend",
                     "lint:frontend":  "cd frontend \u0026\u0026 npm run lint",

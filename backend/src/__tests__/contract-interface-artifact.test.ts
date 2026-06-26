@@ -49,7 +49,7 @@ describe("contract interface artifact", () => {
     expect(contractInterface.generatedBy).toBe("contracts/scripts/generate-interface.mjs");
     expect(contractInterface.methods.length).toBeGreaterThanOrEqual(27);
     expect(contractInterface.events.length).toBeGreaterThanOrEqual(7);
-    expect(contractInterface.errors).toHaveLength(16);
+    expect(contractInterface.errors).toHaveLength(19);
   });
 
   it("covers backend write and read contract calls", () => {

@@ -170,6 +170,7 @@ function inferMutability(name) {
     "get_claimed",
     "get_project_count",
     "list_projects",
+    "list_project_summaries",
     "get_balance",
     "get_unallocated_balance",
     "is_token_allowed",
@@ -183,6 +184,7 @@ function inferMutability(name) {
 
   if (readMethods.has(name)) return "read";
   if (name === "refresh_project_storage") return "maintenance";
+  if (name === "migrate_flat_to_buckets") return "maintenance";
   return "write";
 }
 
@@ -266,10 +268,13 @@ function parseEvents() {
 }
 
 function parseCargoMetadata() {
+  const rawSorobanSdk =
+    cargo.match(/soroban-sdk\s*=\s*\{\s*version\s*=\s*"([^"]+)"/)?.[1] ?? null;
+
   return {
     package: cargo.match(/^name\s*=\s*"([^"]+)"/m)?.[1] ?? "unknown",
     version: cargo.match(/^version\s*=\s*"([^"]+)"/m)?.[1] ?? "0.0.0",
-    sorobanSdk: cargo.match(/soroban-sdk\s*=\s*\{\s*version\s*=\s*"([^"]+)"/)?.[1] ?? null
+    sorobanSdk: rawSorobanSdk?.replace(/^=/, "") ?? null
   };
 }
 

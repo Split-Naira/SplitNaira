@@ -2,7 +2,7 @@
   "schema": "https://splitnaira.dev/schemas/contract-interface.v1.json",
   "schemaVersion": 1,
   "generatedBy": "contracts/scripts/generate-interface.mjs",
-  "sourceHash": "b4c5aeda799968d2f5ecac79de0eadfe92a5490ee3579a5893703ad27bcabbab",
+  "sourceHash": "80e0d7e002471c69cca52c450556b205b50455f6e28c3fdfed52f60a1958313c",
   "sources": [
     "contracts/Cargo.toml",
     "contracts/lib.rs",
@@ -13,7 +13,7 @@
     "name": "SplitNairaContract",
     "package": "splitnaira-contracts",
     "version": "0.1.0",
-    "sorobanSdk": "=20.5.0"
+    "sorobanSdk": "20.5.0"
   },
   "methods": [
     {
