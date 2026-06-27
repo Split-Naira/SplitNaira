@@ -817,7 +817,7 @@ fn test_update_collaborators_with_pending_balance_emits_warning() {
     let mut warning_emitted = false;
     for event in events.iter() {
         if let Ok(topic) = Symbol::try_from_val(&env, &event.1.get(0).unwrap()) {
-            if topic == Symbol::new(&env, "splits_updated_with_pending_balance") {
+            if topic == Symbol::new(&env, "splits_updated_pending_balance") {
                 warning_emitted = true;
                 assert_eq!(
                     Symbol::try_from_val(&env, &event.1.get(1).unwrap()).unwrap(),
@@ -4173,4 +4173,134 @@ fn test_batch_distribute_fails_when_paused_batch() {
     let result = client.try_batch_distribute(&batch);
     
     assert_eq!(result, Err(Ok(SplitError::DistributionsPaused)));
+}
+
+// ============================================================
+//  CONFIGURABLE CAPACITY: MAX_COLLABORATORS  (Issue #511)
+// ============================================================
+
+#[test]
+fn test_max_collaborators_defaults_to_50() {
+    let (env, _admin, _token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    // With no override configured, the effective cap is the historical default.
+    assert_eq!(client.get_max_collaborators(), 50);
+}
+
+#[test]
+fn test_set_max_collaborators_updates_effective_cap() {
+    let (env, _admin, _token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    client.set_admin(&admin);
+
+    client.set_max_collaborators(&admin, &10);
+    assert_eq!(client.get_max_collaborators(), 10);
+
+    // Reconfigure again to confirm the override is mutable.
+    client.set_max_collaborators(&admin, &200);
+    assert_eq!(client.get_max_collaborators(), 200);
+}
+
+#[test]
+fn test_set_max_collaborators_requires_admin() {
+    let (env, _admin, _token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    // No admin configured yet.
+    let stranger = Address::generate(&env);
+    assert_eq!(
+        client.try_set_max_collaborators(&stranger, &10),
+        Err(Ok(SplitError::AdminNotSet))
+    );
+
+    // Admin set, but a different caller is rejected.
+    let admin = Address::generate(&env);
+    client.set_admin(&admin);
+    let other = Address::generate(&env);
+    assert_eq!(
+        client.try_set_max_collaborators(&other, &10),
+        Err(Ok(SplitError::Unauthorized))
+    );
+}
+
+#[test]
+fn test_set_max_collaborators_rejects_out_of_range() {
+    let (env, _admin, _token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    client.set_admin(&admin);
+
+    // Below the floor (a project always needs >= 2 collaborators).
+    assert_eq!(
+        client.try_set_max_collaborators(&admin, &1),
+        Err(Ok(SplitError::InvalidMaxCollaborators))
+    );
+    // Above the resource-safety ceiling.
+    assert_eq!(
+        client.try_set_max_collaborators(&admin, &201),
+        Err(Ok(SplitError::InvalidMaxCollaborators))
+    );
+
+    // Boundaries are accepted.
+    client.set_max_collaborators(&admin, &2);
+    assert_eq!(client.get_max_collaborators(), 2);
+    client.set_max_collaborators(&admin, &200);
+    assert_eq!(client.get_max_collaborators(), 200);
+}
+
+#[test]
+fn test_lowered_cap_is_enforced_on_create_project() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    client.set_admin(&admin);
+
+    // Tighten capacity to exactly two collaborators.
+    client.set_max_collaborators(&admin, &2);
+
+    let owner = Address::generate(&env);
+    let a = Address::generate(&env);
+    let b = Address::generate(&env);
+    let c = Address::generate(&env);
+
+    // Two collaborators: allowed under the new cap.
+    let two = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[a.clone(), b.clone()]),
+        Vec::from_slice(&env, &[5000u32, 5000u32]),
+    );
+    client.create_project(
+        &owner,
+        &Symbol::new(&env, "cap_ok"),
+        &String::from_str(&env, "Cap OK"),
+        &String::from_str(&env, "music"),
+        &token,
+        &two,
+    );
+
+    // Three collaborators: now exceeds the configured cap.
+    let three = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[a.clone(), b.clone(), c.clone()]),
+        Vec::from_slice(&env, &[4000u32, 4000u32, 2000u32]),
+    );
+    let result = client.try_create_project(
+        &owner,
+        &Symbol::new(&env, "cap_bad"),
+        &String::from_str(&env, "Cap Bad"),
+        &String::from_str(&env, "music"),
+        &token,
+        &three,
+    );
+    assert_eq!(result, Err(Ok(SplitError::TooManyCollaborators)));
 }

@@ -158,6 +158,13 @@ const ctrl = new SplitsController();
 
 splitsRouter.get("/", ctrl.listProjects.bind(ctrl));
 splitsRouter.get("/:projectId", ctrl.getProject.bind(ctrl));
+/**
+ * @openapi
+ * POST /splits/{projectId}/lock
+ * summary: Lock a project permanently
+ * description: Builds an unsigned XDR to permanently lock a project against further changes.
+ * tags: [Splits]
+ */
 splitsRouter.post("/:projectId/lock", ctrl.lockProject.bind(ctrl));
 splitsRouter.post("/:projectId/deposit", ctrl.deposit.bind(ctrl));
 
@@ -168,7 +175,6 @@ function logPaymentsAdminAction(
 ) {
   logger.info("Payments admin action prepared", {
     action,
-    requestId: res.locals.requestId,
     ...details
   });
 }
@@ -194,6 +200,13 @@ splitsRouter.get("/", async (req: Request, res: Response, next: NextFunction) =>
   }
 });
 
+/**
+ * @openapi
+ * GET /splits/{projectId}
+ * summary: Get project details by ID
+ * description: Fetches the current on-chain state for a single split project.
+ * tags: [Splits]
+ */
 splitsRouter.get("/:projectId", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsedId = projectIdParamSchema.safeParse(req.params.projectId);
@@ -598,6 +611,13 @@ splitsRouter.post("/admin/disallow-token", async (req: Request, res: Response, n
   }
 });
 
+/**
+ * @openapi
+ * POST /splits/admin/pause-distributions
+ * summary: Pause all distributions
+ * description: Builds an unsigned XDR to pause contract-wide fund distributions. Requires admin API key.
+ * tags: [Admin]
+ */
 splitsRouter.post("/admin/pause-distributions", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const requestId = res.locals.requestId;

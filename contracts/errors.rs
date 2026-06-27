@@ -1,4 +1,4 @@
-use soroban_sdk::contracterror;
+﻿use soroban_sdk::contracterror;
 
 /// Errors returned by the SplitNaira smart contract.
 ///
@@ -90,11 +90,17 @@ pub enum SplitError {
     // Arithmetic Errors
     // ---------------------------------------------------------------------
 
-    /// Project has exceeded the maximum allowed number of collaborators
-    TooManyCollaborators = 19,
-
     /// Cached accounted balance exceeds the contract's actual token balance
     AccountingDiscrepancy = 20,
+
+    /// Admin-supplied capacity limit is outside the permitted range.
+    InvalidMaxCollaborators = 21,
+
+    /// An arithmetic operation overflowed.
+    ///
+    /// Code `14` matches the value already published in the README error-code
+    /// table; the variant was referenced in `lib.rs` but had never been declared.
+    ArithmeticOverflow = 14,
 }
 
 impl SplitError {

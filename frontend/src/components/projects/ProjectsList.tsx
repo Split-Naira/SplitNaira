@@ -66,11 +66,27 @@ export function ProjectsList({
           <div className="glass-card rounded-[2.5rem] p-8 md:p-10">
             <h2 className="font-display text-2xl tracking-tight mb-2">Available Projects</h2>
             <button
-              onClick={() => void onFetchProjectsList()}
+              type="button"
+              onClick={() => void onFetchProjectsList(false)}
               disabled={isLoadingProjectsList}
-              className="premium-button rounded-2xl bg-greenMid px-8 py-4 text-xs font-bold uppercase tracking-widest text-white disabled:opacity-20"
+              aria-label="Refresh projects"
+              title="Refresh projects"
+              className="premium-button inline-flex items-center gap-2 rounded-2xl bg-greenMid px-8 py-4 text-xs font-bold uppercase tracking-widest text-white disabled:opacity-20"
             >
-              Refresh Projects
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={clsx("h-4 w-4", isLoadingProjectsList && "animate-spin")}
+              >
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <path d="M21 3v6h-6" />
+              </svg>
+              {isLoadingProjectsList ? "Refreshing…" : "Refresh Projects"}
             </button>
             {projectsListError && (
               <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3">
@@ -330,7 +346,12 @@ export function ProjectsList({
                   </p>
                 )}
                 {receipt && (receipt.action === "distribute" || receipt.action === "lock" || receipt.action === "deposit") && (
-                  <TransactionReceiptView receipt={receipt} network={wallet.network ?? null} />
+                  <TransactionReceiptView
+                    receipt={receipt}
+                    network={wallet.network ?? null}
+                    explorerUrl={getExplorerUrl(receipt.hash, wallet.network ?? null)}
+                    explorerLabel={getExplorerLabel(wallet.network ?? null)}
+                  />
                 )}
               </div>
             </div>

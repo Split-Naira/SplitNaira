@@ -2,6 +2,7 @@ import { Router, type NextFunction, type Response } from "express";
 import { getEnvDiagnostics } from "../config/env.js";
 import { getDataSource } from "../services/database.js";
 import { checkSorobanReachability } from "../services/stellar.js";
+import { getServiceHealth } from "../services/EventListenerService.js";
 
 export const healthRouter = Router();
 
@@ -151,5 +152,15 @@ async function handleReadiness(_req: unknown, res: Response, next: NextFunction)
     return;
   }
 
-  res.json({ status: "ready", components });
+  // Surface the background event listener's health. A degraded listener (e.g.
+  // during a Soroban RPC outage with active back-off) does not make the API
+  // unready for reads, so this is reported informationally rather than failing
+  // the readiness probe.
+  const eventListener = getServiceHealth();
+
+  res.json({
+    status: "ready",
+    version: SERVICE_VERSION,
+    components: { ...components, eventListener },
+  });
 }

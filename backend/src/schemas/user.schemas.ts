@@ -16,6 +16,7 @@ export const userRegistrationSchema = z.object({
   alias: z.string().min(1, "Alias is required").max(64, "Alias must be at most 64 characters").optional(),
 });
 
+
 // User response schema
 export const userResponseSchema = z.object({
   id: z.string().uuid(),
@@ -27,6 +28,13 @@ export const userResponseSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
 });
+
+export const userUpdateSchema = z.object({
+  email: userRegistrationSchema.shape.email,
+  alias: userRegistrationSchema.shape.alias,
+}).strict();
+
+export type UserUpdate = z.infer<typeof userUpdateSchema>;
 
 export type UserRegistration = z.infer<typeof userRegistrationSchema>;
 export type UserResponse = z.infer<typeof userResponseSchema>;

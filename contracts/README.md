@@ -59,6 +59,19 @@ Removes a token from allowlist.
 - Auth: contract admin.
 - Errors: `AdminNotSet`, `Unauthorized`.
 
+### `set_max_collaborators(admin: Address, value: u32) -> Result<(), SplitError>`
+Configures the per-project collaborator cap (Scale & Capacity tuning).
+- Auth: contract admin.
+- Bounds: `2 <= value <= 200`. The ceiling keeps `distribute` within Soroban's
+  per-call resource limits; the floor matches the two-collaborator minimum.
+- Default when never set: `50` (historical behaviour, backward compatible).
+- Rollback: set the value back to `50`. Only affects validation of *new*
+  `create_project` / `update_collaborators` calls.
+- Errors: `AdminNotSet`, `Unauthorized`, `InvalidMaxCollaborators`.
+
+### `get_max_collaborators() -> u32`
+Returns the collaborator cap currently in effect (admin override or default `50`).
+
 ### Project lifecycle
 
 ### `create_project(owner, project_id, title, project_type, token, collaborators) -> Result<(), SplitError>`
@@ -261,6 +274,13 @@ Soroban event shape is `(topics, data)`. This contract uses `topics = (event_nam
   - Topics: `("collaborators_updated", "afrobeats_vol3")`
   - Data: `"afrobeats_vol3"`
 
+### `max_collaborators_set`
+- Topics format: `("max_collaborators_set", admin)`
+- Data format: `value` (the new per-project collaborator cap)
+- Example:
+  - Topics: `("max_collaborators_set", "G...ADMIN")`
+  - Data: `75`
+
 ## Error Codes
 
 - `1` `ProjectExists`
@@ -282,3 +302,5 @@ Soroban event shape is `(topics, data)`. This contract uses `topics = (event_nam
 - `17` `InvalidRecipient`
 - `18` `NotACollaborator`
 - `19` `TooManyCollaborators`
+- `20` `AccountingDiscrepancy`
+- `21` `InvalidMaxCollaborators`

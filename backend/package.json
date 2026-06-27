@@ -12,6 +12,7 @@
     "format:check": "prettier --check \"src/**/*.ts\"",
     "test": "vitest run",
     "test:compat": "vitest run src/routes/splits.compatibility.test.ts",
+    "test:integration": "vitest run src/__tests__/e2e-testnet.integration.test.ts",
     "test:watch": "vitest --watch",
     "deps:check": "npm ls --all --omit=optional",
     "generate:openapi": "tsx src/openapi.ts",
@@ -40,6 +41,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@apidevtools/swagger-parser": "^12.1.0",
     "@eslint/js": "9.39.4",
     "@types/cors": "2.8.19",
     "@types/express": "5.0.6",
