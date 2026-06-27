@@ -348,7 +348,7 @@ const HealthResponseSchema = registry.register(
 const ReadinessResponseSchema = registry.register(
   "ReadinessResponse",
   z.object({
-    status: z.enum(["ok", "not_ready"]),
+    status: z.enum(["ready", "not_ready"]),
     error: z.string().optional().describe("Error code if not ready"),
     message: z.string().optional().describe("Error message if not ready"),
     issues: z.array(z.string()).optional().describe("List of configuration issues"),
@@ -359,14 +359,22 @@ const ReadinessResponseSchema = registry.register(
 registry.registerPath({
   method: "get",
   path: "/health",
-  summary: "Get overall health status",
+  summary: "Get readiness status (alias for /health/ready)",
   tags: ["Health"],
   responses: {
     200: {
-      description: "Server health information",
+      description: "Server is ready to accept traffic",
       content: {
         "application/json": {
-          schema: HealthResponseSchema,
+          schema: ReadinessResponseSchema,
+        },
+      },
+    },
+    503: {
+      description: "Server is not ready",
+      content: {
+        "application/json": {
+          schema: ReadinessResponseSchema,
         },
       },
     },

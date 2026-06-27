@@ -109,7 +109,9 @@ export async function pollEvents() {
             const txHash = event.txHash;
             const timestamp = Math.floor(new Date(event.ledgerClosedAt).getTime() / 1000);
 
-            // Verify if transaction is already indexed
+            // Verify if transaction is already indexed. The database also enforces
+            // uniqueness on txHash via a unique index, but this application-layer
+            // check avoids duplicate save attempts during event polling.
             const existing = await repo.findOneBy({ txHash });
             if (!existing) {
               // Retrieve project to get its token address
