@@ -346,7 +346,12 @@ export function ProjectsList({
                   </p>
                 )}
                 {receipt && (receipt.action === "distribute" || receipt.action === "lock" || receipt.action === "deposit") && (
-                  <TransactionReceiptView receipt={receipt} network={wallet.network ?? null} />
+                  <TransactionReceiptView
+                    receipt={receipt}
+                    network={wallet.network ?? null}
+                    explorerUrl={getExplorerUrl(receipt.hash, wallet.network ?? null)}
+                    explorerLabel={getExplorerLabel(wallet.network ?? null)}
+                  />
                 )}
               </div>
             </div>
