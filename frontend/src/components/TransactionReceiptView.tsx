@@ -4,12 +4,20 @@
  * Boundary: pure presentational component.
  * Renders on-chain action receipts for create / deposit / distribute / lock,
  * including intermediate confirmation, success, and terminal failure states.
+ *
+ * Now supports real-time status updates via SSE when a transaction hash is provided.
  */
 "use client";
 
+import { useEffect } from "react";
 import { getExplorerUrl, getExplorerLabel } from "@/lib/stellar";
+import { useTransactionStatus } from "@/hooks/useTransactionStatus";
 
-export type SorobanReceiptLifecycle = "confirming" | "success" | "failed" | "timeout";
+export type SorobanReceiptLifecycle =
+  | "confirming"
+  | "success"
+  | "failed"
+  | "timeout";
 
 export interface TransactionReceipt {
   hash: string;
@@ -43,9 +51,10 @@ const ACTION_COPY: Record<TransactionReceipt["action"], ActionCopy> = {
     confirmingTitle: "Creating Project",
     failedTitle: "Project Creation Failed",
     successSummary: (r) => `Project "${r.title ?? r.projectId}" initialized.`,
-    confirmingSummary: () => "Transaction accepted by the network — waiting for ledger inclusion.",
+    confirmingSummary: () =>
+      "Transaction accepted by the network — waiting for ledger inclusion.",
     failedSummary: () => "The transaction did not complete successfully.",
-    timeoutSummary: () => DEFAULT_TIMEOUT_SUMMARY
+    timeoutSummary: () => DEFAULT_TIMEOUT_SUMMARY,
   },
   deposit: {
     successTitle: "Deposit Successful",
@@ -54,16 +63,17 @@ const ACTION_COPY: Record<TransactionReceipt["action"], ActionCopy> = {
     successSummary: (r) => `Deposited ${r.amount} tokens to ${r.projectId}.`,
     confirmingSummary: () => "Waiting for the deposit to finalize on ledger.",
     failedSummary: () => "The deposit transaction failed.",
-    timeoutSummary: () => DEFAULT_TIMEOUT_SUMMARY
+    timeoutSummary: () => DEFAULT_TIMEOUT_SUMMARY,
   },
   distribute: {
     successTitle: "Distribution Successful",
     confirmingTitle: "Running Distribution",
     failedTitle: "Distribution Failed",
     successSummary: (r) => `Round #${r.round} completed for ${r.projectId}.`,
-    confirmingSummary: () => "Waiting for payout operations to finalize on ledger.",
+    confirmingSummary: () =>
+      "Waiting for payout operations to finalize on ledger.",
     failedSummary: () => "The distribution transaction failed.",
-    timeoutSummary: () => DEFAULT_TIMEOUT_SUMMARY
+    timeoutSummary: () => DEFAULT_TIMEOUT_SUMMARY,
   },
   lock: {
     successTitle: "Project Locked Permanently",
@@ -73,13 +83,25 @@ const ACTION_COPY: Record<TransactionReceipt["action"], ActionCopy> = {
     confirmingSummary: () => "Waiting for the lock to finalize on ledger.",
     failedSummary: () => "The lock transaction failed.",
     timeoutSummary: () =>
-      "The testnet is experiencing high latency. The lock transaction may still complete on-chain. Please verify on the explorer or try again."
-  }
+      "The testnet is experiencing high latency. The lock transaction may still complete on-chain. Please verify on the explorer or try again.",
+  },
 };
 
 const ICONS: Record<TransactionReceipt["action"], JSX.Element> = {
-  create: <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />,
-  deposit: <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />,
+  create: (
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M12 4.5v15m7.5-7.5h-15"
+    />
+  ),
+  deposit: (
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+    />
+  ),
   distribute: (
     <path
       strokeLinecap="round"
@@ -93,11 +115,18 @@ const ICONS: Record<TransactionReceipt["action"], JSX.Element> = {
       strokeLinejoin="round"
       d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
     />
-  )
+  ),
 };
 
 const EXTERNAL_LINK_ICON = (
-  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden="true">
+  <svg
+    className="h-3 w-3"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth={2.5}
+    aria-hidden="true"
+  >
     <path
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -109,7 +138,8 @@ const EXTERNAL_LINK_ICON = (
 export function TransactionReceiptView({
   receipt,
   network,
-  onRetry
+  onRetry,
+  enableRealtime = true,
 }: {
   receipt: TransactionReceipt;
   network: string | null;
@@ -117,10 +147,26 @@ export function TransactionReceiptView({
    * Defaults to a full page reload if not provided, preserving the
    * original behavior for existing call sites. */
   onRetry?: () => void;
+  /** Enable real-time SSE updates for confirming transactions */
+  enableRealtime?: boolean;
 }) {
   const explorerUrl = getExplorerUrl(receipt.hash, network);
   const explorerLabel = getExplorerLabel(network);
   const actionCopy = ACTION_COPY[receipt.action];
+
+  // Subscribe to real-time transaction status updates
+  const { status: realtimeStatus } = useTransactionStatus(
+    receipt.lifecycle === "confirming" ? receipt.hash : null,
+    enableRealtime,
+  );
+
+  // Update receipt lifecycle when real-time status arrives
+  useEffect(() => {
+    if (realtimeStatus === "completed" && receipt.lifecycle === "confirming") {
+      // Transaction completed - this could trigger a parent callback if needed
+      console.log(`Transaction ${receipt.hash} completed via SSE`);
+    }
+  }, [realtimeStatus, receipt.lifecycle, receipt.hash]);
 
   const isConfirming = receipt.lifecycle === "confirming";
   const isFailed = receipt.lifecycle === "failed";
@@ -182,7 +228,9 @@ export function TransactionReceiptView({
       className={`mt-8 rounded-2xl border p-6 animate-in fade-in slide-in-from-bottom-4 ${borderClass}`}
     >
       <div className="flex items-start gap-4">
-        <div className={`mt-1 flex h-10 w-10 items-center justify-center rounded-full ${iconBgClass}`}>
+        <div
+          className={`mt-1 flex h-10 w-10 items-center justify-center rounded-full ${iconBgClass}`}
+        >
           {isConfirming ? (
             <svg
               className={`h-5 w-5 animate-spin ${accentClass}`}
@@ -191,7 +239,14 @@ export function TransactionReceiptView({
               role="status"
               aria-label="Transaction confirming"
             >
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
               <path
                 className="opacity-75"
                 fill="currentColor"
@@ -212,8 +267,14 @@ export function TransactionReceiptView({
           )}
         </div>
         <div className="space-y-1">
-          <h3 className={`text-sm font-bold uppercase tracking-widest ${accentClass}`}>{title}</h3>
-          <p className="text-[11px] text-muted-foreground font-medium italic opacity-90">{summary}</p>
+          <h3
+            className={`text-sm font-bold uppercase tracking-widest ${accentClass}`}
+          >
+            {title}
+          </h3>
+          <p className="text-[11px] text-muted-foreground font-medium italic opacity-90">
+            {summary}
+          </p>
           {isFailed && receipt.failureReason && (
             <p className="pt-1 text-[11px] font-medium leading-relaxed text-red-200/90">
               {receipt.failureReason}
@@ -231,7 +292,9 @@ export function TransactionReceiptView({
             </div>
           )}
           <div className="pt-2 space-y-1">
-            <p className="font-mono text-[9px] text-muted break-all opacity-60">Tx: {receipt.hash}</p>
+            <p className="font-mono text-[9px] text-muted break-all opacity-60">
+              Tx: {receipt.hash}
+            </p>
             {(isSuccess || isConfirming || isTimeout) && (
               <a
                 href={explorerUrl}

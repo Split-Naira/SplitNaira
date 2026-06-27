@@ -7,9 +7,17 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  ...(process.env.VERCEL ? {} : { output: 'standalone' }),
+  ...(process.env.VERCEL ? {} : { output: "standalone" }),
   experimental: {
-    optimizePackageImports: ["clsx"]
+    optimizePackageImports: ["clsx"],
+  },
+  async rewrites() {
+    return [
+      {
+        source: "/api/events/:path*",
+        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/events/:path*`,
+      },
+    ];
   },
   async headers() {
     return [
@@ -25,12 +33,9 @@ const nextConfig = {
   },
 };
 
-export default withSentryConfig(
-  withNextIntl(nextConfig),
-  {
-    silent: true,
-    widenClientFileUpload: true,
-    hideSourceMaps: true,
-    disableLogger: true,
-  }
-);
+export default withSentryConfig(withNextIntl(nextConfig), {
+  silent: true,
+  widenClientFileUpload: true,
+  hideSourceMaps: true,
+  disableLogger: true,
+});

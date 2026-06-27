@@ -10,22 +10,26 @@ import { QueryProvider } from "@/components/query-provider";
 const dmSans = DM_Sans({
   subsets: ["latin"],
   variable: "--font-sans",
-  display: "swap"
+  display: "swap",
 });
 
 const syne = Syne({
   subsets: ["latin"],
   variable: "--font-display",
-  display: "swap"
+  display: "swap",
 });
 
 export const metadata: Metadata = {
   title: "SplitNaira",
-  description: "Royalty splitting for creative collaborators on Stellar."
+  description: "Royalty splitting for creative collaborators on Stellar.",
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/logo.svg",
+  },
 };
 
 export default async function RootLayout({
-  children
+  children,
 }: {
   children: React.ReactNode;
 }) {
