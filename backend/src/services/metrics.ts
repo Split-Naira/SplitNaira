@@ -91,4 +91,50 @@ export function resetRequestMetrics(): void {
   requestCounters.clear();
   requestDurations.clear();
   inflightRequests = 0;
+
+  projectsCreatedTotal = 0;
+  distributionsExecutedTotal = 0;
+  depositsReceivedTotal = 0;
+  sseConnectionsActive = 0;
+}
+
+let projectsCreatedTotal = 0;
+let distributionsExecutedTotal = 0;
+let depositsReceivedTotal = 0;
+let sseConnectionsActive = 0;
+
+export function incrementProjectsCreated(): void {
+  projectsCreatedTotal += 1;
+}
+
+export function incrementDistributionsExecuted(): void {
+  distributionsExecutedTotal += 1;
+}
+
+export function incrementDepositsReceived(): void {
+  depositsReceivedTotal += 1;
+}
+
+export function incrementSseConnections(): void {
+  sseConnectionsActive += 1;
+}
+
+export function decrementSseConnections(): void {
+  sseConnectionsActive = Math.max(0, sseConnectionsActive - 1);
+}
+
+export function getProjectsCreatedTotal(): number {
+  return projectsCreatedTotal;
+}
+
+export function getDistributionsExecutedTotal(): number {
+  return distributionsExecutedTotal;
+}
+
+export function getDepositsReceivedTotal(): number {
+  return depositsReceivedTotal;
+}
+
+export function getSseConnectionsActive(): number {
+  return sseConnectionsActive;
 }

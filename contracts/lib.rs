@@ -1,4 +1,4 @@
-#![no_std]
+﻿#![no_std]
 
 use soroban_sdk::{
     contract, contractimpl, contracttype, panic_with_error, token, Address, Env, Map, String, Symbol, Vec,
@@ -34,6 +34,8 @@ use events::{
 mod tests;
 #[cfg(test)]
 mod hardening_tests;
+#[cfg(test)]
+mod reliability_tests;
 
 use errors::SplitError;
 
@@ -49,7 +51,7 @@ const PROJECT_TTL_THRESHOLD_LEDGERS: u32 = 50_000;
 /// created, mutated, distributed, or read.
 /// Active projects survive at least 5 days without a read; any read operation resets this clock.
 ///
-/// 100_000 ledgers ≈ 5.8 days at 5s/ledger close time.
+/// 100_000 ledgers â‰ˆ 5.8 days at 5s/ledger close time.
 ///
 /// TODO: If the contract's administrative initialization pattern is extended in the future,
 /// these hard-coded constants should be considered for migration into configurable instance-storage values.
@@ -581,7 +583,7 @@ impl SplitNairaContract {
 ///   number of collaborators, ensuring each collaborator can receive at
 ///   least one stroop.
     ///
-    /// Anyone can call distribute â€” the math is trustless.
+    /// Anyone can call distribute Ã¢â‚¬â€ the math is trustless.
     ///
     /// # Arguments
     /// * `env`        - Soroban environment
@@ -728,7 +730,7 @@ if balance < project.collaborators.len() as i128 {
     }
 
     // ----------------------------------------------------------
-    // SELF-SERVICE CLAIM (User Onboarding â€” Wave 5)
+    // SELF-SERVICE CLAIM (User Onboarding Ã¢â‚¬â€ Wave 5)
     // ----------------------------------------------------------
 
     /// Self-service pull payout for one collaborator. Does not increment
@@ -1225,7 +1227,7 @@ if balance < project.collaborators.len() as i128 {
     /// Transfers ownership of a project to a new address.
     ///
     /// Only the current owner can call this. Works on both locked and unlocked
-    /// projects â€” ownership transfer does not depend on lock state. The new
+    /// projects Ã¢â‚¬â€ ownership transfer does not depend on lock state. The new
     /// owner gains all owner-gated capabilities (update metadata, update
     /// collaborators on unlocked projects, lock, transfer again).
     ///
@@ -1533,3 +1535,4 @@ if balance < project.collaborators.len() as i128 {
         Ok(total)
     }
 }
+

@@ -4,6 +4,10 @@ import {
   getInflightRequestCount,
   getRequestCountSnapshots,
   getRequestDurationSnapshots,
+  getProjectsCreatedTotal,
+  getDistributionsExecutedTotal,
+  getDepositsReceivedTotal,
+  getSseConnectionsActive,
 } from "../services/metrics.js";
 
 export const metricsRouter = Router();
@@ -60,6 +64,21 @@ function formatPrometheusMetrics(): string {
   lines.push("# HELP splitnaira_http_requests_inflight Number of in-flight HTTP requests.");
   lines.push("# TYPE splitnaira_http_requests_inflight gauge");
   lines.push(`splitnaira_http_requests_inflight ${getInflightRequestCount()}`);
+  lines.push("# HELP projects_created_total Total projects created.");
+lines.push("# TYPE projects_created_total counter");
+lines.push(`projects_created_total ${getProjectsCreatedTotal()}`);
+
+lines.push("# HELP distributions_executed_total Total distributions executed.");
+lines.push("# TYPE distributions_executed_total counter");
+lines.push(`distributions_executed_total ${getDistributionsExecutedTotal()}`);
+
+lines.push("# HELP deposits_received_total Total deposits received.");
+lines.push("# TYPE deposits_received_total counter");
+lines.push(`deposits_received_total ${getDepositsReceivedTotal()}`);
+
+lines.push("# HELP sse_connections_active Active SSE connections.");
+lines.push("# TYPE sse_connections_active gauge");
+lines.push(`sse_connections_active ${getSseConnectionsActive()}`);
 
   return lines.join("\n");
 }

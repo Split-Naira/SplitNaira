@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unused-vars, react-hooks/exhaustive-deps, @typescript-eslint/no-explicit-any, no-empty */
+/* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any, no-empty */
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
@@ -158,7 +158,10 @@ export function SplitApp() {
   const depositModalRef = useRef<HTMLDivElement | null>(null);
 
   const [projectsList, setProjectsList] = useState<SplitProject[]>([]);
-  const [projectsListLoaded, setProjectsListLoaded] = useState(false);
+  // Tracks whether the Projects tab has performed its initial load. A ref (not
+  // state) so re-visiting the tab does not re-trigger the auto-load effect,
+  // while still distinguishing first load from a re-visit.
+  const projectsLoadedRef = useRef(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [isLoadingProjectsList, setIsLoadingProjectsList] = useState(false);
   const [projectsStart, setProjectsStart] = useState(0);
@@ -778,8 +781,12 @@ export function SplitApp() {
 
   // Phase 3: Fetch projects list from backend with pagination
   const onFetchProjectsList = useCallback(async (loadMore = false) => {
+    // Only guard against concurrent fetches. The previous
+    // `if (!loadMore && projectsList.length > 0) return;` guard silently
+    // swallowed forced reloads (e.g. the Refresh button, or returning to the
+    // tab after creating a project elsewhere) — a non-loadMore call must
+    // always be allowed to refetch fresh contract state.
     if (isLoadingProjectsList) return;
-    if (!loadMore && projectsList.length > 0) return;
 
     setIsLoadingProjectsList(true);
     setProjectsListError(null);
@@ -805,9 +812,11 @@ export function SplitApp() {
       setProjectsListError("Failed to fetch projects list.");
     } finally {
       setIsLoadingProjectsList(false);
-      setProjectsListLoaded(true);
+      projectsLoadedRef.current = true;
     }
-  }, [isLoadingProjectsList, projectsList.length, projectsStart, listProjects]);
+    // `listProjects` is a stable module-level import (not state), so it is
+    // intentionally excluded from the dependency array.
+  }, [isLoadingProjectsList, projectsStart]);
 
   const onFetchDashboardData = useCallback(async () => {
     setIsLoadingDashboard(true);
@@ -941,8 +950,11 @@ export function SplitApp() {
 
   useEffect(() => {
     if (activeTab === "projects") {
-      if (projectsList.length === 0 && !isLoadingProjectsList) {
-        void onFetchProjectsList();
+      // Fetch fresh data on the first visit to the Projects tab. Subsequent
+      // re-visits don't auto-refetch (use the Refresh button); the ref keeps
+      // this decision independent of the current list length.
+      if (!projectsLoadedRef.current && !isLoadingProjectsList) {
+        void onFetchProjectsList(false);
       }
     } else if (activeTab === "dashboard" && dashboardData.length === 0 && !isLoadingDashboard) {
       void onFetchDashboardData();
@@ -954,7 +966,6 @@ export function SplitApp() {
     isLoadingProjectsList,
     onFetchDashboardData,
     onFetchProjectsList,
-    projectsList.length,
   ]);
 
   useEffect(() => {

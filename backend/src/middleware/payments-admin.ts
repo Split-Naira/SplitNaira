@@ -5,7 +5,7 @@ import { logger } from "../services/logger.js";
 
 export const PAYMENTS_ADMIN_API_KEY_HEADER = "x-admin-api-key";
 
-function hashIp(ip: string | undefined): string {
+export function hashIp(ip: string | undefined): string {
   if (!ip) return "unknown";
   return createHash("sha256").update(ip).digest("hex").slice(0, 16);
 }
@@ -26,7 +26,6 @@ function logBlockedAdminRequest(req: Request, res: Response, reason: string): vo
     reason,
     method: req.method,
     path: req.originalUrl,
-    requestId: res.locals.requestId,
     ip: hashIp(req.ip)
   });
 }

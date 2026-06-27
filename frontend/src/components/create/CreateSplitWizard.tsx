@@ -3,6 +3,7 @@
 import { Controller, type Control, type UseFormRegister, type FieldErrors, type FieldArrayWithId } from "react-hook-form";
 import { clsx } from "clsx";
 import { StrKey } from "@stellar/stellar-sdk";
+import { getExplorerUrl, getExplorerLabel } from "@/lib/stellar";
 import type { SplitProject } from "@/lib/stellar";
 import type { WalletState } from "@/lib/wallet";
 import { TokenSelector } from "../TypeSelector";
@@ -327,7 +328,12 @@ export function CreateSplitWizard({
         </button>
       </div>
       {receipt && receipt.action === "create" && (
-        <TransactionReceiptView receipt={receipt} network={wallet.network ?? null} />
+        <TransactionReceiptView
+          receipt={receipt}
+          network={wallet.network ?? null}
+          explorerUrl={getExplorerUrl(receipt.hash, wallet.network ?? null)}
+          explorerLabel={getExplorerLabel(wallet.network ?? null)}
+        />
       )}
 
       {latestTxHash && (
