@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type NextFunction, type Response } from "express";
 import { getEnvDiagnostics } from "../config/env.js";
 import { getDataSource } from "../services/database.js";
 import { checkSorobanReachability } from "../services/stellar.js";
@@ -14,20 +14,19 @@ export function markStartupComplete(): void {
   startupComplete = true;
 }
 
+export function resetStartupComplete(): void {
+  startupComplete = false;
+}
+
 export function isStartupComplete(): boolean {
   return startupComplete;
 }
 
 /**
- * Health endpoint - indicates service is running
+ * Health endpoint - alias for readiness to preserve backward compatibility.
  */
-healthRouter.get("/", (_req, res) => {
-  res.json({
-    status: "ok",
-    version: SERVICE_VERSION,
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString()
-  });
+healthRouter.get("/", async (_req, res, next) => {
+  await handleReadiness(_req, res, next);
 });
 
 /**
@@ -52,7 +51,9 @@ healthRouter.get("/startup", (_req, res) => {
 /**
  * Readiness endpoint - indicates service is ready to serve traffic
  */
-healthRouter.get("/ready", async (_req, res, next) => {
+healthRouter.get("/ready", handleReadiness);
+
+async function handleReadiness(_req: unknown, res: Response, next: NextFunction) {
   const requestId = res.locals.requestId;
   const components = {
     env: { ok: true },
@@ -60,6 +61,18 @@ healthRouter.get("/ready", async (_req, res, next) => {
     rpc: { ok: false, message: "" },
     contract: { ok: false, message: "" }
   };
+
+  if (!startupComplete) {
+    res.status(503).json({
+      status: "not_ready",
+      error: "starting",
+      message: "Service startup has not completed.",
+      components,
+      requestId,
+      details: {}
+    });
+    return;
+  }
 
   const envDiagnostics = getEnvDiagnostics();
   if (!envDiagnostics.ok) {
@@ -78,9 +91,11 @@ healthRouter.get("/ready", async (_req, res, next) => {
 
   try {
     const ds = getDataSource();
-    // Simple readiness check: execute a lightweight query to verify DB connectivity.
+    if (!ds.isInitialized) {
+      throw new Error("Database connection is not initialized.");
+    }
+
     try {
-      // Use a deterministic column name so result parsing is consistent across PG versions
       const rows = await ds.query('SELECT 1 AS one');
       components.db = { ok: true, message: 'query_ok', rows: Array.isArray(rows) ? rows.length : undefined };
     } catch (queryErr) {
@@ -137,4 +152,4 @@ healthRouter.get("/ready", async (_req, res, next) => {
   }
 
   res.json({ status: "ready", components });
-});
+}

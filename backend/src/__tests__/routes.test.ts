@@ -3,6 +3,7 @@ import request from "supertest";
 import { app } from "../index.js";
 import { checkSorobanReachability } from "../services/stellar.js";
 import { clearEnvCache } from "../config/env.js";
+import { markStartupComplete, resetStartupComplete } from "../routes/health.js";
 
 vi.mock("@stellar/stellar-sdk", () => {
   return {
@@ -115,6 +116,7 @@ describe("Route Integration Tests", () => {
     clearEnvCache();
     delete process.env.PAYMENTS_ADMIN_API_KEY;
     delete process.env.PAYMENTS_ADMIN_WRITE_ENABLED;
+    markStartupComplete();
   });
 
   afterEach(() => {
@@ -141,12 +143,13 @@ describe("Route Integration Tests", () => {
   });
 
   describe("GET /health", () => {
-    it("should return 200 and ok status", async () => {
+    it("should act as a readiness alias and return ready status", async () => {
       const res = await request(app).get("/health");
       expect(res.status).toBe(200);
-      expect(res.body.status).toBe("ok");
-      expect(res.body).toHaveProperty("uptime");
-      expect(res.body).toHaveProperty("timestamp");
+      expect(res.body.status).toBe("ready");
+      expect(res.body.components).toBeDefined();
+      expect(res.body.components.env.ok).toBe(true);
+      expect(res.body.components.db.ok).toBe(true);
     });
   });
 
@@ -163,6 +166,14 @@ describe("Route Integration Tests", () => {
       const res = await request(app).get("/health/ready");
       expect(res.status).toBe(200);
       expect(res.body.status).toBe("ready");
+    });
+
+    it("should return 503 when startup has not completed", async () => {
+      resetStartupComplete();
+      const res = await request(app).get("/health/ready");
+      expect(res.status).toBe(503);
+      expect(res.body.status).toBe("not_ready");
+      expect(res.body.error).toBe("starting");
     });
 
     it("should return 503 when environment variables are missing", async () => {
@@ -214,6 +225,7 @@ describe("Route Integration Tests", () => {
 
   describe("GET /health/startup", () => {
     it("should return 503 while startup is incomplete", async () => {
+      resetStartupComplete();
       const res = await request(app).get("/health/startup");
       expect(res.status).toBe(503);
       expect(res.body.status).toBe("starting");
