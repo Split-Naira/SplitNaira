@@ -11,14 +11,14 @@ import { authJwtMiddleware } from "../middleware/auth-jwt.js";
 export const usersRouter = Router();
 
 /**
+ * @openapi
  * POST /users/register
- * Register a new user with wallet address
- * Transaction-safe: Automatically rolled back on error
+ * summary: Register a new user
+ * description: Creates a user profile linked to a Stellar wallet address.
+ * tags: [Users]
  */
 usersRouter.post("/register", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const requestId = res.locals.requestId;
-
     const { walletAddress, email, alias } = userRegistrationSchema.parse(req.body);
 
     // Get repository without opening a transaction
@@ -55,7 +55,6 @@ usersRouter.post("/register", async (req: Request, res: Response, next: NextFunc
     logger.info("User registered successfully", {
       userId: savedUser.id,
       walletAddress: savedUser.walletAddress,
-      requestId,
     });
 
     return res.status(201).json({
@@ -74,13 +73,14 @@ usersRouter.post("/register", async (req: Request, res: Response, next: NextFunc
 });
 
 /**
+ * @openapi
  * POST /users/login
- * Log in a user by wallet address
+ * summary: Log in by wallet address
+ * description: Authenticates a registered user and returns a JWT bearer token.
+ * tags: [Users]
  */
 usersRouter.post("/login", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const requestId = res.locals.requestId;
-
     const loginSchema = z.object({
       walletAddress: stellarAddressSchema
     });
@@ -104,7 +104,6 @@ usersRouter.post("/login", async (req: Request, res: Response, next: NextFunctio
     logger.info("User logged in successfully", {
       userId: user.id,
       walletAddress: user.walletAddress,
-      requestId
     });
 
     return res.status(200).json({
@@ -124,8 +123,11 @@ usersRouter.post("/login", async (req: Request, res: Response, next: NextFunctio
 });
 
 /**
+ * @openapi
  * GET /users/me
- * Get the authenticated user's profile
+ * summary: Get authenticated user profile
+ * description: Returns the profile of the user identified by the JWT bearer token.
+ * tags: [Users]
  */
 usersRouter.get("/me", authJwtMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -151,8 +153,11 @@ usersRouter.get("/me", authJwtMiddleware, async (req: Request, res: Response, ne
 });
 
 /**
+ * @openapi
  * PATCH /users/me
- * Update the authenticated user's profile
+ * summary: Update authenticated user profile
+ * description: Updates email or alias for the authenticated user.
+ * tags: [Users]
  */
 usersRouter.patch("/me", authJwtMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -192,8 +197,11 @@ usersRouter.patch("/me", authJwtMiddleware, async (req: Request, res: Response, 
 });
 
 /**
- * GET /users/:walletAddress
- * Get user by wallet address
+ * @openapi
+ * GET /users/{walletAddress}
+ * summary: Get user by wallet address
+ * description: Looks up a public user profile by Stellar wallet address.
+ * tags: [Users]
  */
 usersRouter.get("/:walletAddress", async (req: Request, res: Response, next: NextFunction) => {
   try {

@@ -1,4 +1,5 @@
 import winston from "winston";
+import { getRequestId } from "./request-context.js";
 
 const logLevels = {
   error: 0,
@@ -61,8 +62,21 @@ const scrubFormat = winston.format((info) => {
   return info;
 });
 
+export function enrichLogEntry(
+  info: winston.Logform.TransformableInfo
+): winston.Logform.TransformableInfo {
+  const requestId = getRequestId();
+  if (requestId && info.requestId === undefined) {
+    info.requestId = requestId;
+  }
+  return info;
+}
+
+const requestContextFormat = winston.format((info) => enrichLogEntry(info));
+
 const prettyFormat = winston.format.combine(
   winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+  requestContextFormat(),
   scrubFormat(),
   winston.format.colorize({ all: true }),
   winston.format.printf((info) => {
@@ -74,6 +88,7 @@ const prettyFormat = winston.format.combine(
 
 const jsonFormat = winston.format.combine(
   winston.format.timestamp(),
+  requestContextFormat(),
   scrubFormat(),
   winston.format.json()
 );

@@ -3,6 +3,7 @@ import { DataSource, type QueryRunner } from "typeorm";
 import { getEnv } from "../config/env.js";
 import { User } from "../entities/User.js";
 import { TransactionRecord } from "../entities/Transaction.js";
+import { AuditLog } from "../entities/AuditLog.js";
 import { logger } from "./logger.js";
 
 let AppDataSource: DataSource | null = null;
@@ -45,7 +46,7 @@ export function createDataSource(): DataSource {
     url: databaseUrl,
     synchronize: false,
     logging: process.env.NODE_ENV === "development",
-    entities: [User, TransactionRecord],
+    entities: [User, TransactionRecord, AuditLog],
     migrations: ["src/migrations/*.ts"],
     migrationsTableName: "migrations",
     extra: {

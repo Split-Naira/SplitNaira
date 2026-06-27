@@ -20,6 +20,7 @@ import {
   enforcePaymentsAdminWriteEnabled,
   requirePaymentsAdminAccess
 } from "./middleware/payments-admin.js";
+import { auditAdminMutationsMiddleware } from "./middleware/audit-log.js";
 import { eventsRouter } from "./routes/events.js";
 import { validateEnv, printEnvDiagnostics } from "./config/env.js";
 import { initDatabase, closeDatabase } from "./services/database.js";
@@ -95,7 +96,8 @@ app.use(
   "/splits/admin",
   adminLimiter,
   requirePaymentsAdminAccess,
-  enforcePaymentsAdminWriteEnabled
+  enforcePaymentsAdminWriteEnabled,
+  auditAdminMutationsMiddleware
 );
 app.use("/splits", (req, res, next) => {
   if (req.method === "GET") return readLimiter(req, res, next);

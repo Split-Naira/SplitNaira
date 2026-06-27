@@ -147,24 +147,7 @@ export async function pollEvents() {
                 status: "completed"
               });
             }
-          } catch (err) {
-            logger.warn(
-              `Could not resolve token address for project ${projectId}. Using fallback.`,
-              { err }
-            );
           }
-
-          records.push(
-            repo.create({
-              roundId: projectId,
-              recipient,
-              amount,
-              token,
-              timestamp,
-              txHash,
-              status: "completed",
-            })
-          );
         } catch (eventError) {
           logger.error("Error processing polled Soroban event", {
             event,
