@@ -8,6 +8,7 @@ import type { SplitProject } from "@/lib/stellar";
 import type { WalletState } from "@/lib/wallet";
 import { TokenSelector } from "../TypeSelector";
 import { TransactionReceiptView, type TransactionReceipt } from "../TransactionReceiptView";
+import { BasisPointsPieChart, type PieChartEntry } from "../BasisPointsPieChart";
 
 interface CreateCollaboratorInput {
   address: string;
@@ -289,6 +290,14 @@ export function CreateSplitWizard({
             );
           })}
         </div>
+        {/* Basis Points Pie Chart */}
+        <BasisPointsPieChart
+          collaborators={collaboratorFields.map((field, index) => ({
+            alias: (field as unknown as Record<string, string>).alias || `Recipient #${index + 1}`,
+            basisPoints: parseInt(String((field as unknown as Record<string, string>).basisPoints ?? "0"), 10) || 0,
+          })) as PieChartEntry[]}
+          totalBasisPoints={totalBasisPoints}
+        />
         <div className="flex flex-col items-end gap-3 px-4 py-6 rounded-3xl bg-white/2 border border-white/5">
           <div className="flex items-center gap-4">
             <span className="text-[10px] uppercase text-muted">Allocation Matrix</span>

@@ -9,6 +9,7 @@ import type { WalletState } from "@/lib/wallet";
 import { Input } from "../Input";
 import { ListSkeleton, ProjectDetailSkeleton } from "../Skeleton";
 import { TransactionReceiptView, type TransactionReceipt } from "../TransactionReceiptView";
+import { BasisPointsPieChart, type PieChartEntry } from "../BasisPointsPieChart";
 
 interface CollaboratorInput {
   id: string;
