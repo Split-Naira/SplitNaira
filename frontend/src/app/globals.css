@@ -1,15 +1,16 @@
 @import "tailwindcss";
+@import "../styles/tokens.css";
 
+/* Legacy aliases for backwards compatibility - prefer var(--brand-*) */
 :root {
-  --bg: #0a0a09;
-  --bg-card: rgba(23, 23, 20, 0.8);
-  --ink: #f9f7f2;
-  --muted: #a1a19a;
-  --gold: #d49a2a;
+  --bg: var(--brand-surface);
+  --bg-card: var(--brand-card);
+  --ink: var(--brand-text);
+  --muted: var(--brand-muted);
+  --gold: var(--brand-accent);
+  --green-mid: var(--brand-primary);
+  --green-bright: var(--brand-highlight);
   --green-deep: #0f2a1a;
-  --green-mid: #1d5c3a;
-  --green-bright: #34d399;
-  --glass-border: rgba(255, 255, 255, 0.08);
 }
 
 body {

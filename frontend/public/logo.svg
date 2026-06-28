@@ -1,0 +1,15 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="24" cy="24" r="22" fill="#1d5c3a" opacity="0.1"/>
+  
+  <!-- Split/Fork icon -->
+  <path d="M24 8 L24 18 M24 18 L18 24 M24 18 L30 24 M18 24 L18 40 M30 24 L30 40" 
+        stroke="#1d5c3a" 
+        stroke-width="3" 
+        stroke-linecap="round" 
+        stroke-linejoin="round"/>
+  
+  <!-- Naira symbol overlay -->
+  <text x="24" y="32" font-family="Arial, sans-serif" font-size="18" font-weight="bold" 
+        fill="#d49a2a" text-anchor="middle">₦</text>
+</svg>

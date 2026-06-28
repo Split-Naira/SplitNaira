@@ -30,7 +30,9 @@ interface EventSubscription {
 }
 
 const parsedMaxListeners = Number(process.env.SSE_MAX_LISTENERS_PER_TXHASH ?? "5");
-const MAX_LISTENERS_PER_TXHASH = Number.isNaN(parsedMaxListeners) ? 5 : Math.max(1, parsedMaxListeners);
+const MAX_LISTENERS_PER_TXHASH = Number.isNaN(parsedMaxListeners)
+  ? 5
+  : Math.max(1, parsedMaxListeners);
 const activeSubscriptions = new Map<string, Set<EventSubscription>>();
 
 function getSubscriptionCount(txHash: string) {
@@ -71,7 +73,7 @@ async function handleEventStream(req: Request, res: Response) {
       code: ErrorCode.RESOURCE_LIMIT_EXCEEDED,
       message: "Too many event stream subscribers for this transaction.",
       requestId,
-      details: { txHash, limit: MAX_LISTENERS_PER_TXHASH }
+      details: { txHash, limit: MAX_LISTENERS_PER_TXHASH },
     });
     return;
   }
@@ -93,7 +95,7 @@ async function handleEventStream(req: Request, res: Response) {
     cleanup() {
       eventBus.removeListener(eventName, subscription.listener);
       removeSubscription(subscription);
-    }
+    },
   };
 
   addSubscription(subscription);

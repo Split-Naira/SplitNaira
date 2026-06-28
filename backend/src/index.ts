@@ -12,20 +12,31 @@ import { splitsRouter } from "./routes/splits.js";
 import { docsRouter } from "./routes/docs.js";
 import { usersRouter } from "./routes/users.js";
 import { transactionsRouter } from "./routes/transactions.js";
+import { eventsRouter } from "./routes/events.js";
 import { errorHandler, notFoundHandler } from "./middleware/error.js";
 import { requestIdMiddleware } from "./middleware/request-id.js";
 import { metricsMiddleware } from "./middleware/metrics.js";
-import { globalLimiter, readLimiter, writeLimiter, adminLimiter, authLimiter, sseConnectionLimiter } from "./middleware/rate-limit.js";
+import {
+  globalLimiter,
+  readLimiter,
+  writeLimiter,
+  adminLimiter,
+  authLimiter,
+  sseConnectionLimiter,
+} from "./middleware/rate-limit.js";
 import {
   enforcePaymentsAdminWriteEnabled,
-  requirePaymentsAdminAccess
+  requirePaymentsAdminAccess,
 } from "./middleware/payments-admin.js";
 import { auditAdminMutationsMiddleware } from "./middleware/audit-log.js";
 import { eventsRouter } from "./routes/events.js";
 import { validateEnv, printEnvDiagnostics } from "./config/env.js";
 import { initDatabase, closeDatabase } from "./services/database.js";
 import { logger } from "./services/logger.js";
-import { startEventListenerService, stopEventListenerService } from "./services/EventListenerService.js";
+import {
+  startEventListenerService,
+  stopEventListenerService,
+} from "./services/EventListenerService.js";
 
 dotenv.config();
 
@@ -34,30 +45,34 @@ export const app = express();
 app.disable("x-powered-by");
 
 const corsOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean)
+  ? process.env.CORS_ORIGIN.split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean)
   : ["http://localhost:3000"];
 
 const corsOrigin = corsOrigins.length > 0 ? corsOrigins : false;
 
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:"],
-      connectSrc: ["'self'"]
-    }
-  },
-  hsts: {
-    maxAge: 31536000,
-    includeSubDomains: true,
-    preload: true
-  },
-  frameguard: { action: 'deny' },
-  xssFilter: true,
-  noSniff: true,
-}));
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:"],
+        connectSrc: ["'self'"],
+      },
+    },
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
+    frameguard: { action: "deny" },
+    xssFilter: true,
+    noSniff: true,
+  })
+);
 app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: "1mb" }));
 app.use(requestIdMiddleware);
@@ -78,10 +93,7 @@ app.use("/docs", (_req, res, next) => {
 const WALLET_ADDRESS_REGEX = /\b[GC][A-Z2-7]{55}\b/g;
 
 export function scrubWalletAddresses(value: string): string {
-  return value.replace(
-    WALLET_ADDRESS_REGEX,
-    "[WALLET_REDACTED]"
-  );
+  return value.replace(WALLET_ADDRESS_REGEX, "[WALLET_REDACTED]");
 }
 
 app.use(
@@ -95,7 +107,7 @@ app.use(
       tokens["response-time"](req, res),
       "ms",
       "x-request-id=",
-      String(requestId)
+      String(requestId),
     ].join(" ");
   })
 );
@@ -121,13 +133,12 @@ app.use("/users", (req, res, next) => {
 });
 app.use("/transactions", readLimiter);
 app.use("/events", sseConnectionLimiter);
-app.use("/events", eventsRouter);
 
 app.get("/", (_req, res) => {
   res.json({
     name: "SplitNaira API",
     status: "ok",
-    version: "0.1.0"
+    version: "0.1.0",
   });
 });
 
@@ -135,9 +146,12 @@ app.use("/health", healthRouter);
 if (isMetricsEnabled()) {
   app.use("/metrics", metricsRouter);
 }
-app.use("/splits", splitsRouter);app.use("/ops", opsRouter);app.use("/docs", docsRouter);
+app.use("/splits", splitsRouter);
+app.use("/ops", opsRouter);
+app.use("/docs", docsRouter);
 app.use("/users", usersRouter);
 app.use("/transactions", transactionsRouter);
+app.use("/events", eventsRouter);
 
 // ─── OpenAPI & Swagger Documentation ──────────────────────────────────────────
 

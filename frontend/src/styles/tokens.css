@@ -1,0 +1,27 @@
+/**
+ * Design Tokens - Single Source of Truth for SplitNaira Brand
+ * 
+ * This file defines the canonical brand palette used throughout the application.
+ * All colors are mapped into Tailwind config for consistent usage.
+ */
+
+:root {
+  /* Brand Primary Colors */
+  --brand-primary: #1d5c3a; /* Logo green */
+  --brand-accent: #d49a2a; /* Gold accent */
+
+  /* Surface & Layout */
+  --brand-surface: #0a0a09; /* Dark background */
+  --brand-card: rgba(23, 23, 20, 0.8);
+  --brand-border: rgba(255, 255, 255, 0.08);
+
+  /* Text Colors */
+  --brand-text: #f9f7f2; /* Primary text (ink) */
+  --brand-muted: #a1a19a; /* Secondary text */
+
+  /* Interactive States */
+  --brand-highlight: #34d399; /* Success/active state */
+
+  /* Glass Effects */
+  --glass-border: rgba(255, 255, 255, 0.08);
+}
