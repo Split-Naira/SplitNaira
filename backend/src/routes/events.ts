@@ -1,105 +1,178 @@
-import { Router, type Request, type Response } from "express";
-import { AppDataSource } from "../data-source.js";
-import { Transaction as TransactionRecord } from "../entities/Transaction.js";
+import { Router, Request, Response } from "express";
+import { getSseEventBus, getSseEventName } from "../services/SseEventBus.js";
+import { getEventBus, TRANSACTION_CONFIRMED } from "../services/EventBus.js";
 import { logger } from "../services/logger.js";
+import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
+
+// Heartbeat cadence for the path-based transaction stream. A comment line every
+// 15s keeps intermediary proxies from closing an otherwise-idle connection.
+const HEARTBEAT_INTERVAL_MS = 15_000;
 
 export const eventsRouter = Router();
 
-eventsRouter.get("/transactions/:txHash", async (req: Request, res: Response) => {
-  const { txHash } = req.params;
-
-  if (!txHash || typeof txHash !== "string") {
-    res.status(400).json({ error: "Invalid transaction hash" });
-    return;
-  }
-
-  // Set SSE headers
+function createSseHeaders(res: Response) {
   res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders?.();
+}
 
-  logger.info(`SSE connection opened for transaction: ${txHash}`);
+function sendSseEvent(res: Response, type: string, data: unknown) {
+  res.write(`event: ${type}\n`);
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
 
-  // Check if transaction already exists
-  const repo = AppDataSource.getRepository(TransactionRecord);
+interface EventSubscription {
+  txHash: string;
+  listener: (payload: unknown) => void;
+  cleanup: () => void;
+}
 
-  try {
-    const existing = await repo.findOneBy({ txHash });
+const parsedMaxListeners = Number(process.env.SSE_MAX_LISTENERS_PER_TXHASH ?? "5");
+const MAX_LISTENERS_PER_TXHASH = Number.isNaN(parsedMaxListeners)
+  ? 5
+  : Math.max(1, parsedMaxListeners);
+const activeSubscriptions = new Map<string, Set<EventSubscription>>();
 
-    if (existing) {
-      // Transaction found immediately - send and close
-      const data = JSON.stringify({
-        status: "completed",
-        record: {
-          txHash: existing.txHash,
-          projectId: existing.projectId,
-          action: existing.action,
-          amount: existing.amount,
-          createdAt: existing.createdAt,
-        },
-      });
-      res.write(`data: ${data}\n\n`);
-      res.end();
-      logger.info(`Transaction ${txHash} found immediately, SSE closed`);
-      return;
-    }
-  } catch (error) {
-    logger.error(`Error querying transaction ${txHash}:`, { error });
-    res.write(`data: ${JSON.stringify({ status: "error", message: "Database error" })}\n\n`);
-    res.end();
+function getSubscriptionCount(txHash: string) {
+  return activeSubscriptions.get(txHash)?.size ?? 0;
+}
+
+function addSubscription(subscription: EventSubscription) {
+  const set = activeSubscriptions.get(subscription.txHash) ?? new Set();
+  set.add(subscription);
+  activeSubscriptions.set(subscription.txHash, set);
+}
+
+function removeSubscription(subscription: EventSubscription) {
+  const set = activeSubscriptions.get(subscription.txHash);
+  if (!set) return;
+  set.delete(subscription);
+  if (set.size === 0) {
+    activeSubscriptions.delete(subscription.txHash);
+  }
+}
+
+async function handleEventStream(req: Request, res: Response) {
+  const txHash = String(req.query.txHash ?? "").trim();
+  const requestId = res.locals.requestId as string | undefined;
+
+  if (!txHash) {
+    throw new AppError(
+      ErrorType.VALIDATION,
+      ErrorCode.VALIDATION_ERROR,
+      "Query parameter txHash is required for /events SSE subscriptions."
+    );
+  }
+
+  const currentCount = getSubscriptionCount(txHash);
+  if (currentCount >= MAX_LISTENERS_PER_TXHASH) {
+    res.status(429).json({
+      error: "too_many_event_listeners",
+      code: ErrorCode.RESOURCE_LIMIT_EXCEEDED,
+      message: "Too many event stream subscribers for this transaction.",
+      requestId,
+      details: { txHash, limit: MAX_LISTENERS_PER_TXHASH },
+    });
     return;
   }
 
-  // Transaction not found yet - poll until it appears or client disconnects
-  let pollCount = 0;
-  const maxPolls = 60; // 60 * 3s = 3 minutes max
-  const pollInterval = 3000; // 3 seconds
+  createSseHeaders(res);
 
-  const pollTimer = setInterval(async () => {
-    pollCount++;
+  const eventBus = getSseEventBus();
+  const eventName = getSseEventName(txHash);
 
-    try {
-      const record = await repo.findOneBy({ txHash });
-
-      if (record) {
-        const data = JSON.stringify({
-          status: "completed",
-          record: {
-            txHash: record.txHash,
-            projectId: record.projectId,
-            action: record.action,
-            amount: record.amount,
-            createdAt: record.createdAt,
-          },
-        });
-        res.write(`data: ${data}\n\n`);
-        clearInterval(pollTimer);
-        res.end();
-        logger.info(`Transaction ${txHash} found after ${pollCount} polls, SSE closed`);
-        return;
+  const subscription: EventSubscription = {
+    txHash,
+    listener(payload) {
+      try {
+        sendSseEvent(res, "transaction_update", payload);
+      } catch (writeError) {
+        logger.warn("Failed to send SSE payload", { txHash, requestId, error: writeError });
       }
+    },
+    cleanup() {
+      eventBus.removeListener(eventName, subscription.listener);
+      removeSubscription(subscription);
+    },
+  };
 
-      // Heartbeat to keep connection alive
-      res.write(`: heartbeat ${pollCount}\n\n`);
+  addSubscription(subscription);
+  eventBus.on(eventName, subscription.listener);
 
-      if (pollCount >= maxPolls) {
-        res.write(`data: ${JSON.stringify({ status: "timeout" })}\n\n`);
-        clearInterval(pollTimer);
-        res.end();
-        logger.warn(`Transaction ${txHash} timed out after ${maxPolls} polls`);
-      }
-    } catch (error) {
-      logger.error(`Error polling transaction ${txHash}:`, { error });
-      res.write(`data: ${JSON.stringify({ status: "error", message: "Polling error" })}\n\n`);
-      clearInterval(pollTimer);
-      res.end();
-    }
-  }, pollInterval);
-
-  // Clean up on client disconnect
-  req.on("close", () => {
-    clearInterval(pollTimer);
-    logger.info(`SSE connection closed by client for transaction: ${txHash}`);
+  res.on("close", () => {
+    subscription.cleanup();
+    logger.info("SSE client disconnected", { txHash, requestId });
   });
-});
+
+  // Keep connection alive with periodic comments to prevent proxies from timing out
+  const keepAlive = setInterval(() => {
+    res.write(": keep-alive\n\n");
+  }, 25_000);
+
+  res.on("close", () => {
+    clearInterval(keepAlive);
+  });
+
+  logger.info("SSE subscription opened", { txHash, requestId, currentCount: currentCount + 1 });
+}
+
+/**
+ * SSE endpoint (Issue #618): GET /events/transactions/:txHash
+ *
+ * Holds the response open and streams the matching `transaction:confirmed`
+ * event (emitted by EventListenerService once the record is saved) as a JSON
+ * SSE message. The bus listener is removed and the heartbeat cleared when the
+ * client disconnects.
+ */
+function handleTransactionStream(req: Request, res: Response) {
+  const txHash = String(req.params.txHash ?? "").trim();
+  const requestId = res.locals.requestId as string | undefined;
+
+  if (!txHash) {
+    throw new AppError(
+      ErrorType.VALIDATION,
+      ErrorCode.VALIDATION_ERROR,
+      "Path parameter txHash is required for /events/transactions subscriptions."
+    );
+  }
+
+  createSseHeaders(res);
+
+  const bus = getEventBus();
+  const listener = (record: unknown) => {
+    if (
+      record &&
+      typeof record === "object" &&
+      (record as { txHash?: unknown }).txHash === txHash
+    ) {
+      try {
+        sendSseEvent(res, "transaction:confirmed", record);
+      } catch (writeError) {
+        logger.warn("Failed to send transaction SSE payload", {
+          txHash,
+          requestId,
+          error: writeError,
+        });
+      }
+    }
+  };
+
+  bus.on(TRANSACTION_CONFIRMED, listener);
+
+  const heartbeat = setInterval(() => {
+    res.write(": heartbeat\n\n");
+  }, HEARTBEAT_INTERVAL_MS);
+
+  req.on("close", () => {
+    bus.removeListener(TRANSACTION_CONFIRMED, listener);
+    clearInterval(heartbeat);
+    logger.info("Transaction SSE client disconnected", { txHash, requestId });
+  });
+
+  logger.info("Transaction SSE subscription opened", { txHash, requestId });
+}
+
+eventsRouter.get("/", handleEventStream);
+eventsRouter.get("/transactions/:txHash", handleTransactionStream);

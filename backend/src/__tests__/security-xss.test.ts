@@ -4,16 +4,30 @@
  * Related to: GitHub Issue #292 - XSS in Split Description Field
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   createSplitSchema,
   updateMetadataSchema,
   collaboratorSchema,
 } from "../schemas/splits.js";
+import { sanitizeString } from "../lib/sanitize.js";
+
+vi.mock("@stellar/stellar-sdk", () => ({
+  Address: {
+    fromString: vi.fn(() => ({})),
+  },
+}));
 
 describe("Security: XSS Prevention", () => {
+  describe("Server-side sanitization", () => {
+    it("sanitizeString strips HTML tags and trims whitespace", () => {
+      expect(sanitizeString("  <script>alert(1)</script>  ")).toBe("alert(1)");
+      expect(sanitizeString("<b>Hello</b> World")).toBe("Hello World");
+    });
+  });
+
   describe("Title field validation", () => {
-    it("should reject script tags in title", () => {
+    it("should strip script tags from title and store sanitized text", () => {
       const maliciousTitle = "<script>alert('XSS')</script>";
       const result = createSplitSchema.safeParse({
         owner: "GBRPYHIL2CI3WHPSKYNYFRM5MH72RTZGKSW2ZSOB2BBZKJFMV7NZUKX",
@@ -34,11 +48,9 @@ describe("Security: XSS Prevention", () => {
           },
         ],
       });
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.issues.some((i) => i.path.includes("title"))).toBe(
-          true
-        );
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.title).toBe("alert('XSS')");
       }
     });
 
@@ -160,6 +172,32 @@ describe("Security: XSS Prevention", () => {
         ],
       });
       expect(result.success).toBe(true);
+    });
+
+    it("should strip HTML script tags from title via server-side sanitization", () => {
+      const result = createSplitSchema.safeParse({
+        owner: "GBRPYHIL2CI3WHPSKYNYFRM5MH72RTZGKSW2ZSOB2BBZKJFMV7NZUKX",
+        projectId: "test_project",
+        title: "<script>alert(1)</script>",
+        projectType: "music",
+        token: "GBRPYHIL2CI3WHPSKYNYFRM5MH72RTZGKSW2ZSOB2BBZKJFMV7NZUKX",
+        collaborators: [
+          {
+            address: "GBRPYHIL2CI3WHPSKYNYFRM5MH72RTZGKSW2ZSOB2BBZKJFMV7NZUKX",
+            alias: "Collaborator 1",
+            basisPoints: 5000,
+          },
+          {
+            address: "GC4T3X2BFXDFJZ7TZHQ2U4BLQZFNV3KVEYAQN37HQNGXZKAHXCN5KFS7",
+            alias: "Collaborator 2",
+            basisPoints: 5000,
+          },
+        ],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.title).toBe("alert(1)");
+      }
     });
   });
 

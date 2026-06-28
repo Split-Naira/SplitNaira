@@ -1,7 +1,8 @@
-import { Router } from "express";
+import { Router, type NextFunction, type Response } from "express";
 import { getEnvDiagnostics } from "../config/env.js";
 import { getDataSource } from "../services/database.js";
 import { checkSorobanReachability } from "../services/stellar.js";
+import { getServiceHealth } from "../services/EventListenerService.js";
 
 export const healthRouter = Router();
 
@@ -14,20 +15,19 @@ export function markStartupComplete(): void {
   startupComplete = true;
 }
 
+export function resetStartupComplete(): void {
+  startupComplete = false;
+}
+
 export function isStartupComplete(): boolean {
   return startupComplete;
 }
 
 /**
- * Health endpoint - indicates service is running
+ * Health endpoint - alias for readiness to preserve backward compatibility.
  */
-healthRouter.get("/", (_req, res) => {
-  res.json({
-    status: "ok",
-    version: SERVICE_VERSION,
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString()
-  });
+healthRouter.get("/", async (_req, res, next) => {
+  await handleReadiness(_req, res, next);
 });
 
 /**
@@ -52,7 +52,9 @@ healthRouter.get("/startup", (_req, res) => {
 /**
  * Readiness endpoint - indicates service is ready to serve traffic
  */
-healthRouter.get("/ready", async (_req, res, next) => {
+healthRouter.get("/ready", handleReadiness);
+
+async function handleReadiness(_req: unknown, res: Response, next: NextFunction) {
   const requestId = res.locals.requestId;
   const components = {
     env: { ok: true },
@@ -60,6 +62,18 @@ healthRouter.get("/ready", async (_req, res, next) => {
     rpc: { ok: false, message: "" },
     contract: { ok: false, message: "" }
   };
+
+  if (!startupComplete) {
+    res.status(503).json({
+      status: "not_ready",
+      error: "starting",
+      message: "Service startup has not completed.",
+      components,
+      requestId,
+      details: {}
+    });
+    return;
+  }
 
   const envDiagnostics = getEnvDiagnostics();
   if (!envDiagnostics.ok) {
@@ -78,9 +92,11 @@ healthRouter.get("/ready", async (_req, res, next) => {
 
   try {
     const ds = getDataSource();
-    // Simple readiness check: execute a lightweight query to verify DB connectivity.
+    if (!ds.isInitialized) {
+      throw new Error("Database connection is not initialized.");
+    }
+
     try {
-      // Use a deterministic column name so result parsing is consistent across PG versions
       const rows = await ds.query('SELECT 1 AS one');
       components.db = { ok: true, message: 'query_ok', rows: Array.isArray(rows) ? rows.length : undefined };
     } catch (queryErr) {
@@ -136,5 +152,15 @@ healthRouter.get("/ready", async (_req, res, next) => {
     return;
   }
 
-  res.json({ status: "ready", components });
-});
+  // Surface the background event listener's health. A degraded listener (e.g.
+  // during a Soroban RPC outage with active back-off) does not make the API
+  // unready for reads, so this is reported informationally rather than failing
+  // the readiness probe.
+  const eventListener = getServiceHealth();
+
+  res.json({
+    status: "ready",
+    version: SERVICE_VERSION,
+    components: { ...components, eventListener },
+  });
+}

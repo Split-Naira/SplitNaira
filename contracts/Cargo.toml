@@ -1,8 +1,8 @@
-[package]
+﻿[package]
 name = "splitnaira-contracts"
 version = "0.1.0"
 edition = "2021"
-description = "Soroban smart contracts for SplitNaira — royalty splitting on Stellar"
+description = "Soroban smart contracts for SplitNaira â€” royalty splitting on Stellar"
 license = "MIT"
 repository = "https://github.com/Split-Naira/SplitNaira"
 
@@ -11,6 +11,8 @@ crate-type = ["cdylib", "rlib"]
 name = "splitnaira_contract"
 path = "lib.rs"
 
+# reliability_tests.rs is registered via #[cfg(test)] mod in lib.rs
+# and is automatically included in: cargo test --features testutils
 [features]
 testutils = ["soroban-sdk/testutils"]
 
@@ -40,3 +42,4 @@ lto = true
 [profile.release-with-logs]
 inherits = "release"
 debug-assertions = true
+

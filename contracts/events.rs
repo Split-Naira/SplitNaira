@@ -495,7 +495,8 @@ impl Publishable for SplitsUpdatedWithPendingBalance {
     fn publish(&self, env: &Env) {
         env.events().publish(
             (
-                Symbol::new(env, "splits_updated_with_pending_balance"),
+                // Soroban Symbols are capped at 32 chars; keep this <= 32.
+                Symbol::new(env, "splits_updated_pending_balance"),
                 self.project_id.clone(),
             ),
             self.pending_balance,
@@ -555,6 +556,46 @@ impl Publishable for TokenDisallowed {
         env.events().publish(
             (Symbol::new(env, "token_disallowed"), self.token.clone()),
             self.admin.clone(),
+        );
+    }
+}
+
+/// Emitted when cached accounted balance exceeds the contract token balance.
+#[derive(Clone, Debug)]
+pub struct AccountingDiscrepancy {
+    pub token: Address,
+    pub contract_balance: i128,
+    pub accounted_balance: i128,
+}
+
+impl AccountingDiscrepancy {
+    pub fn publish(&self, env: &Env) {
+        env.events().publish(
+            (Symbol::new(env, "accounting_discrepancy"), self.token.clone()),
+            (self.contract_balance, self.accounted_balance),
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// MaxCollaboratorsUpdated
+// ---------------------------------------------------------------------------
+
+/// Emitted when the admin reconfigures the per-project collaborator cap.
+///
+/// **Topics:** `["max_collaborators_set", admin]`
+/// **Data:** `value` (the new cap)
+#[derive(Clone, Debug)]
+pub struct MaxCollaboratorsUpdated {
+    pub admin: Address,
+    pub value: u32,
+}
+
+impl Publishable for MaxCollaboratorsUpdated {
+    fn publish(&self, env: &Env) {
+        env.events().publish(
+            (Symbol::new(env, "max_collaborators_set"), self.admin.clone()),
+            self.value,
         );
     }
 }

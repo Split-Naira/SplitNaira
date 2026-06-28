@@ -2,7 +2,11 @@ import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { getDataSource, withTransaction } from "../services/database.js";
 import { User } from "../entities/User.js";
-import { userRegistrationSchema, stellarAddressSchema } from "../schemas/user.schemas.js";
+import {
+  userRegistrationSchema,
+  stellarAddressSchema,
+  userUpdateSchema,
+} from "../schemas/user.schemas.js";
 import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
 import { logger } from "../services/logger.js";
 import { signToken } from "../services/jwt.js";
@@ -11,55 +15,52 @@ import { authJwtMiddleware } from "../middleware/auth-jwt.js";
 export const usersRouter = Router();
 
 /**
+ * @openapi
  * POST /users/register
- * Register a new user with wallet address
- * Transaction-safe: Automatically rolled back on error
+ * summary: Register a new user
+ * description: Creates a user profile linked to a Stellar wallet address.
+ * tags: [Users]
  */
 usersRouter.post("/register", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const requestId = res.locals.requestId;
-
     const { walletAddress, email, alias } = userRegistrationSchema.parse(req.body);
 
-    // Execute user registration within transaction
+    // Get repository without opening a transaction
+    const dataSource = getDataSource();
+    const userRepository = dataSource.getRepository(User);
+
+    // Lightweight existence check before starting a transaction
+    const walletExists = await userRepository.exist({
+      where: { walletAddress },
+    });
+
+    if (walletExists) {
+      return res.status(409).json({
+        error: "conflict",
+        message: "Wallet address already registered.",
+      });
+    }
+
+    // Only open a transaction if the wallet does not already exist
     const savedUser = await withTransaction(async (queryRunner) => {
       const userRepository = queryRunner.manager.getRepository(User);
 
-      // Check if user already exists
-      const existingUser = await userRepository.findOne({
-        where: { walletAddress }
-      });
-
-      if (existingUser) {
-        throw new AppError(
-          ErrorType.VALIDATION,
-          ErrorCode.VALIDATION_ERROR,
-          "User with this wallet address already exists.",
-          undefined,
-          { walletAddress }
-        );
-      }
-
-      // Create new user
       const newUser = userRepository.create({
         walletAddress,
         email,
         alias,
         role: "user",
-        isActive: true
+        isActive: true,
       });
 
-      // Save to database within transaction
       return await userRepository.save(newUser);
     });
 
     logger.info("User registered successfully", {
       userId: savedUser.id,
       walletAddress: savedUser.walletAddress,
-      requestId
     });
 
-    // Return user data (excluding sensitive fields if any)
     return res.status(201).json({
       id: savedUser.id,
       walletAddress: savedUser.walletAddress,
@@ -68,7 +69,7 @@ usersRouter.post("/register", async (req: Request, res: Response, next: NextFunc
       role: savedUser.role,
       isActive: savedUser.isActive,
       createdAt: savedUser.createdAt.toISOString(),
-      updatedAt: savedUser.updatedAt.toISOString()
+      updatedAt: savedUser.updatedAt.toISOString(),
     });
   } catch (error) {
     return next(error);
@@ -76,13 +77,14 @@ usersRouter.post("/register", async (req: Request, res: Response, next: NextFunc
 });
 
 /**
+ * @openapi
  * POST /users/login
- * Log in a user by wallet address
+ * summary: Log in by wallet address
+ * description: Authenticates a registered user and returns a JWT bearer token.
+ * tags: [Users]
  */
 usersRouter.post("/login", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const requestId = res.locals.requestId;
-
     const loginSchema = z.object({
       walletAddress: stellarAddressSchema
     });
@@ -106,7 +108,6 @@ usersRouter.post("/login", async (req: Request, res: Response, next: NextFunctio
     logger.info("User logged in successfully", {
       userId: user.id,
       walletAddress: user.walletAddress,
-      requestId
     });
 
     return res.status(200).json({
@@ -126,8 +127,11 @@ usersRouter.post("/login", async (req: Request, res: Response, next: NextFunctio
 });
 
 /**
+ * @openapi
  * GET /users/me
- * Get the authenticated user's profile
+ * summary: Get authenticated user profile
+ * description: Returns the profile of the user identified by the JWT bearer token.
+ * tags: [Users]
  */
 usersRouter.get("/me", authJwtMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -153,8 +157,11 @@ usersRouter.get("/me", authJwtMiddleware, async (req: Request, res: Response, ne
 });
 
 /**
+ * @openapi
  * PATCH /users/me
- * Update the authenticated user's profile
+ * summary: Update authenticated user profile
+ * description: Updates email or alias for the authenticated user.
+ * tags: [Users]
  */
 usersRouter.patch("/me", authJwtMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -194,8 +201,11 @@ usersRouter.patch("/me", authJwtMiddleware, async (req: Request, res: Response, 
 });
 
 /**
- * GET /users/:walletAddress
- * Get user by wallet address
+ * @openapi
+ * GET /users/{walletAddress}
+ * summary: Get user by wallet address
+ * description: Looks up a public user profile by Stellar wallet address.
+ * tags: [Users]
  */
 usersRouter.get("/:walletAddress", async (req: Request, res: Response, next: NextFunction) => {
   try {

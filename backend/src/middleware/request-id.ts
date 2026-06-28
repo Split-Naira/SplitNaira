@@ -1,11 +1,13 @@
 import type { RequestHandler } from "express";
 import { randomUUID } from "crypto";
+import { requestContext } from "../services/request-context.js";
 
 /**
  * Generates (or propagates) a request correlation id.
  * - Accepts inbound `x-request-id` or `x-correlation-id`
  * - Always sets `res.locals.requestId`
  * - Mirrors both headers in the response for cross-service tracing
+ * - Stores requestId in AsyncLocalStorage for automatic logger correlation
  */
 export const requestIdMiddleware: RequestHandler = (req, res, next) => {
   const incoming =
@@ -15,6 +17,9 @@ export const requestIdMiddleware: RequestHandler = (req, res, next) => {
   res.locals.requestId = requestId;
   res.setHeader("x-request-id", requestId);
   res.setHeader("x-correlation-id", requestId);
-  next();
+
+  requestContext.run({ requestId }, () => {
+    next();
+  });
 };
 

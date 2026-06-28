@@ -10,8 +10,8 @@ extern crate alloc;
 
 use super::*;
 use soroban_sdk::{
-    testutils::{Address as _, Events as _, Ledger},
-    token, vec, Address, Env, IntoVal, String, Symbol, TryFromVal, TryIntoVal, Vec,
+    testutils::{Address as _, EnvTestConfig, Events as _, Ledger},
+    token, vec, Address, Env, FromVal, IntoVal, String, Symbol, TryFromVal, TryIntoVal, Vec,
 };
 
 // ============================================================
@@ -53,6 +53,75 @@ fn deposit_to_project(
     let token_client = token::StellarAssetClient::new(env, token);
     token_client.mint(from, &amount);
     client.deposit(project_id, from, &amount);
+}
+
+fn seed_bucketed_projects(
+    env: &Env,
+    contract_id: &Address,
+    owner: &Address,
+    token: &Address,
+    collabs: &Vec<Collaborator>,
+    total: u32,
+) {
+    const BUCKET_SIZE: u32 = 100;
+    let title = String::from_str(env, "Seed");
+    let project_type = String::from_str(env, "music");
+
+    env.as_contract(contract_id, || {
+        for i in 0..total {
+            let id_str = std::format!("s{i:03}");
+            let project_id = Symbol::new(env, &id_str);
+            let project = SplitProject {
+                project_id: project_id.clone(),
+                title: title.clone(),
+                project_type: project_type.clone(),
+                token: token.clone(),
+                owner: owner.clone(),
+                collaborators: collabs.clone(),
+                locked: false,
+                total_distributed: 0,
+                distribution_round: 0,
+            };
+            env.storage()
+                .persistent()
+                .set(&DataKey::Project(project_id.clone()), &project);
+            env.storage().persistent().set(
+                &DataKey::ProjectBalance(project_id.clone()),
+                &0i128,
+            );
+
+            let target_bucket = i / BUCKET_SIZE;
+            let offset = i % BUCKET_SIZE;
+            if offset == 0 {
+                let mut bucket = Vec::new(env);
+                bucket.push_back(project_id);
+                env.storage()
+                    .persistent()
+                    .set(&DataKey::ProjectIdsBucket(target_bucket), &bucket);
+            } else {
+                let mut bucket: Vec<Symbol> = env
+                    .storage()
+                    .persistent()
+                    .get(&DataKey::ProjectIdsBucket(target_bucket))
+                    .unwrap();
+                bucket.push_back(project_id);
+                env.storage()
+                    .persistent()
+                    .set(&DataKey::ProjectIdsBucket(target_bucket), &bucket);
+            }
+        }
+        let bucket_count = if total == 0 {
+            0
+        } else {
+            (total - 1) / BUCKET_SIZE + 1
+        };
+        env.storage()
+            .persistent()
+            .set(&DataKey::ProjectIdsBucketCount, &bucket_count);
+        env.storage()
+            .persistent()
+            .set(&DataKey::ProjectCount, &total);
+    });
 }
 
 // ============================================================
@@ -748,7 +817,7 @@ fn test_update_collaborators_with_pending_balance_emits_warning() {
     let mut warning_emitted = false;
     for event in events.iter() {
         if let Ok(topic) = Symbol::try_from_val(&env, &event.1.get(0).unwrap()) {
-            if topic == Symbol::new(&env, "splits_updated_with_pending_balance") {
+            if topic == Symbol::new(&env, "splits_updated_pending_balance") {
                 warning_emitted = true;
                 assert_eq!(
                     Symbol::try_from_val(&env, &event.1.get(1).unwrap()).unwrap(),
@@ -1843,6 +1912,7 @@ fn test_get_claimable_before_any_distribution() {
     let info = client.get_claimable(&project_id, &alice);
     assert_eq!(info.claimed, 0);
     assert_eq!(info.distribution_round, 0);
+    assert_eq!(info.last_claim_amount, 0);
 }
 
 #[test]
@@ -3778,6 +3848,301 @@ fn test_get_allowed_tokens_pagination_skips_after_disallow() {
     assert_eq!(safe_fetch.len(), 2);
     assert_eq!(safe_fetch.get(0).unwrap(), token_b);
     assert_eq!(safe_fetch.get(1).unwrap(), token_c);
+}
+
+// ============================================================
+//  ISSUE #655 — claim does not increment distribution_round
+// ============================================================
+
+#[test]
+fn test_claim_does_not_increment_distribution_round() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[6000u32, 4000u32]),
+    );
+    let project_id = Symbol::new(&env, "claim_round");
+    client.create_project(
+        &owner,
+        &project_id,
+        &String::from_str(&env, "Claim Round Test"),
+        &String::from_str(&env, "music"),
+        &token,
+        &collabs,
+    );
+
+    deposit_to_project(&env, &client, &token, &project_id, &owner, 10_000_000);
+    client.claim(&project_id, &alice);
+
+    let project = client.get_project(&project_id).unwrap();
+    assert_eq!(
+        project.distribution_round, 0,
+        "claim must not increment distribution_round"
+    );
+
+    let info = client.get_claimable(&project_id, &alice);
+    assert_eq!(info.claimed, 6_000_000);
+    assert_eq!(info.distribution_round, 0);
+    assert_eq!(info.last_claim_amount, 6_000_000);
+}
+
+#[test]
+fn test_get_claimable_last_claim_amount_resets_per_claim() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[5000u32, 5000u32]),
+    );
+    let project_id = Symbol::new(&env, "last_claim");
+    client.create_project(
+        &owner,
+        &project_id,
+        &String::from_str(&env, "Last Claim"),
+        &String::from_str(&env, "music"),
+        &token,
+        &collabs,
+    );
+
+    deposit_to_project(&env, &client, &token, &project_id, &owner, 10_000_000);
+    client.claim(&project_id, &alice);
+    assert_eq!(
+        client.get_claimable(&project_id, &alice).last_claim_amount,
+        5_000_000
+    );
+
+    deposit_to_project(&env, &client, &token, &project_id, &owner, 10_000_000);
+    client.claim(&project_id, &alice);
+    assert_eq!(
+        client.get_claimable(&project_id, &alice).last_claim_amount,
+        7_500_000
+    );
+}
+
+// ============================================================
+//  ISSUE #661 — bucket-only project indexing
+// ============================================================
+
+#[test]
+fn test_create_project_does_not_write_flat_project_ids() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[5000u32, 5000u32]),
+    );
+
+    client.create_project(
+        &owner,
+        &Symbol::new(&env, "bucket_only_a"),
+        &String::from_str(&env, "A"),
+        &String::from_str(&env, "music"),
+        &token,
+        &collabs,
+    );
+    client.create_project(
+        &owner,
+        &Symbol::new(&env, "bucket_only_b"),
+        &String::from_str(&env, "B"),
+        &String::from_str(&env, "music"),
+        &token,
+        &collabs,
+    );
+
+    let has_flat = env.as_contract(&contract_id, || {
+        env.storage().persistent().has(&DataKey::ProjectIds)
+    });
+    assert!(
+        !has_flat,
+        "new projects must be indexed in buckets only, not the flat ProjectIds vec"
+    );
+    assert_eq!(client.get_project_ids(&0, &10).len(), 2);
+}
+
+#[test]
+fn test_list_projects_200_plus_via_buckets() {
+    let env = Env::new_with_config(EnvTestConfig {
+        capture_snapshot_at_drop: false,
+    });
+    env.mock_all_auths();
+    let token_admin = Address::generate(&env);
+    let token = env.register_stellar_asset_contract(token_admin.clone());
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[6000u32, 4000u32]),
+    );
+
+    let total = 201u32;
+    seed_bucketed_projects(&env, &contract_id, &owner, &token, &collabs, total);
+
+    assert_eq!(client.get_project_count(), total);
+
+    let mut collected_ids = Vec::new(&env);
+    let page_size = 25u32;
+    let mut start = 0u32;
+    while start < total {
+        let page = client.list_projects(&start, &page_size);
+        for project in page.iter() {
+            collected_ids.push_back(project.project_id.clone());
+        }
+        start = start.saturating_add(page_size);
+    }
+    assert_eq!(collected_ids.len(), total);
+
+    let mut id_page = Vec::new(&env);
+    start = 0;
+    while start < total {
+        let chunk = client.get_project_ids(&start, &page_size);
+        for id in chunk.iter() {
+            id_page.push_back(id);
+        }
+        start = start.saturating_add(page_size);
+    }
+    assert_eq!(id_page.len(), total);
+}
+
+#[test]
+fn test_migrate_flat_to_buckets() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    client.set_admin(&admin);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[5000u32, 5000u32]),
+    );
+
+    let id_a = Symbol::new(&env, "legacy_a");
+    let id_b = Symbol::new(&env, "legacy_b");
+    client.create_project(
+        &owner,
+        &id_a,
+        &String::from_str(&env, "Legacy A"),
+        &String::from_str(&env, "music"),
+        &token,
+        &collabs,
+    );
+    client.create_project(
+        &owner,
+        &id_b,
+        &String::from_str(&env, "Legacy B"),
+        &String::from_str(&env, "music"),
+        &token,
+        &collabs,
+    );
+
+    env.as_contract(&contract_id, || {
+        let mut flat = Vec::new(&env);
+        flat.push_back(id_a.clone());
+        flat.push_back(id_b.clone());
+        env.storage()
+            .persistent()
+            .set(&DataKey::ProjectIds, &flat);
+        env.storage()
+            .persistent()
+            .set(&DataKey::ProjectIdsBucketCount, &0u32);
+        env.storage()
+            .persistent()
+            .remove(&DataKey::ProjectIdsBucket(0));
+    });
+
+    client.migrate_flat_to_buckets(&admin);
+
+    let ids = client.get_project_ids(&0, &10);
+    assert_eq!(ids.len(), 2);
+    assert_eq!(ids.get(0).unwrap(), id_a);
+    assert_eq!(ids.get(1).unwrap(), id_b);
+
+    let has_flat = env.as_contract(&contract_id, || {
+        env.storage().persistent().has(&DataKey::ProjectIds)
+    });
+    assert!(!has_flat, "flat ProjectIds must be removed after migration");
+}
+
+// ============================================================
+//  ISSUE #665 — unallocated balance never negative
+// ============================================================
+
+#[test]
+fn test_unallocated_balance_clamps_when_accounted_inflated() {
+    let (env, _token_admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[5000u32, 5000u32]),
+    );
+    let project_id = Symbol::new(&env, "acct_disc");
+    client.create_project(
+        &owner,
+        &project_id,
+        &String::from_str(&env, "Accounting"),
+        &String::from_str(&env, "music"),
+        &token,
+        &collabs,
+    );
+    deposit_to_project(&env, &client, &token, &project_id, &owner, 100_0000000i128);
+
+    env.as_contract(&contract_id, || {
+        env.storage().persistent().set(
+            &DataKey::AccountedTokenBalance(token.clone()),
+            &500_0000000i128,
+        );
+    });
+
+    let unallocated = client.get_unallocated_balance(&token);
+    assert_eq!(unallocated, 0, "unallocated balance must never be negative");
+
+    let events = env.events().all();
+    let has_discrepancy = events.iter().any(|(_contract, topics, _data)| {
+        topics
+            .get(0)
+            .map(|t| Symbol::try_from_val(&env, &t).ok())
+            .flatten()
+            == Some(Symbol::new(&env, "accounting_discrepancy"))
+    });
+    assert!(
+        has_discrepancy,
+        "inflated accounted balance must emit accounting_discrepancy event"
+    );
+}
 
 #[test]
 fn test_batch_distribute_fails_when_paused_batch() {
@@ -3808,4 +4173,134 @@ fn test_batch_distribute_fails_when_paused_batch() {
     let result = client.try_batch_distribute(&batch);
     
     assert_eq!(result, Err(Ok(SplitError::DistributionsPaused)));
+}
+
+// ============================================================
+//  CONFIGURABLE CAPACITY: MAX_COLLABORATORS  (Issue #511)
+// ============================================================
+
+#[test]
+fn test_max_collaborators_defaults_to_50() {
+    let (env, _admin, _token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    // With no override configured, the effective cap is the historical default.
+    assert_eq!(client.get_max_collaborators(), 50);
+}
+
+#[test]
+fn test_set_max_collaborators_updates_effective_cap() {
+    let (env, _admin, _token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    client.set_admin(&admin);
+
+    client.set_max_collaborators(&admin, &10);
+    assert_eq!(client.get_max_collaborators(), 10);
+
+    // Reconfigure again to confirm the override is mutable.
+    client.set_max_collaborators(&admin, &200);
+    assert_eq!(client.get_max_collaborators(), 200);
+}
+
+#[test]
+fn test_set_max_collaborators_requires_admin() {
+    let (env, _admin, _token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    // No admin configured yet.
+    let stranger = Address::generate(&env);
+    assert_eq!(
+        client.try_set_max_collaborators(&stranger, &10),
+        Err(Ok(SplitError::AdminNotSet))
+    );
+
+    // Admin set, but a different caller is rejected.
+    let admin = Address::generate(&env);
+    client.set_admin(&admin);
+    let other = Address::generate(&env);
+    assert_eq!(
+        client.try_set_max_collaborators(&other, &10),
+        Err(Ok(SplitError::Unauthorized))
+    );
+}
+
+#[test]
+fn test_set_max_collaborators_rejects_out_of_range() {
+    let (env, _admin, _token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    client.set_admin(&admin);
+
+    // Below the floor (a project always needs >= 2 collaborators).
+    assert_eq!(
+        client.try_set_max_collaborators(&admin, &1),
+        Err(Ok(SplitError::InvalidMaxCollaborators))
+    );
+    // Above the resource-safety ceiling.
+    assert_eq!(
+        client.try_set_max_collaborators(&admin, &201),
+        Err(Ok(SplitError::InvalidMaxCollaborators))
+    );
+
+    // Boundaries are accepted.
+    client.set_max_collaborators(&admin, &2);
+    assert_eq!(client.get_max_collaborators(), 2);
+    client.set_max_collaborators(&admin, &200);
+    assert_eq!(client.get_max_collaborators(), 200);
+}
+
+#[test]
+fn test_lowered_cap_is_enforced_on_create_project() {
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    client.set_admin(&admin);
+
+    // Tighten capacity to exactly two collaborators.
+    client.set_max_collaborators(&admin, &2);
+
+    let owner = Address::generate(&env);
+    let a = Address::generate(&env);
+    let b = Address::generate(&env);
+    let c = Address::generate(&env);
+
+    // Two collaborators: allowed under the new cap.
+    let two = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[a.clone(), b.clone()]),
+        Vec::from_slice(&env, &[5000u32, 5000u32]),
+    );
+    client.create_project(
+        &owner,
+        &Symbol::new(&env, "cap_ok"),
+        &String::from_str(&env, "Cap OK"),
+        &String::from_str(&env, "music"),
+        &token,
+        &two,
+    );
+
+    // Three collaborators: now exceeds the configured cap.
+    let three = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[a.clone(), b.clone(), c.clone()]),
+        Vec::from_slice(&env, &[4000u32, 4000u32, 2000u32]),
+    );
+    let result = client.try_create_project(
+        &owner,
+        &Symbol::new(&env, "cap_bad"),
+        &String::from_str(&env, "Cap Bad"),
+        &String::from_str(&env, "music"),
+        &token,
+        &three,
+    );
+    assert_eq!(result, Err(Ok(SplitError::TooManyCollaborators)));
 }

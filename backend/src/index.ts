@@ -22,11 +22,14 @@ import {
   writeLimiter,
   adminLimiter,
   authLimiter,
+  sseConnectionLimiter,
 } from "./middleware/rate-limit.js";
 import {
   enforcePaymentsAdminWriteEnabled,
   requirePaymentsAdminAccess,
 } from "./middleware/payments-admin.js";
+import { auditAdminMutationsMiddleware } from "./middleware/audit-log.js";
+import { eventsRouter } from "./routes/events.js";
 import { validateEnv, printEnvDiagnostics } from "./config/env.js";
 import { initDatabase, closeDatabase } from "./services/database.js";
 import { logger } from "./services/logger.js";
@@ -87,12 +90,18 @@ app.use("/docs", (_req, res, next) => {
   next();
 });
 
+const WALLET_ADDRESS_REGEX = /\b[GC][A-Z2-7]{55}\b/g;
+
+export function scrubWalletAddresses(value: string): string {
+  return value.replace(WALLET_ADDRESS_REGEX, "[WALLET_REDACTED]");
+}
+
 app.use(
   morgan((tokens, req, res) => {
     const requestId = res.locals.requestId ?? req.header("x-request-id") ?? "-";
     return [
       tokens.method(req, res),
-      tokens.url(req, res),
+      scrubWalletAddresses(tokens.url(req, res) ?? ""),
       tokens.status(req, res),
       "-",
       tokens["response-time"](req, res),
@@ -108,7 +117,8 @@ app.use(
   "/splits/admin",
   adminLimiter,
   requirePaymentsAdminAccess,
-  enforcePaymentsAdminWriteEnabled
+  enforcePaymentsAdminWriteEnabled,
+  auditAdminMutationsMiddleware
 );
 app.use("/splits", (req, res, next) => {
   if (req.method === "GET") return readLimiter(req, res, next);
@@ -122,7 +132,7 @@ app.use("/users", (req, res, next) => {
   return writeLimiter(req, res, next);
 });
 app.use("/transactions", readLimiter);
-app.use("/events", readLimiter);
+app.use("/events", sseConnectionLimiter);
 
 app.get("/", (_req, res) => {
   res.json({

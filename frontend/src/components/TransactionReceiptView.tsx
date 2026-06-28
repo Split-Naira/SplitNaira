@@ -138,11 +138,18 @@ const EXTERNAL_LINK_ICON = (
 export function TransactionReceiptView({
   receipt,
   network,
+  explorerUrl,
+  explorerLabel,
   onRetry,
   enableRealtime = true,
 }: {
   receipt: TransactionReceipt;
   network: string | null;
+  /** Explorer URL for this transaction. When omitted, it is derived from
+   * `getExplorerUrl(receipt.hash, network)` so existing callers keep working. */
+  explorerUrl?: string;
+  /** Explorer label. When omitted, derived from `getExplorerLabel(network)`. */
+  explorerLabel?: string;
   /** Called when the user clicks "Refresh to Retry" on a timeout.
    * Defaults to a full page reload if not provided, preserving the
    * original behavior for existing call sites. */
@@ -150,8 +157,12 @@ export function TransactionReceiptView({
   /** Enable real-time SSE updates for confirming transactions */
   enableRealtime?: boolean;
 }) {
-  const explorerUrl = getExplorerUrl(receipt.hash, network);
-  const explorerLabel = getExplorerLabel(network);
+  // Prefer explicitly provided explorer props (keeps this component purely
+  // presentational); fall back to deriving them from the network for callers
+  // that only pass `network`.
+  const resolvedExplorerUrl =
+    explorerUrl ?? getExplorerUrl(receipt.hash, network);
+  const resolvedExplorerLabel = explorerLabel ?? getExplorerLabel(network);
   const actionCopy = ACTION_COPY[receipt.action];
 
   // Subscribe to real-time transaction status updates
@@ -297,24 +308,24 @@ export function TransactionReceiptView({
             </p>
             {(isSuccess || isConfirming || isTimeout) && (
               <a
-                href={explorerUrl}
+                href={resolvedExplorerUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-[10px] font-bold text-greenBright underline underline-offset-4 hover:text-white transition-colors"
               >
-                Verify on {explorerLabel}
+                Verify on {resolvedExplorerLabel}
                 <span className="sr-only"> (opens in a new tab)</span>
                 {EXTERNAL_LINK_ICON}
               </a>
             )}
             {isFailed && (
               <a
-                href={explorerUrl}
+                href={resolvedExplorerUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-[10px] font-bold text-red-300/90 underline underline-offset-4 hover:text-white transition-colors"
               >
-                Inspect on {explorerLabel}
+                Inspect on {resolvedExplorerLabel}
                 <span className="sr-only"> (opens in a new tab)</span>
                 {EXTERNAL_LINK_ICON}
               </a>

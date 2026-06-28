@@ -1,4 +1,4 @@
-#![no_std]
+﻿#![no_std]
 
 use soroban_sdk::{
     contract, contractimpl, contracttype, panic_with_error, token, Address, Env, Map, String, Symbol, Vec,
@@ -13,6 +13,8 @@ const PROJECT_ID_BUCKET_SIZE: u32 = 100;
 mod errors;
 mod events;
 use events::{
+    Publishable,
+    MaxCollaboratorsUpdated,
     CollaboratorsUpdated,
     DepositReceived,
     DistributionComplete,
@@ -28,11 +30,14 @@ use events::{
     TokenDisallowed,
     UnallocatedWithdrawn,
     SplitsUpdatedWithPendingBalance,
+    AccountingDiscrepancy,
 };
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod hardening_tests;
+#[cfg(test)]
+mod reliability_tests;
 
 use errors::SplitError;
 
@@ -48,14 +53,32 @@ const PROJECT_TTL_THRESHOLD_LEDGERS: u32 = 50_000;
 /// created, mutated, distributed, or read.
 /// Active projects survive at least 5 days without a read; any read operation resets this clock.
 ///
-/// 100_000 ledgers ≈ 5.8 days at 5s/ledger close time.
+/// 100_000 ledgers â‰ˆ 5.8 days at 5s/ledger close time.
 ///
 /// TODO: If the contract's administrative initialization pattern is extended in the future,
 /// these hard-coded constants should be considered for migration into configurable instance-storage values.
 const PROJECT_TTL_BUMP_LEDGERS: u32 = 100_000;
 
-/// Maximum number of collaborators allowed in a single project
-const MAX_COLLABORATORS: u32 = 50;
+/// Default maximum number of collaborators allowed in a single project.
+///
+/// This is the value used when no admin override has been configured via
+/// [`SplitNairaContract::set_max_collaborators`]. Keeping it as the default
+/// preserves the historical contract behaviour for existing deployments.
+const DEFAULT_MAX_COLLABORATORS: u32 = 50;
+
+/// Minimum value an admin may configure for the collaborator cap.
+///
+/// A project always requires at least two collaborators (see
+/// [`SplitError::TooFewCollaborators`]), so the cap can never be set below this.
+const MIN_MAX_COLLABORATORS: u32 = 2;
+
+/// Hard upper bound on the admin-configurable collaborator cap.
+///
+/// `distribute` iterates over every collaborator within a single transaction,
+/// so the cap is bounded to keep each distribution within Soroban's per-call
+/// resource limits. This ceiling protects the contract from being configured
+/// into a state where distributions can no longer fit in a ledger.
+const MAX_MAX_COLLABORATORS: u32 = 200;
 
 // ============================================================
 //  DATA TYPES
@@ -110,9 +133,11 @@ pub enum DataKey {
     ProjectBalance(Symbol),
     /// Tracks how much each address has claimed per project
     Claimed(Symbol, Address),
+    /// Amount from the most recent claim for a collaborator on a project
+    LastClaimAmount(Symbol, Address),
     /// Total project count (for enumeration)
     ProjectCount,
-    /// Stores all project IDs in order for enumeration
+    /// Deprecated flat project ID index. Use `ProjectIdsBucket` instead.
     ProjectIds,
     /// Bucketed project ID index for memory-efficient pagination.
     /// Each bucket holds up to PROJECT_ID_BUCKET_SIZE IDs.
@@ -131,16 +156,40 @@ pub enum DataKey {
     AccountedTokenBalance(Address),
     /// Global flag to pause all distributions (emergency stop)
     DistributionsPaused,
+    /// Admin-configurable per-project collaborator cap.
+    /// When unset, the contract falls back to `DEFAULT_MAX_COLLABORATORS`.
+    MaxCollaborators,
 }
 
 /// Returned by `get_claimable`: how much a collaborator has received and the
-/// last distribution round the project has completed.
+/// project's push-distribution round counter.
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClaimableInfo {
     /// Total amount claimed (paid out) to this collaborator across all rounds
     pub claimed: i128,
-    /// Number of distribution rounds completed for this project
+    /// Push-based `distribute` rounds only (not `claim`).
+    pub distribution_round: u32,
+    /// Most recent `claim` payout amount for this collaborator.
+    pub last_claim_amount: i128,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProjectSummary {
+    /// Unique project identifier
+    pub project_id: Symbol,
+
+    /// Human-readable title
+    pub title: String,
+
+    /// Project owner
+    pub owner: Address,
+
+    /// Whether collaborator configuration is immutable
+    pub locked: bool,
+
+    /// Number of completed distributions
     pub distribution_round: u32,
 }
 
@@ -204,6 +253,64 @@ impl SplitNairaContract {
         }
         .publish(&env);
         Ok(())
+    }
+
+    /// Returns the per-project collaborator cap currently in effect.
+    ///
+    /// This is the admin-configured value if one has been set via
+    /// [`Self::set_max_collaborators`], otherwise [`DEFAULT_MAX_COLLABORATORS`].
+    /// Existing deployments that never call the setter keep the default, so this
+    /// is fully backward compatible.
+    pub fn get_max_collaborators(env: Env) -> u32 {
+        Self::effective_max_collaborators(&env)
+    }
+
+    /// Configures the per-project collaborator cap (Scale & Capacity tuning).
+    ///
+    /// Only the contract admin may call this. The value is bounded to
+    /// `[MIN_MAX_COLLABORATORS, MAX_MAX_COLLABORATORS]` so distributions always
+    /// remain executable within Soroban's per-call resource limits.
+    ///
+    /// # Rollback
+    /// To revert to the original behaviour, set the value back to
+    /// `DEFAULT_MAX_COLLABORATORS` (50). The override only affects validation of
+    /// *new* `create_project` / `update_collaborators` calls; projects created
+    /// while a higher cap was active are unaffected by a later reduction.
+    ///
+    /// # Errors
+    /// * `SplitError::Unauthorized`           - caller is not the admin
+    /// * `SplitError::AdminNotSet`            - admin has not been configured
+    /// * `SplitError::InvalidMaxCollaborators`- value outside the allowed range
+    pub fn set_max_collaborators(
+        env: Env,
+        admin: Address,
+        value: u32,
+    ) -> Result<(), SplitError> {
+        Self::require_contract_admin(&env, &admin)?;
+
+        if value < MIN_MAX_COLLABORATORS || value > MAX_MAX_COLLABORATORS {
+            return Err(SplitError::InvalidMaxCollaborators);
+        }
+
+        env.storage()
+            .instance()
+            .set(&DataKey::MaxCollaborators, &value);
+
+        MaxCollaboratorsUpdated {
+            admin: admin.clone(),
+            value,
+        }
+        .publish(&env);
+        Ok(())
+    }
+
+    /// Resolves the effective collaborator cap: the admin override if present,
+    /// otherwise the compiled-in default.
+    fn effective_max_collaborators(env: &Env) -> u32 {
+        env.storage()
+            .instance()
+            .get::<DataKey, u32>(&DataKey::MaxCollaborators)
+            .unwrap_or(DEFAULT_MAX_COLLABORATORS)
     }
 
     /// Adds a token contract address to the allowlist.
@@ -352,20 +459,10 @@ impl SplitNairaContract {
             .persistent()
             .get::<DataKey, u32>(&DataKey::ProjectCount)
             .unwrap_or(0);
+        let new_count = count + 1;
         env.storage()
             .persistent()
-            .set(&DataKey::ProjectCount, &(count + 1));
-
-        // Add project_id to the index for enumeration
-        let mut project_ids: Vec<Symbol> = env
-            .storage()
-            .persistent()
-            .get::<DataKey, Vec<Symbol>>(&DataKey::ProjectIds)
-            .unwrap_or(Vec::new(&env));
-        project_ids.push_back(project_id.clone());
-        env.storage()
-            .persistent()
-            .set(&DataKey::ProjectIds, &project_ids);
+            .set(&DataKey::ProjectCount, &new_count);
 
         // Append to bucketed index for memory-efficient pagination
         let bucket_count: u32 = env
@@ -373,8 +470,7 @@ impl SplitNairaContract {
             .persistent()
             .get::<DataKey, u32>(&DataKey::ProjectIdsBucketCount)
             .unwrap_or(0);
-        let total_ids = project_ids.len();
-        let target_bucket = (total_ids - 1) / PROJECT_ID_BUCKET_SIZE;
+        let target_bucket = (new_count - 1) / PROJECT_ID_BUCKET_SIZE;
         if target_bucket >= bucket_count {
             let mut new_bucket = Vec::new(&env);
             new_bucket.push_back(project_id.clone());
@@ -560,12 +656,15 @@ impl SplitNairaContract {
     /// collaborators according to their basis point shares.
     ///
     /// Compatibility-sensitive invariants:
-    /// - `distribution_round` increments exactly once per successful call
-    /// - `total_distributed` increases by the exact amount paid out
-    /// - the final collaborator receives any integer-division remainder so
-    ///   the full project balance is accounted for every round
+/// - `distribution_round` increments exactly once per successful call
+/// - `total_distributed` increases by the exact amount paid out
+/// - the final collaborator receives any integer-division remainder so
+///   the full project balance is accounted for every round
+/// - Distribution is rejected if the project balance is smaller than the
+///   number of collaborators, ensuring each collaborator can receive at
+///   least one stroop.
     ///
-    /// Anyone can call distribute â€” the math is trustless.
+    /// Anyone can call distribute Ã¢â‚¬â€ the math is trustless.
     ///
     /// # Arguments
     /// * `env`        - Soroban environment
@@ -587,15 +686,21 @@ impl SplitNairaContract {
 
         let mut project = Self::get_project_or_err(&env, &project_id)?;
 
-        // Read project-scoped distributable balance.
-        let balance: i128 = env
-            .storage()
-            .persistent()
-            .get::<DataKey, i128>(&DataKey::ProjectBalance(project_id.clone()))
-            .unwrap_or(0);
-        if balance <= 0 {
-            return Err(SplitError::NoBalance);
-        }
+       let balance: i128 = env
+    .storage()
+    .persistent()
+    .get::<DataKey, i128>(&DataKey::ProjectBalance(project_id.clone()))
+    .unwrap_or(0);
+
+if balance <= 0 {
+    return Err(SplitError::NoBalance);
+}
+
+// Reject tiny balances that would otherwise result in one collaborator
+// receiving the entire remainder while others receive zero.
+if balance < project.collaborators.len() as i128 {
+    return Err(SplitError::NoBalance);
+}
 
         let token_client = token::Client::new(&env, &project.token);
         let contract_address = env.current_contract_address();
@@ -706,28 +811,11 @@ impl SplitNairaContract {
     }
 
     // ----------------------------------------------------------
-    // SELF-SERVICE CLAIM (User Onboarding â€” Wave 5)
+    // SELF-SERVICE CLAIM (User Onboarding Ã¢â‚¬â€ Wave 5)
     // ----------------------------------------------------------
 
-    /// Allows an individual collaborator to pull their proportional share of
-    /// the current project balance without requiring a full `distribute` call.
-    ///
-    /// This is the pull-based counterpart to the push-based `distribute`.
-    /// It is the primary onboarding path for new collaborators who want to
-    /// claim earnings at their own cadence.
-    ///
-    /// # Behaviour
-    /// - If `claimer` is not a collaborator on the project, returns `NotACollaborator`.
-    /// - If the project balance is zero, returns `Ok(0)` (no error, nothing transferred).
-    /// - Otherwise transfers `floor(balance Ã— basis_points / 10_000)` tokens to
-    ///   `claimer`, reduces `ProjectBalance` by that amount, and updates the
-    ///   per-address `Claimed` ledger entry.
-    /// - Emits a `CollaboratorClaimed` event on every non-zero transfer.
-    ///
-    /// # Errors
-    /// * `SplitError::NotFound`          â€” project does not exist
-    /// * `SplitError::NotACollaborator`  â€” claimer is not a collaborator
-    /// * `SplitError::DistributionsPaused` â€” global pause is active
+    /// Self-service pull payout for one collaborator. Does not increment
+    /// `distribution_round` (push-only counter).
     pub fn claim(
         env: Env,
         project_id: Symbol,
@@ -796,6 +884,10 @@ impl SplitNairaContract {
             &DataKey::Claimed(project_id.clone(), claimer.clone()),
             &(prev_claimed + amount),
         );
+        env.storage().persistent().set(
+            &DataKey::LastClaimAmount(project_id.clone(), claimer.clone()),
+            &amount,
+        );
         Self::bump_claimed_ttl(&env, &project_id, &claimer);
 
         // Transfer tokens to claimer
@@ -806,7 +898,7 @@ impl SplitNairaContract {
             project_id: project_id.clone(),
             claimer: claimer.clone(),
             amount,
-            distribution_round: project.distribution_round, // Add this line
+            distribution_round: project.distribution_round,
         }
         .publish(&env);
 
@@ -891,6 +983,36 @@ impl SplitNairaContract {
         result
     }
 
+    pub fn list_project_summaries(
+    env: Env,
+    start: u32,
+    limit: u32,
+) -> Vec<ProjectSummary> {
+    let ids = Self::get_project_ids_from_buckets(&env, start, limit);
+
+    let mut result = Vec::new(&env);
+
+    for project_id in ids.iter() {
+        if let Some(project) = env
+            .storage()
+            .persistent()
+            .get::<DataKey, SplitProject>(
+                &DataKey::Project(project_id),
+            )
+        {
+            result.push_back(ProjectSummary {
+                project_id: project.project_id,
+                title: project.title,
+                owner: project.owner,
+                locked: project.locked,
+                distribution_round: project.distribution_round,
+            });
+        }
+    }
+
+    result
+}
+
     /// Returns the project-scoped distributable balance.
     pub fn get_balance(env: Env, project_id: Symbol) -> Result<i128, SplitError> {
         Self::get_project_or_err(&env, &project_id)?;
@@ -901,16 +1023,23 @@ impl SplitNairaContract {
             .unwrap_or(0))
     }
 
-    /// Returns contract token balance not accounted for in any project balance.
-    ///
-    /// `unallocated = token_balance(contract) - sum(project_balances_for_token)`
+    /// Unallocated token balance (clamped to zero on accounting mismatch).
     pub fn get_unallocated_balance(env: Env, token: Address) -> Result<i128, SplitError> {
         let contract_address = env.current_contract_address();
         let token_client = token::Client::new(&env, &token);
         let contract_token_balance = token_client.balance(&contract_address);
 
         let accounted = Self::get_accounted_balance(&env, &token)?;
-        Ok(contract_token_balance - accounted)
+        if contract_token_balance < accounted {
+            AccountingDiscrepancy {
+                token: token.clone(),
+                contract_balance: contract_token_balance,
+                accounted_balance: accounted,
+            }
+            .publish(&env);
+            return Ok(0);
+        }
+        Ok(contract_token_balance.saturating_sub(accounted))
     }
 
     /// Admin-only recovery for direct token transfers into the contract address.
@@ -1046,11 +1175,61 @@ impl SplitNairaContract {
         Self::get_project_ids_from_buckets(&env, start, limit)
     }
 
-    /// Returns how much a collaborator has been paid across all distribution
-    /// rounds for a given project, plus the number of completed rounds.
-    ///
-    /// # Errors
-    /// * `SplitError::NotFound` - if the project does not exist
+    /// Migrates deprecated flat `ProjectIds` into bucketed index.
+    pub fn migrate_flat_to_buckets(env: Env, admin: Address) -> Result<(), SplitError> {
+        Self::require_contract_admin(&env, &admin)?;
+
+        let flat_ids: Vec<Symbol> = env
+            .storage()
+            .persistent()
+            .get::<DataKey, Vec<Symbol>>(&DataKey::ProjectIds)
+            .unwrap_or(Vec::new(&env));
+
+        let bucket_count: u32 = env
+            .storage()
+            .persistent()
+            .get::<DataKey, u32>(&DataKey::ProjectIdsBucketCount)
+            .unwrap_or(0);
+
+        if bucket_count == 0 && flat_ids.len() > 0 {
+            for i in 0..flat_ids.len() {
+                let id = flat_ids.get(i as u32).unwrap();
+                let idx = i as u32;
+                let target_bucket = idx / PROJECT_ID_BUCKET_SIZE;
+                let offset = idx % PROJECT_ID_BUCKET_SIZE;
+                if offset == 0 {
+                    let mut bucket = Vec::new(&env);
+                    bucket.push_back(id);
+                    env.storage()
+                        .persistent()
+                        .set(&DataKey::ProjectIdsBucket(target_bucket), &bucket);
+                } else {
+                    let mut bucket: Vec<Symbol> = env
+                        .storage()
+                        .persistent()
+                        .get::<DataKey, Vec<Symbol>>(&DataKey::ProjectIdsBucket(target_bucket))
+                        .unwrap_or(Vec::new(&env));
+                    bucket.push_back(id);
+                    env.storage()
+                        .persistent()
+                        .set(&DataKey::ProjectIdsBucket(target_bucket), &bucket);
+                }
+            }
+            let new_bucket_count =
+                (flat_ids.len() as u32 - 1) / PROJECT_ID_BUCKET_SIZE + 1;
+            env.storage()
+                .persistent()
+                .set(&DataKey::ProjectIdsBucketCount, &new_bucket_count);
+        }
+
+        if env.storage().persistent().has(&DataKey::ProjectIds) {
+            env.storage().persistent().remove(&DataKey::ProjectIds);
+        }
+
+        Ok(())
+    }
+
+    /// Claimed amount, push `distribution_round`, and last `claim` amount.
     pub fn get_claimable(
         env: Env,
         project_id: Symbol,
@@ -1061,11 +1240,20 @@ impl SplitNairaContract {
         let claimed = env
             .storage()
             .persistent()
-            .get::<DataKey, i128>(&DataKey::Claimed(project_id, collaborator))
+            .get::<DataKey, i128>(&DataKey::Claimed(project_id.clone(), collaborator.clone()))
+            .unwrap_or(0);
+        let last_claim_amount = env
+            .storage()
+            .persistent()
+            .get::<DataKey, i128>(&DataKey::LastClaimAmount(
+                project_id,
+                collaborator,
+            ))
             .unwrap_or(0);
         Ok(ClaimableInfo {
             claimed,
             distribution_round: project.distribution_round,
+            last_claim_amount,
         })
     }
 
@@ -1120,7 +1308,7 @@ impl SplitNairaContract {
     /// Transfers ownership of a project to a new address.
     ///
     /// Only the current owner can call this. Works on both locked and unlocked
-    /// projects â€” ownership transfer does not depend on lock state. The new
+    /// projects Ã¢â‚¬â€ ownership transfer does not depend on lock state. The new
     /// owner gains all owner-gated capabilities (update metadata, update
     /// collaborators on unlocked projects, lock, transfer again).
     ///
@@ -1205,6 +1393,15 @@ impl SplitNairaContract {
                 PROJECT_TTL_BUMP_LEDGERS,
             );
         }
+        let last_claim_key =
+            DataKey::LastClaimAmount(project_id.clone(), collaborator.clone());
+        if env.storage().persistent().has(&last_claim_key) {
+            env.storage().persistent().extend_ttl(
+                &last_claim_key,
+                PROJECT_TTL_THRESHOLD_LEDGERS,
+                PROJECT_TTL_BUMP_LEDGERS,
+            );
+        }
     }
 
     fn require_contract_admin(env: &Env, admin: &Address) -> Result<(), SplitError> {
@@ -1252,7 +1449,7 @@ impl SplitNairaContract {
             return Err(SplitError::TooFewCollaborators);
         }
 
-        if collaborators.len() > MAX_COLLABORATORS {
+        if collaborators.len() > Self::effective_max_collaborators(env) {
             return Err(SplitError::TooManyCollaborators);
         }
 
@@ -1419,3 +1616,4 @@ impl SplitNairaContract {
         Ok(total)
     }
 }
+

@@ -71,6 +71,15 @@ export const adminLimiter = rateLimit({
   handler: rateLimitHandler,
 });
 
+/** SSE connection limiter — protects event stream endpoints from excessive connection rate. */
+export const sseConnectionLimiter = rateLimit({
+  windowMs: WINDOW_MS,
+  limit: Number(process.env.RATE_LIMIT_SSE_MAX ?? 20),
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitHandler,
+});
+
 /**
  * Auth / wallet endpoints — strict burst cap to prevent credential stuffing
  * and replay-attack floods.

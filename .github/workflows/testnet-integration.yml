@@ -1,0 +1,104 @@
+name: Testnet Integration (Nightly)
+
+# Issue #369: run the API happy-path against a real Soroban testnet so that
+# RPC/contract breaking changes are caught before they reach deployment.
+# Unit tests mock RPC; this exercises the live network.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# Required configuration (GitHub → Settings → Environments → "testnet")
+#
+#   Secrets:
+#     STELLAR_TESTNET_CONTRACT_ID     Deployed SplitNaira contract id (C...)
+#     STELLAR_TESTNET_SOURCE_ACCOUNT  A funded testnet account public key (G...)
+#                                     used as the simulation source / owner.
+#   Optional secrets (enable extra steps):
+#     STELLAR_TESTNET_TOKEN           A SAC token contract id (C...) — enables
+#                                     the create_project build/simulate step.
+#     STELLAR_TESTNET_PROJECT_ID      An existing on-chain project id — enables
+#                                     the deposit build/simulate step.
+#
+# The public testnet endpoints (RPC, Horizon, network passphrase) are set as
+# defaults below and rarely need overriding.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  schedule:
+    # 03:00 UTC nightly
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: "Optional existing testnet project id (enables deposit step)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  testnet-integration:
+    name: API happy-path against live testnet
+    runs-on: ubuntu-latest
+    environment: testnet # provides the STELLAR_TESTNET_* secrets
+
+    env:
+      RUN_TESTNET_INTEGRATION: "1"
+      # Public testnet endpoints (override via env if needed).
+      SOROBAN_RPC_URL: "https://soroban-testnet.stellar.org"
+      HORIZON_URL: "https://horizon-testnet.stellar.org"
+      SOROBAN_NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
+      # From the "testnet" environment secrets.
+      CONTRACT_ID: ${{ secrets.STELLAR_TESTNET_CONTRACT_ID }}
+      SIMULATOR_ACCOUNT: ${{ secrets.STELLAR_TESTNET_SOURCE_ACCOUNT }}
+      TESTNET_SOURCE_ACCOUNT: ${{ secrets.STELLAR_TESTNET_SOURCE_ACCOUNT }}
+      TESTNET_TOKEN: ${{ secrets.STELLAR_TESTNET_TOKEN }}
+      TESTNET_PROJECT_ID: ${{ inputs.project_id || secrets.STELLAR_TESTNET_PROJECT_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Verify required secrets are configured
+        run: |
+          missing=""
+          [ -n "$CONTRACT_ID" ] || missing="$missing STELLAR_TESTNET_CONTRACT_ID"
+          [ -n "$TESTNET_SOURCE_ACCOUNT" ] || missing="$missing STELLAR_TESTNET_SOURCE_ACCOUNT"
+          if [ -n "$missing" ]; then
+            echo "❌ Missing required testnet secrets:$missing" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "Configure them under the repo's \"testnet\" environment." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - name: Run testnet integration suite
+        id: integration
+        run: npm run test:integration -w backend -- --reporter=verbose
+
+      - name: Report result to workflow summary
+        if: always()
+        run: |
+          {
+            echo "## Testnet Integration — ${{ steps.integration.outcome }}"
+            echo ""
+            if [ "${{ steps.integration.outcome }}" = "success" ]; then
+              echo "✅ The API happy-path succeeded against the live Soroban testnet."
+            else
+              echo "❌ The API happy-path FAILED against the live Soroban testnet."
+              echo "This usually means an RPC change, a redeployed/incompatible contract,"
+              echo "or an unfunded source account. Check the \"Run testnet integration suite\" logs."
+            fi
+            echo ""
+            echo "| Setting | Value |"
+            echo "| --- | --- |"
+            echo "| RPC | \`$SOROBAN_RPC_URL\` |"
+            echo "| Contract | \`${CONTRACT_ID:-<unset>}\` |"
+            echo "| Source account | \`${TESTNET_SOURCE_ACCOUNT:0:6}…\` |"
+            echo "| create_project step | $([ -n "$TESTNET_TOKEN" ] && echo enabled || echo 'skipped (no STELLAR_TESTNET_TOKEN)') |"
+            echo "| deposit step | $([ -n "$TESTNET_PROJECT_ID" ] && echo enabled || echo 'skipped (no project id)') |"
+          } >> "$GITHUB_STEP_SUMMARY"

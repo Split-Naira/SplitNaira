@@ -1,5 +1,7 @@
 #![cfg(test)]
 
+extern crate std;
+
 use dx_tooling::validator::run_checks;
 
 /// Source code of the contract under test.
@@ -41,7 +43,7 @@ fn validator_detects_missing_authorization() {
         violations
     );
 
-    let violations_text = format!("{:#?}", violations);
+    let violations_text = std::format!("{:#?}", violations);
 
     assert!(
         violations_text.contains("claim"),

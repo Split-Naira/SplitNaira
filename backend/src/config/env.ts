@@ -29,6 +29,11 @@ const backendEnvSchema = z.object({
     .optional()
     .default("true"),
 
+    LOG_SCRUB_WALLET_ADDRESSES: z
+  .enum(["true", "false"])
+  .optional()
+  .default(process.env.NODE_ENV === "production" ? "true" : "false"),
+
   PAYMENTS_ADMIN_API_KEY: z.string().optional(),
   PAYMENTS_ADMIN_WRITE_ENABLED: z
     .enum(["true", "false"])
