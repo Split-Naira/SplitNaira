@@ -182,6 +182,7 @@ function logPaymentsAdminAction(
 splitsRouter.get("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = listProjectsSchema.safeParse(req.query);
+
     if (!parsed.success) {
       throw new AppError(
         ErrorType.VALIDATION,
@@ -193,13 +194,27 @@ splitsRouter.get("/", async (req: Request, res: Response, next: NextFunction) =>
     }
 
     const { start, limit, search, type } = parsed.data;
-    const projects = await listProjects(start, limit, search, type);
-    return res.status(200).json(serializeBigInts(projects));
+
+    const { projects, total } = await listProjects(
+      start,
+      limit,
+      search,
+      type
+    );
+
+    return res.status(200).json(
+      serializeBigInts({
+        projects,
+        total,
+        start,
+        limit,
+        hasMore: start + projects.length < total,
+      })
+    );
   } catch (error) {
     return next(error);
   }
 });
-
 /**
  * @openapi
  * GET /splits/{projectId}

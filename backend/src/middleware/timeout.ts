@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { RpcTimeoutError } from "../services/stellar.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 

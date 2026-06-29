@@ -2,7 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import type { ZodError } from "zod";
 import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
 import { logger } from "../services/logger.js";
-import { RpcError } from "../services/stellar.js";
+import { RpcError, RpcTimeoutError } from "../services/stellar.js";
 
 function formatZodError(err: ZodError) {
   const flattened = err.flatten();
@@ -75,6 +75,14 @@ export function errorHandler(
       });
     });
   }
+  if (err instanceof RpcTimeoutError) {
+  return res.status(504).json({
+    error: "timeout_error",
+    message: err.message,
+    requestId,
+    details: {}
+  });
+}
 
   if (err instanceof RpcError) {
     return res.status(err.statusCode).json({

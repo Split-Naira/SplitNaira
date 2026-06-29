@@ -3,6 +3,9 @@ import { getEnvDiagnostics } from "../config/env.js";
 import { getDataSource } from "../services/database.js";
 import { getCacheStats } from "../services/stellar.js";
 import { getServiceHealth } from "../services/EventListenerService.js";
+import { createPayoutHistoryService } from "../services/PayoutHistoryService.js";
+
+const payoutHistory = createPayoutHistoryService();
 
 export const opsRouter = Router();
 
@@ -34,6 +37,24 @@ export interface MainnetReadinessResponse {
     };
   };
 }
+
+opsRouter.post("/backfill", async (req, res) => {
+  try {
+    const { fromLedger } = req.body;
+
+    await payoutHistory.backfill(fromLedger);
+
+    res.json({
+      success: true,
+      message: "Backfill completed",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
 
 opsRouter.get("/status", (_req, res) => {
   res.json({
