@@ -29,7 +29,6 @@ import {
   requirePaymentsAdminAccess,
 } from "./middleware/payments-admin.js";
 import { auditAdminMutationsMiddleware } from "./middleware/audit-log.js";
-import { eventsRouter } from "./routes/events.js";
 import { validateEnv, printEnvDiagnostics } from "./config/env.js";
 import { initDatabase, closeDatabase } from "./services/database.js";
 import { logger } from "./services/logger.js";
@@ -49,6 +48,12 @@ const corsOrigins = process.env.CORS_ORIGIN
       .map((origin) => origin.trim())
       .filter(Boolean)
   : ["http://localhost:3000"];
+
+if (process.env.NODE_ENV === "production" && corsOrigins.includes("*")) {
+  throw new Error(
+    "CORS wildcard (*) is not allowed in production. Set CORS_ORIGIN to specific origin(s)."
+  );
+}
 
 const corsOrigin = corsOrigins.length > 0 ? corsOrigins : false;
 
@@ -78,10 +83,8 @@ app.use(express.json({ limit: "1mb" }));
 app.use(requestIdMiddleware);
 app.use(metricsMiddleware);
 
-// Global safety-net — must run before all route-specific limiters (#290)
 app.use(globalLimiter);
 
-// Swagger UI needs inline scripts/styles — relax CSP only for /docs
 app.use("/docs", (_req, res, next) => {
   res.setHeader(
     "Content-Security-Policy",
@@ -124,7 +127,6 @@ app.use("/splits", (req, res, next) => {
   if (req.method === "GET") return readLimiter(req, res, next);
   return writeLimiter(req, res, next);
 });
-// Auth endpoints get a stricter per-IP limiter to block credential stuffing
 app.use("/users/register", authLimiter);
 app.use("/users/login", authLimiter);
 app.use("/users", (req, res, next) => {
@@ -135,11 +137,7 @@ app.use("/transactions", readLimiter);
 app.use("/events", sseConnectionLimiter);
 
 app.get("/", (_req, res) => {
-  res.json({
-    name: "SplitNaira API",
-    status: "ok",
-    version: "0.1.0",
-  });
+  res.json({ name: "SplitNaira API", status: "ok", version: "0.1.0" });
 });
 
 app.use("/health", healthRouter);
@@ -153,9 +151,6 @@ app.use("/users", usersRouter);
 app.use("/transactions", transactionsRouter);
 app.use("/events", eventsRouter);
 
-// ─── OpenAPI & Swagger Documentation ──────────────────────────────────────────
-
-// Serve OpenAPI spec as JSON
 app.get("/api/openapi.json", async (_req, res, next) => {
   try {
     const { generateOpenApi } = await import("./openapi.js");
@@ -166,7 +161,6 @@ app.get("/api/openapi.json", async (_req, res, next) => {
   }
 });
 
-// Serve Swagger UI at /api/docs
 const swaggerOptions = {
   customCss: ".swagger-ui .topbar { display: none }",
   customSiteTitle: "SplitNaira API Documentation",
@@ -179,18 +173,11 @@ const swaggerOptions = {
 };
 
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(null, swaggerOptions));
-
-// Redirect /api/docs/ to /api/docs
-app.get("/api/docs/", (_req, res) => {
-  res.redirect("/api/docs");
-});
+app.get("/api/docs/", (_req, res) => { res.redirect("/api/docs"); });
 
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-// Lazily initialise Sentry only when SENTRY_DSN is set. Dynamic import avoids
-// loading the @sentry/node OpenTelemetry instrumentation in test/CI environments
-// where no DSN is configured, which would otherwise patch http internals.
 async function initSentry(): Promise<void> {
   if (!process.env.SENTRY_DSN) return;
   const Sentry = await import("@sentry/node");
@@ -201,10 +188,7 @@ async function initSentry(): Promise<void> {
     release: process.env.npm_package_version,
     beforeSend(event) {
       if (scrubWallets) {
-        const scrubbed = JSON.stringify(event).replace(
-          /\b[GC][A-Z2-7]{55}\b/g,
-          "[WALLET_REDACTED]"
-        );
+        const scrubbed = JSON.stringify(event).replace(/\b[GC][A-Z2-7]{55}\b/g, "[WALLET_REDACTED]");
         return JSON.parse(scrubbed);
       }
       return event;
@@ -222,47 +206,31 @@ if (process.env.NODE_ENV !== "test") {
   const start = async () => {
     try {
       await initSentry();
-
-      if (process.env.NODE_ENV !== "production") {
-        printEnvDiagnostics();
-      }
+      if (process.env.NODE_ENV !== "production") { printEnvDiagnostics(); }
       validateEnv();
-
       await initDatabase();
       await startEventListenerService();
       markStartupComplete();
 
       const port = Number(process.env.PORT ?? 3001);
-      const server = app.listen(port, () => {
-        logger.info(`Server started on port ${port}`);
-      });
+      const server = app.listen(port, () => { logger.info(`Server started on port ${port}`); });
 
-      // Graceful shutdown
       const shutdown = async (signal: NodeJS.Signals) => {
         logger.info(`Received ${signal}. Shutting down...`);
         stopEventListenerService();
         await closeDatabase();
         server.close((err?: Error) => {
-          if (err) {
-            logger.error("Error during server close", { error: err });
-            process.exit(1);
-          }
+          if (err) { logger.error("Error during server close", { error: err }); process.exit(1); }
           logger.info("Server closed cleanly");
           process.exit(0);
         });
-
-        // Fallback: force exit after timeout
         const forceTimeoutMs = Number(process.env.SHUTDOWN_FORCE_TIMEOUT_MS ?? 10_000);
-        setTimeout(() => {
-          logger.warn("Force exiting after timeout");
-          process.exit(1);
-        }, forceTimeoutMs).unref();
+        setTimeout(() => { logger.warn("Force exiting after timeout"); process.exit(1); }, forceTimeoutMs).unref();
       };
 
       process.on("SIGINT", shutdown);
       process.on("SIGTERM", shutdown);
 
-      // Fatal error handlers
       process.on("unhandledRejection", (reason) => {
         logger.error("Unhandled promise rejection", { reason });
         void captureToSentry(reason);

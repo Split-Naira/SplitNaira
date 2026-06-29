@@ -25,20 +25,7 @@ export function createDataSource(): DataSource {
     !databaseUrl.includes("sslmode=") &&
     !databaseUrl.includes("ssl=");
 
-  // Production guidance:
-  // - `DATABASE_POOL_MAX` controls the PG connection pool size (TypeORM -> pg `max`).
-  //   Set this based on your Postgres instance limits and expected concurrency.
-  //   A conservative default is 10; for Render or managed DBs, ensure the total
-  //   connections across app instances stays below the DB's max_connections.
-  // - SSL is automatically enabled for non-localhost hosts unless overridden
-  //   in the DATABASE_URL (sslmode/ssl). For strict environments set
-  //   `DATABASE_URL` with `sslmode=require` or configure a CA and set
-  //   `PGSSLMODE` accordingly.
-  const poolMax = env.DATABASE_POOL_MAX
-    ? Number(env.DATABASE_POOL_MAX)
-    : 10;
-
-  // Additional pool tuning options exposed via env vars if needed
+  const poolMax = env.DATABASE_POOL_MAX ? Number(env.DATABASE_POOL_MAX) : 10;
   const poolIdleMs = env.DATABASE_POOL_IDLE_MS ? Number(env.DATABASE_POOL_IDLE_MS) : 30000;
   const poolConnTimeoutMs = env.DATABASE_POOL_CONN_TIMEOUT_MS ? Number(env.DATABASE_POOL_CONN_TIMEOUT_MS) : 2000;
 
@@ -51,33 +38,20 @@ export function createDataSource(): DataSource {
     migrations: ["src/migrations/*.ts"],
     migrationsTableName: "migrations",
     extra: {
-      // `max` is the maximum number of clients in the pool.
       max: poolMax,
-      // Idle timeout (ms) before a client is closed
       idleTimeoutMillis: poolIdleMs,
-      // How long to wait when connecting a new client
-      connectionTimeoutMillis: poolConnTimeoutMs
+      connectionTimeoutMillis: poolConnTimeoutMs,
     },
-    ssl: needsSsl
-      ? {
-        rejectUnauthorized: false
-      }
-      : false
+    ssl: needsSsl ? { rejectUnauthorized: false } : false,
   });
 }
 
 export async function initDatabase(): Promise<DataSource> {
-  if (AppDataSource?.isInitialized) {
-    return AppDataSource;
-  }
-
-  if (initializationPromise) {
-    return initializationPromise;
-  }
+  if (AppDataSource?.isInitialized) return AppDataSource;
+  if (initializationPromise) return initializationPromise;
 
   initializationPromise = (async () => {
     AppDataSource = createDataSource();
-
     try {
       await AppDataSource.initialize();
       logger.info("Database connection established");
@@ -101,11 +75,22 @@ export function getDataSource(): DataSource {
   return AppDataSource;
 }
 
+const DEADLOCK_ERROR_CODE = "40P01";
+const DEADLOCK_MAX_RETRIES = 3;
+const DEADLOCK_RETRY_DELAY_MS = 50;
+
+function isDeadlockError(error: unknown): boolean {
+  return (error as any)?.code === DEADLOCK_ERROR_CODE;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
- * Execute a callback function within a database transaction.
- * Automatically rolls back on error.
- * @param callback - Async function to execute within transaction
- * @returns Promise with the callback result
+ * Execute a callback within a database transaction.
+ * Automatically rolls back on error and retries up to 3 times on PostgreSQL
+ * deadlock errors (error code 40P01).
  */
 
 function isRetryableTransactionError(error: unknown): boolean {
@@ -125,37 +110,41 @@ export async function withTransaction<T>(
   callback: (queryRunner: QueryRunner) => Promise<T>
 ): Promise<T> {
   const dataSource = getDataSource();
-  const queryRunner = dataSource.createQueryRunner();
+  let attempt = 0;
 
-  await queryRunner.connect();
-  await queryRunner.startTransaction();
+  while (true) {
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-  try {
-    const result = await callback(queryRunner);
-    await queryRunner.commitTransaction();
-    return result;
-  } catch (error) {
-    await queryRunner.rollbackTransaction();
-    throw error;
-  } finally {
-    await queryRunner.release();
+    try {
+      const result = await callback(queryRunner);
+      await queryRunner.commitTransaction();
+      return result;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+
+      if (isDeadlockError(error) && attempt < DEADLOCK_MAX_RETRIES - 1) {
+        attempt++;
+        logger.warn("Deadlock detected, retrying transaction", { attempt, maxRetries: DEADLOCK_MAX_RETRIES });
+        await sleep(DEADLOCK_RETRY_DELAY_MS * attempt);
+      } else {
+        throw error;
+      }
+    } finally {
+      await queryRunner.release();
+    }
   }
 }
 
 export async function closeDatabase(): Promise<void> {
   if (initializationPromise && !AppDataSource?.isInitialized) {
-    try {
-      await initializationPromise;
-    } catch {
-      // Ignore initialization failures during cleanup.
-    }
+    try { await initializationPromise; } catch { /* ignore */ }
   }
-
   if (AppDataSource?.isInitialized) {
     await AppDataSource.destroy();
     logger.info("Database connection closed");
   }
-
   AppDataSource = null;
   initializationPromise = null;
 }
