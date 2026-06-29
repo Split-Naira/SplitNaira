@@ -25,7 +25,7 @@ SplitNaira is in active development. This repo currently contains:
 
 ## Quick Start
 
-### Option 1: Docker Compose (Recommended for demos & pre-deploy)
+### Option 1: Docker Compose (Recommended for demos and pre-deployment checks)
 
 ```bash
 # Copy the environment template
@@ -173,34 +173,36 @@ cargo build --release --target wasm32v1-none --locked
 ## Project Structure
 
 ```
-splitNaira/
+SplitNaira/
 ├── backend/         # Express API
 ├── contracts/      # Soroban smart contracts
 ├── frontend/       # Next.js application
-└── demo/          # Static prototype
+└── demo/           # Static prototype
 ```
 
 ## Operational Health Checks
 
 | Endpoint | Purpose |
 |-----------|----------|
-| /health/live | Liveness Probe |
-| /health/ready | Readiness Probe |
-| /health/startup | Startup Probe |
+| `/health/live` | Liveness probe |
+| `/health/ready` | Readiness probe |
+| `/health/startup` | Startup probe |
 
-Used for Kubernetes, Docker Swarm and cloud deployment monitoring.
+Used for Kubernetes, Docker Swarm, and cloud deployment monitoring.
 
 ## Observability
 
 ### Metrics
 
+```http
 GET /metrics
+```
 
 ### Request Tracing
 
 All requests include:
 
-X-Correlation-Id
+`X-Correlation-Id`
 
 ### Logging
 
@@ -210,7 +212,9 @@ Structured JSON logs are emitted for production monitoring.
 
 Endpoint:
 
+```http
 GET /ops/mainnet-readiness
+```
 
 Purpose:
 
@@ -226,22 +230,28 @@ This endpoint performs a lightweight operational check that includes:
 - cache and runtime capacity metrics
 - production secret audit and contract ID consistency check
 
-Use it as a pre-deploy gate during release and rollback planning.
+Use it as a pre-deployment gate during release and rollback planning.
 
 ## Developer Setup
 
+```bash
 npm install
 npm run verify:env
 npm run dev
+```
 
 ## Code Quality
 
+```bash
 npm run lint
 npm run test
+```
 
 ## Bundle Analysis
 
+```bash
 npm run analyze
+```
 
 ## Documentation
 
