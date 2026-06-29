@@ -6,6 +6,7 @@ import { ToastProvider } from "@/components/toast-provider";
 import { WalletProvider } from "@/components/wallet-provider";
 import { AppErrorBoundary } from "@/components/app-error-boundary";
 import { QueryProvider } from "@/components/query-provider";
+import { LoadingBar } from "@/components/LoadingBar";
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -38,6 +39,7 @@ export default async function RootLayout({
   return (
     <html lang={locale}>
       <body className={`${dmSans.variable} ${syne.variable} antialiased`}>
+        <LoadingBar />
         <AppErrorBoundary>
           <QueryProvider>
             <ToastProvider>
