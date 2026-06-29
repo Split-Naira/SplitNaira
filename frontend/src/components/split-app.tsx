@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { reportLoadingFlags, type LoadingBarFlags } from "./LoadingBar";
 import { useTranslations } from "next-intl";
 
 import { SplitApp as SplitAppLegacy } from "./split-app-legacy";
@@ -56,6 +57,10 @@ export function SplitApp() {
 
   useFocusTrap(activeModalRef, isModalOpen);
   useLockBodyScroll(isModalOpen);
+
+  const onLoadingFlagsChange = useCallback((flags: LoadingBarFlags) => {
+    reportLoadingFlags(flags);
+  }, []);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -121,7 +126,7 @@ export function SplitApp() {
 
   return (
     <div ref={rootRef}>
-      <SplitAppLegacy />
+      <SplitAppLegacy onLoadingFlagsChange={onLoadingFlagsChange} />
     </div>
   );
 }

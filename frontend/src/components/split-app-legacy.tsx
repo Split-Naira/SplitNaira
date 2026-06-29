@@ -57,6 +57,7 @@ import { DashboardView } from "./dashboard/DashboardView";
 import { CreateSplitWizard } from "./create/CreateSplitWizard";
 import { ManageSplitView } from "./manage/ManageSplitView";
 import { ProjectsList } from "./projects/ProjectsList";
+import type { LoadingBarFlags } from "./LoadingBar";
 
 interface CollaboratorInput {
   id: string;
@@ -109,7 +110,11 @@ const SEEDED_PROJECT_IDS = [
   "cultural_resonance_05",
 ];
 
-export function SplitApp() {
+export function SplitApp({
+  onLoadingFlagsChange,
+}: {
+  onLoadingFlagsChange?: (flags: LoadingBarFlags) => void;
+} = {}) {
   const { wallet, connect, refresh } = useWallet();
 
   const {
@@ -938,6 +943,27 @@ export function SplitApp() {
       setIsUpdatingAllowlist(false);
     }
   };
+
+  useEffect(() => {
+    onLoadingFlagsChange?.({
+      isLoadingDashboard,
+      isLoadingProjectsList,
+      isFetchingProject,
+    });
+
+    return () => {
+      onLoadingFlagsChange?.({
+        isLoadingDashboard: false,
+        isLoadingProjectsList: false,
+        isFetchingProject: false,
+      });
+    };
+  }, [
+    isLoadingDashboard,
+    isLoadingProjectsList,
+    isFetchingProject,
+    onLoadingFlagsChange,
+  ]);
 
   useEffect(() => {
     if (activeTab === "projects") {
