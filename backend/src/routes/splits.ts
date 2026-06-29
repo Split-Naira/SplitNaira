@@ -125,7 +125,9 @@ export {
   buildAllowTokenUnsignedXdr,
   buildDisallowTokenUnsignedXdr,
   buildWithdrawUnallocatedUnsignedXdr,
-  buildClaimUnsignedXdr
+  buildClaimUnsignedXdr,
+  encodeCursor,
+  decodeCursor
 } from "../services/splits.service.js";
 
 function sendValidationError(

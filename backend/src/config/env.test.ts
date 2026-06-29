@@ -171,6 +171,37 @@ describe("validateEnv()", () => {
     expect(env.PAYMENTS_ADMIN_API_KEY).toBe("super-secret-admin-key");
     expect(env.PAYMENTS_ADMIN_WRITE_ENABLED).toBe("false");
   });
+
+  it("rejects CORS_ORIGIN with wildcard in production", () => {
+    Object.assign(process.env, {
+      ...VALID_ENV,
+      NODE_ENV: "production",
+      CORS_ORIGIN: "*"
+    });
+
+    expect(() => validateEnv()).toThrowError(/CORS_ORIGIN.*must not contain '\*'/);
+  });
+
+  it("rejects CORS_ORIGIN containing wildcard with other origins in production", () => {
+    Object.assign(process.env, {
+      ...VALID_ENV,
+      NODE_ENV: "production",
+      CORS_ORIGIN: "https://app.splitnaira.com,*"
+    });
+
+    expect(() => validateEnv()).toThrowError(/\*'/);
+  });
+
+  it("allows CORS_ORIGIN wildcard in development mode", () => {
+    Object.assign(process.env, {
+      ...VALID_ENV,
+      NODE_ENV: "development",
+      CORS_ORIGIN: "*"
+    });
+
+    const env = validateEnv();
+    expect(env.CORS_ORIGIN).toBe("*");
+  });
 });
 
 // ─── getEnv() ─────────────────────────────────────────────────────────────────

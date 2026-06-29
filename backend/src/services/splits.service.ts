@@ -37,6 +37,19 @@ import {
   type AdminTokenRequest
 } from "./contract-helpers.js";
 
+export function encodeCursor(value: number): string {
+  return Buffer.from(String(value)).toString("base64");
+}
+
+export function decodeCursor(cursor: string): number {
+  const decoded = Buffer.from(cursor, "base64").toString("utf8");
+  const num = Number(decoded);
+  if (!Number.isInteger(num) || num < 0) {
+    throw new Error("Invalid cursor");
+  }
+  return num;
+}
+
 export function serializeBigInts(obj: unknown): unknown {
   if (obj === null || obj === undefined) return obj;
   if (typeof obj === "bigint") return obj.toString();
