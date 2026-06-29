@@ -10,6 +10,7 @@ import type {
 } from "@/lib/api";
 import type { WalletState } from "@/lib/wallet";
 import { SummaryCardSkeleton } from "../Skeleton";
+import { ProjectCard } from "../ProjectCard";
 
 export interface AllowlistActionResult {
   action: "allow" | "disallow";
@@ -561,17 +562,11 @@ export function DashboardView({
             {dashboardData
               .filter((p) => p.collaborators.some((c) => c.address === wallet.address))
               .map((p) => (
-                <div key={p.projectId} className="bg-white/5 rounded-2xl p-5 border border-white/5 flex justify-between items-center">
-                  <div className="space-y-1">
-                    <p className="font-bold text-xs truncate max-w-[120px]">{sanitizeText(p.title)}</p>
-                    <p className="text-[9px] text-muted uppercase tracking-widest">
-                      {(p.collaborators.find((c) => c.address === wallet.address)?.basisPoints ?? 0) / 100}% Share
-                    </p>
-                  </div>
-                  <p className="font-mono text-sm font-bold text-greenBright/80">
-                    +{Number(userEarnings[p.projectId] || 0).toLocaleString()}
-                  </p>
-                </div>
+                <ProjectCard
+                  key={p.projectId}
+                  project={p}
+                  userEarnings={userEarnings[p.projectId]}
+                />
               ))}
           </div>
         </div>

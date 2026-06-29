@@ -1,45 +1,88 @@
 "use client";
 
 import { clsx } from "clsx";
+import { sanitizeText } from "@/lib/security";
+import type { SplitProject } from "@/lib/stellar";
 
 export interface ProjectCardProps {
-  id: string;
-  name: string;
-  status: "active" | "locked" | "inactive";
-  balance: string;
-  collaboratorCount: number;
-  onDistribute?: (id: string) => void;
+  project: SplitProject;
+  userEarnings?: string;
+  onDistribute?: () => void;
+  onSelect?: () => void;
+  isSelected?: boolean;
 }
 
-const statusClasses: Record<ProjectCardProps["status"], string> = {
-  active: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  locked: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-  inactive: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400",
-};
+export function ProjectCard({ project, userEarnings, onDistribute, onSelect, isSelected }: ProjectCardProps) {
+  const Compact = Boolean(userEarnings);
 
-export function ProjectCard({ id, name, status, balance, collaboratorCount, onDistribute }: ProjectCardProps) {
-  return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 flex flex-col gap-3 shadow-sm">
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">{name}</h3>
-        <span className={clsx("shrink-0 rounded-full px-2 py-0.5 text-xs font-medium capitalize", statusClasses[status])}>
-          {status}
-        </span>
+  const outerClass = Compact
+    ? "bg-white/5 rounded-2xl p-5 border border-white/5 flex justify-between items-center"
+    : "glass-card rounded-[2.5rem] p-8 text-left hover:bg-white/5 transition-all";
+
+  const Content = (
+    <>
+      <div className="space-y-1">
+        <div className="flex items-center gap-3">
+          <h3 className={clsx(Compact ? "font-bold text-xs truncate max-w-[120px]" : "font-display text-xl mb-1")}>
+            {sanitizeText(project.title)}
+          </h3>
+          <span className="rounded-full bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-muted border border-white/5">
+            {sanitizeText(project.projectType)}
+          </span>
+          {project.locked && (
+            <span className="ml-2 rounded-full bg-amber-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-300 border border-amber-400/20">
+              Locked
+            </span>
+          )}
+        </div>
+
+        {!Compact && <p className="font-mono text-[10px] text-muted mb-4">{project.projectId}</p>}
+
+        <div className={clsx(Compact ? "flex items-center justify-between w-full" : "flex justify-between border-t border-white/5 pt-4")}>
+          <div>
+            <p className={clsx(Compact ? "text-xl font-display" : "text-xl font-display text-greenBright")}>
+              {Number(project.balance).toLocaleString()}
+            </p>
+            {Compact && <p className="text-[10px] font-mono text-muted">{userEarnings ? `+${Number(userEarnings).toLocaleString()}` : ""}</p>}
+          </div>
+
+          <div className="text-right">
+            <p className="text-[10px] uppercase text-muted">{Compact ? "Earnings" : "Available"}</p>
+            <p className="text-[10px] text-muted">{project.collaborators.length} collaborator{project.collaborators.length !== 1 ? "s" : ""}</p>
+          </div>
+        </div>
+
+        {!Compact && onDistribute && (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDistribute();
+              }}
+              disabled={Number(project.balance) <= 0}
+              className="premium-button rounded-2xl bg-greenBright py-3 px-6 text-xs font-black uppercase tracking-[0.3em] text-[#0a0a09] shadow-xl shadow-greenBright/10 disabled:opacity-30"
+            >
+              Trigger Distribution
+            </button>
+          </div>
+        )}
       </div>
-
-      <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-        <span>Balance: <span className="font-medium text-gray-900 dark:text-white">{balance}</span></span>
-        <span>{collaboratorCount} collaborator{collaboratorCount !== 1 ? "s" : ""}</span>
-      </div>
-
-      {onDistribute && (
-        <button
-          onClick={() => onDistribute(id)}
-          className="mt-1 w-full rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium py-1.5 transition-colors"
-        >
-          Distribute
-        </button>
-      )}
-    </div>
+    </>
   );
+
+  if (onSelect) {
+    return (
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-pressed={isSelected}
+        className={outerClass}
+      >
+        {Content}
+      </button>
+    );
+  }
+
+  return <div className={outerClass}>{Content}</div>;
 }
