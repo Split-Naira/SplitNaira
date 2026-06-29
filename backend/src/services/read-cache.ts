@@ -12,6 +12,8 @@ export interface ReadCacheOptions {
 export interface ReadCacheStats {
   size: number;
   keys: string[];
+  hits: number;
+  misses: number;
 }
 
 interface CacheEntry<T> {
@@ -27,6 +29,8 @@ export class ReadCache {
   private readonly defaultTtlMs: number;
   private readonly maxEntries: number;
   private readonly store = new Map<string, CacheEntry<unknown>>();
+  private hits = 0;
+  private misses = 0;
 
   constructor(options: ReadCacheOptions = {}) {
     this.defaultTtlMs = options.defaultTtlMs ?? DEFAULT_TTL_MS;
@@ -36,13 +40,18 @@ export class ReadCache {
   get<T>(key: string): T | undefined {
     const entry = this.store.get(key) as CacheEntry<T> | undefined;
     if (!entry) {
+      this.misses++;
       return undefined;
     }
     if (Date.now() > entry.expiresAt) {
       this.store.delete(key);
+      this.misses++;
       return undefined;
     }
+    this.hits++;
     entry.lastAccessedAt = Date.now();
+    this.store.delete(key);
+    this.store.set(key, entry);
     return entry.value;
   }
 
@@ -75,7 +84,7 @@ export class ReadCache {
 
   stats(): ReadCacheStats {
     this.purgeExpired();
-    return { size: this.store.size, keys: Array.from(this.store.keys()) };
+    return { size: this.store.size, keys: Array.from(this.store.keys()), hits: this.hits, misses: this.misses };
   }
 
   private purgeExpired(): void {
@@ -88,15 +97,8 @@ export class ReadCache {
   }
 
   private evictLRU(): void {
-    let lruKey: string | null = null;
-    let lruAccess = Infinity;
-    for (const [key, entry] of this.store.entries()) {
-      if (entry.lastAccessedAt < lruAccess) {
-        lruAccess = entry.lastAccessedAt;
-        lruKey = key;
-      }
-    }
-    if (lruKey) {
+    const lruKey = this.store.keys().next().value;
+    if (lruKey !== undefined) {
       this.store.delete(lruKey);
     }
   }

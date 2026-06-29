@@ -184,13 +184,17 @@ describe("splits routes integration", () => {
     expect(getAccountMock).toHaveBeenCalledWith("GDISP");
   });
 
-  it("lists split projects", async () => {
+  it("lists split projects with offset pagination", async () => {
     getAccountMock.mockResolvedValue({ accountId: "GSIM" });
-    simulateTransactionMock.mockResolvedValue({
-      result: {
-        retval: [{ projectId: "project_1" }, { projectId: "project_2" }],
-      },
-    });
+    simulateTransactionMock
+      .mockResolvedValueOnce({
+        result: {
+          retval: [{ projectId: "project_1" }, { projectId: "project_2" }],
+        },
+      })
+      .mockResolvedValueOnce({
+        result: { retval: 5 },
+      });
 
     const app = createApp();
 
@@ -198,12 +202,71 @@ describe("splits routes integration", () => {
       .get("/splits?start=0&limit=10")
       .expect(200);
 
-    expect(response.body).toEqual([
-      { projectId: "project_1" },
-      { projectId: "project_2" },
-    ]);
+    expect(response.body).toMatchObject({
+      projects: [{ projectId: "project_1" }, { projectId: "project_2" }],
+      total: 5,
+    });
 
     expect(getAccountMock).toHaveBeenCalledWith("GTESTSIMULATOR");
+  });
+
+  it("lists split projects with cursor pagination", async () => {
+    getAccountMock.mockResolvedValue({ accountId: "GSIM" });
+    simulateTransactionMock
+      .mockResolvedValueOnce({
+        result: {
+          retval: [{ projectId: "project_3" }, { projectId: "project_4" }],
+        },
+      })
+      .mockResolvedValueOnce({
+        result: { retval: 10 },
+      });
+
+    const app = createApp();
+
+    const cursor = Buffer.from("2").toString("base64");
+    const response = await request(app)
+      .get(`/splits?cursor=${cursor}&limit=2`)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      projects: [{ projectId: "project_3" }, { projectId: "project_4" }],
+      total: 10,
+    });
+    expect(response.body.nextCursor).toBeTruthy();
+  });
+
+  it("cursor pagination returns null nextCursor on last page", async () => {
+    getAccountMock.mockResolvedValue({ accountId: "GSIM" });
+    simulateTransactionMock
+      .mockResolvedValueOnce({
+        result: {
+          retval: [{ projectId: "project_9" }],
+        },
+      })
+      .mockResolvedValueOnce({
+        result: { retval: 10 },
+      });
+
+    const app = createApp();
+
+    const cursor = Buffer.from("9").toString("base64");
+    const response = await request(app)
+      .get(`/splits?cursor=${cursor}&limit=5`)
+      .expect(200);
+
+    expect(response.body.projects).toHaveLength(1);
+    expect(response.body.nextCursor).toBeNull();
+  });
+
+  it("rejects invalid cursor with 400", async () => {
+    const app = createApp();
+
+    const response = await request(app)
+      .get("/splits?cursor=invalid!!")
+      .expect(400);
+
+    expect(response.body.error).toBeTruthy();
   });
 
   it("fetches a project by id", async () => {

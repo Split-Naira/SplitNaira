@@ -258,6 +258,12 @@ export function printEnvDiagnostics(): void {
     const display = present ? ` = ${truncate(raw)}` : "";
     logger.info(`  ${marker}  ${key}${display}`);
   }
+
+  const corsRaw = process.env.CORS_ORIGIN;
+  if (corsRaw) {
+    const origins = corsRaw.split(",").map((o) => o.trim());
+    logger.info(`  CORS_ORIGIN resolved to: ${JSON.stringify(origins)}`);
+  }
 }
 
 function truncate(value: string, max = 48): string {

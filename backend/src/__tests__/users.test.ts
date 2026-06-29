@@ -350,4 +350,65 @@ describe("User Registration API", () => {
       expect(response.body.error).toBe("validation_error");
     });
   });
+
+  describe("GET /users/me", () => {
+    it("should return authenticated user profile", async () => {
+      const walletAddress = "GCNSJNUEJLYRS7FXIWVDUABVBP5PQHCWW6M7IQIBA66C5LCY2RAZ5LBI";
+      findOneMock.mockResolvedValue({
+        id: "33333333-3333-4333-8333-333333333333",
+        walletAddress,
+        email: "me@test.com",
+        alias: "MeUser",
+        role: "user",
+        isActive: true,
+        createdAt: NOW,
+        updatedAt: NOW
+      });
+
+      const app = createApp();
+      const token = signToken(walletAddress);
+      const response = await request(app)
+        .get("/users/me")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(200);
+
+      expect(response.body.walletAddress).toBe(walletAddress);
+      expect(response.body.email).toBe("me@test.com");
+      expect(response.body.alias).toBe("MeUser");
+      expect(response.body.role).toBe("user");
+    });
+
+    it("should return 401 when no auth token is provided", async () => {
+      const app = createApp();
+      const response = await request(app)
+        .get("/users/me")
+        .expect(401);
+
+      expect(response.body.error).toBe("unauthorized");
+    });
+
+    it("should return 401 when an invalid token is provided", async () => {
+      const app = createApp();
+      const response = await request(app)
+        .get("/users/me")
+        .set("Authorization", "Bearer invalid-token")
+        .expect(401);
+
+      expect(response.body.error).toBe("unauthorized");
+    });
+
+    it("should return 404 when authenticated user is not found in database", async () => {
+      findOneMock.mockResolvedValue(null);
+
+      const app = createApp();
+      const walletAddress = "GCNSJNUEJLYRS7FXIWVDUABVBP5PQHCWW6M7IQIBA66C5LCY2RAZ5LBI";
+      const token = signToken(walletAddress);
+      const response = await request(app)
+        .get("/users/me")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(404);
+
+      expect(response.body.error).toBeDefined();
+    });
+  });
 });

@@ -166,6 +166,7 @@ export const listProjectsSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(10),
   search: z.string().optional(),
   type: z.string().optional(),
+  cursor: z.string().optional(),
 });
 
 export const distributeSchema = z.object({

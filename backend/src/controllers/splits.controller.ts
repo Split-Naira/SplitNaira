@@ -1,14 +1,46 @@
 import type { Request, Response, NextFunction } from "express";
-import { projectIdParamSchema, lockProjectSchema, depositSchema } from "../schemas/splits.js";
+import { projectIdParamSchema, lockProjectSchema, depositSchema, listProjectsSchema } from "../schemas/splits.js";
 import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
-import { serializeBigInts, listProjects, fetchProjectById, buildLockProjectUnsignedXdr, buildDepositUnsignedXdr } from "../services/splits.service.js";
+import { serializeBigInts, listProjects, fetchProjectById, buildLockProjectUnsignedXdr, buildDepositUnsignedXdr, encodeCursor, decodeCursor, simulateReadOnlyContractCall } from "../services/splits.service.js";
+import { scValToNative } from "@stellar/stellar-sdk";
 import { logger } from "../services/logger.js";
 
 export class SplitsController {
   async listProjects(req: Request, res: Response, next: NextFunction) {
     try {
-      const projects = await listProjects(0, 100);
-      return res.status(200).json(serializeBigInts(projects));
+      const parsed = listProjectsSchema.safeParse(req.query);
+      if (!parsed.success) {
+        throw new AppError(
+          ErrorType.VALIDATION,
+          ErrorCode.VALIDATION_ERROR,
+          "Invalid request payload.",
+          undefined,
+          parsed.error.flatten()
+        );
+      }
+
+      let { start, limit, search, type, cursor } = parsed.data;
+
+      if (cursor) {
+        start = decodeCursor(cursor);
+      }
+
+      const projects = await listProjects(start, limit, search, type);
+
+      const total = await simulateReadOnlyContractCall("get_project_count");
+      const totalCount = total ? Number(scValToNative(total)) : 0;
+
+      const nextCursor = start + projects.length < totalCount
+        ? encodeCursor(start + limit)
+        : null;
+
+      return res.status(200).json(
+        serializeBigInts({
+          projects,
+          total: totalCount,
+          nextCursor,
+        })
+      );
     } catch (error) { return next(error); }
   }
 

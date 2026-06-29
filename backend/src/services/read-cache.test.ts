@@ -62,6 +62,47 @@ describe("ReadCache", () => {
 
     expect(cache.stats().size).toBe(0);
   });
+
+  it("preserves recently accessed key under LRU eviction", () => {
+    const cache = new ReadCache({ defaultTtlMs: 60_000, maxEntries: 3 });
+    cache.set("a", 1);
+    cache.set("b", 2);
+    cache.set("c", 3);
+    cache.get("a");
+    cache.get("b");
+    cache.set("d", 4);
+
+    expect(cache.get("a")).toBe(1);
+    expect(cache.get("b")).toBe(2);
+    expect(cache.get("d")).toBe(4);
+    expect(cache.get("c")).toBeUndefined();
+  });
+
+  it("tracks hits and misses in stats", () => {
+    const cache = new ReadCache({ defaultTtlMs: 60_000 });
+    cache.set("existing", 42);
+
+    cache.get("existing");
+    cache.get("missing");
+    cache.get("existing");
+
+    const stats = cache.stats();
+    expect(stats.hits).toBe(2);
+    expect(stats.misses).toBe(1);
+  });
+
+  it("counts expired entry access as miss not hit", () => {
+    const cache = new ReadCache({ defaultTtlMs: 500 });
+    cache.set("ephemeral", "value");
+
+    vi.advanceTimersByTime(600);
+
+    cache.get("ephemeral");
+
+    const stats = cache.stats();
+    expect(stats.hits).toBe(0);
+    expect(stats.misses).toBe(1);
+  });
 });
 
 describe("getReadCache", () => {
