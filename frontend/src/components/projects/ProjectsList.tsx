@@ -6,6 +6,7 @@ import type { SplitProject } from "@/lib/stellar";
 import type { ProjectHistoryItem, AdminStatusState } from "@/lib/api";
 import type { WalletState } from "@/lib/wallet";
 import { DashboardGridSkeleton, ListSkeleton } from "../Skeleton";
+import { ProjectCard } from "../ProjectCard";
 import { TransactionReceiptView, type TransactionReceipt } from "../TransactionReceiptView";
 
 interface ProjectsListProps {
@@ -106,24 +107,15 @@ export function ProjectsList({
           ) : projectsList.length > 0 ? (
             <div className="grid gap-6 md:grid-cols-2 animate-in fade-in">
               {projectsList.map((p) => (
-                <button
+                <ProjectCard
                   key={p.projectId}
-                  onClick={() => {
+                  project={p}
+                  onSelect={() => {
                     setSelectedProjectId(p.projectId);
                     setFetchedProject(p);
                     fetchHistory(p.projectId);
                   }}
-                  className="glass-card rounded-[2.5rem] p-8 text-left hover:bg-white/5 transition-all"
-                >
-                  <h3 className="font-display text-xl mb-1">{sanitizeText(p.title)}</h3>
-                  <p className="font-mono text-[10px] text-muted mb-4">{p.projectId}</p>
-                  <div className="flex justify-between border-t border-white/5 pt-4">
-                    <span className="text-xl font-display text-greenBright">
-                      {Number(p.balance).toLocaleString()}
-                    </span>
-                    <span className="text-[10px] uppercase text-muted">Available</span>
-                  </div>
-                </button>
+                />
               ))}
             </div>
           ) : (
