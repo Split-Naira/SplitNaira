@@ -121,4 +121,31 @@ impl SplitError {
                 | SplitError::InsufficientUnallocated
         )
     }
+
+    /// Returns a human-readable description for off-chain tooling and debugging.
+    pub fn to_message(&self) -> &'static str {
+        match self {
+            SplitError::ProjectExists => "A project with the specified ID already exists.",
+            SplitError::NotFound => "The requested project could not be found.",
+            SplitError::AlreadyLocked => "The project is permanently locked.",
+            SplitError::ProjectLocked => "The project is locked and cannot be modified.",
+            SplitError::Unauthorized => "Caller is not authorized to perform this action.",
+            SplitError::NotACollaborator => "Address is not a registered collaborator.",
+            SplitError::InvalidSplit => "Collaborator basis points must total exactly 10,000.",
+            SplitError::TooFewCollaborators => "At least two collaborators are required.",
+            SplitError::ZeroShare => "Collaborator share cannot be zero.",
+            SplitError::DuplicateCollaborator => "Duplicate collaborator address detected.",
+            SplitError::InvalidAmount => "Deposit or transfer amount is invalid.",
+            SplitError::InvalidRecipient => "Recipient address is invalid.",
+            SplitError::TooManyCollaborators => "Maximum collaborator limit exceeded.",
+            SplitError::NoBalance => "Project has no balance available for distribution.",
+            SplitError::TokenNotAllowed => "Token is not included in the configured allowlist.",
+            SplitError::InsufficientUnallocated => "Requested withdrawal exceeds available unallocated funds.",
+            SplitError::AdminNotSet => "Contract administrator has not been configured.",
+            SplitError::DistributionsPaused => "Distributions have been paused by the administrator.",
+            SplitError::AccountingDiscrepancy => "Cached accounted balance exceeds the contract's actual token balance.",
+            SplitError::InvalidMaxCollaborators => "Admin-supplied capacity limit is outside the permitted range.",
+            SplitError::ArithmeticOverflow => "An arithmetic operation overflowed.",
+        }
+    }
 }

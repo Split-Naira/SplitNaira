@@ -1,5 +1,3 @@
-#![no_std]
-
 pub mod compiler;
 pub mod simulator;
 pub mod deployer;

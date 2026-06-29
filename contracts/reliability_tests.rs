@@ -41,7 +41,7 @@ fn two_collabs(env: &Env) -> Vec<Collaborator> {
 /// Creates a project with a registered token and returns the (client, owner, token).
 /// Token allowlist is bypassed by using register_stellar_asset_contract which
 /// Soroban testutils accept without an admin allowlist entry.
-fn setup_project(env: &Env, project_id: &Symbol) -> (SplitNairaContractClient, Address, Address) {
+fn setup_project<'a>(env: &'a Env, project_id: &Symbol) -> (SplitNairaContractClient<'a>, Address, Address) {
     let (client, _) = make_client(env);
     let token_admin = Address::generate(env);
     let token = env.register_stellar_asset_contract(token_admin);
