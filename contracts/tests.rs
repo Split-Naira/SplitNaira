@@ -1565,10 +1565,27 @@ fn test_basis_points_invariant_table() {
 
         match expected_err {
             None => assert_eq!(result, Ok(Ok(())), "case {} expected success but got {:?}", i, result),
-            Some(err) => assert_eq!(result, Err(Ok(*err)), "case {} expected {:?} but got {:?}", i, err, result),
+            Some(err) => {
+                let msg = err.to_message();
+                match result {
+                    Err(Ok(actual_err)) => {
+                        assert_eq!(
+                            actual_err.to_message(),
+                            msg,
+                            "case {} failed. Expected message: \"{}\", got: \"{}\"",
+                            i,
+                            msg,
+                            actual_err.to_message()
+                        );
+                    }
+                    other => {
+                        panic!("case {} failed. Expected error with message: \"{}\", but got: {:?}", i, msg, other);
+                    }
+                }
+            }
         }
     }
-}
+} 
 
 #[test]
 fn test_list_projects_bounds() {
