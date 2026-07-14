@@ -32,7 +32,7 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
@@ -54,7 +54,7 @@ jobs:
       MAINNET_CONTRACT_ID: ${{ secrets.MAINNET_CONTRACT_ID }}
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
@@ -112,7 +112,7 @@ jobs:
     needs: deploy-backend
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
       - name: Post-deploy readiness smoke check
