@@ -9,12 +9,12 @@ pub fn deploy_contract(artifact: &ContractArtifact) -> Option<u64> {
     Some(artifact.version as u64 + 1000)
 }
 
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::process::Command;
-use chrono::Utc;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -47,7 +47,7 @@ pub fn record_successful_deployment(
     deployer: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let file_path = "../deployments.json";
-    
+
     // Read and parse current state mapping indices
     let mut registry: DeploymentsRegistry = match File::open(file_path) {
         Ok(mut file) => {
@@ -76,7 +76,7 @@ pub fn record_successful_deployment(
         .create(true)
         .truncate(true)
         .open(file_path)?;
-        
+
     let json_bytes = serde_json::to_string_pretty(&registry)?;
     file.write_all(json_bytes.as_bytes())?;
 

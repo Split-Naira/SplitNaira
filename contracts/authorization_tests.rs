@@ -349,7 +349,14 @@ fn test_claim_rejects_non_collaborator_and_preserves_balances() {
     let (client, owner, token) = setup_project(&env, &project_id);
     let outsider = Address::generate(&env);
 
-    deposit_to_project(&env, &client, &token, &project_id, &owner, 1_000_0000000i128);
+    deposit_to_project(
+        &env,
+        &client,
+        &token,
+        &project_id,
+        &owner,
+        1_000_0000000i128,
+    );
 
     let before_balance = client.get_balance(&project_id);
     let before_claimed = client.get_claimed(&project_id, &outsider);
@@ -390,7 +397,14 @@ fn test_distribute_is_permissionless_by_design() {
     let project_id = Symbol::new(&env, "auth_dist");
     let (client, owner, token) = setup_project(&env, &project_id);
 
-    deposit_to_project(&env, &client, &token, &project_id, &owner, 1_000_0000000i128);
+    deposit_to_project(
+        &env,
+        &client,
+        &token,
+        &project_id,
+        &owner,
+        1_000_0000000i128,
+    );
 
     // Zero authorization entries: no address, including the owner, has
     // signed this invocation. A `require_auth`-gated call would panic here.
@@ -469,11 +483,17 @@ fn test_set_admin_successful_rotation_transfers_control() {
     // Bootstrap with an initial admin then rotate.
     client.set_admin(&original_admin);
     let rotation_result = client.try_set_admin(&new_admin);
-    assert!(rotation_result.is_ok(), "admin rotation by current admin must succeed");
+    assert!(
+        rotation_result.is_ok(),
+        "admin rotation by current admin must succeed"
+    );
 
     // New admin can now perform admin-gated operations.
     let allow_result = client.try_allow_token(&new_admin, &token);
-    assert!(allow_result.is_ok(), "new admin must be able to allow tokens");
+    assert!(
+        allow_result.is_ok(),
+        "new admin must be able to allow tokens"
+    );
     assert!(client.is_token_allowed(&token));
 
     // Former admin no longer has privileges.

@@ -1,4 +1,4 @@
-﻿use soroban_sdk::contracterror;
+use soroban_sdk::contracterror;
 
 /// Errors returned by the SplitNaira smart contract.
 ///
@@ -13,7 +13,6 @@ pub enum SplitError {
     // ---------------------------------------------------------------------
     // Project Errors
     // ---------------------------------------------------------------------
-
     /// A project with the specified ID already exists.
     ProjectExists = 1,
 
@@ -29,7 +28,6 @@ pub enum SplitError {
     // ---------------------------------------------------------------------
     // Authorization Errors
     // ---------------------------------------------------------------------
-
     /// Caller is not authorized to perform this action.
     Unauthorized = 3,
 
@@ -39,7 +37,6 @@ pub enum SplitError {
     // ---------------------------------------------------------------------
     // Validation Errors
     // ---------------------------------------------------------------------
-
     /// Collaborator basis points must total exactly 10,000.
     InvalidSplit = 4,
 
@@ -66,7 +63,6 @@ pub enum SplitError {
     // ---------------------------------------------------------------------
     // Token & Balance Errors
     // ---------------------------------------------------------------------
-
     /// Project has no balance available for distribution.
     NoBalance = 7,
 
@@ -79,7 +75,6 @@ pub enum SplitError {
     // ---------------------------------------------------------------------
     // Administrative Errors
     // ---------------------------------------------------------------------
-
     /// Contract administrator has not been configured.
     AdminNotSet = 13,
 
@@ -89,7 +84,6 @@ pub enum SplitError {
     // ---------------------------------------------------------------------
     // Arithmetic Errors
     // ---------------------------------------------------------------------
-
     /// Cached accounted balance exceeds the contract's actual token balance
     AccountingDiscrepancy = 20,
 

@@ -1,4 +1,4 @@
-﻿#![cfg(test)]
+#![cfg(test)]
 //! Reliability tests: verify the contract behaves correctly under edge-case
 //! inputs and that all error paths return the expected error codes.
 //!
@@ -10,11 +10,8 @@
 //! - Duplicate `TooManyCollaborators` variant fixed in errors.rs
 //! - Module registered in lib.rs under #[cfg(test)]
 
+use crate::{errors::SplitError, Collaborator, SplitNairaContract, SplitNairaContractClient};
 use soroban_sdk::{testutils::Address as _, vec, Address, Env, String, Symbol, Vec};
-use crate::{
-    Collaborator, SplitNairaContract, SplitNairaContractClient,
-    errors::SplitError,
-};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared helpers
@@ -26,7 +23,6 @@ fn make_client(env: &Env) -> (SplitNairaContractClient, Address) {
     let client = SplitNairaContractClient::new(env, &contract_id);
     (client, contract_id)
 }
-
 
 use crate::{errors::SplitError, Collaborator, SplitNairaContract, SplitNairaContractClient};
 use soroban_sdk::{testutils::Address as _, vec, Address, Env, String, Symbol, Vec};
@@ -48,15 +44,26 @@ fn two_collabs(env: &Env) -> Vec<Collaborator> {
     let b = Address::generate(env);
     vec![
         env,
-        Collaborator { address: a, alias: String::from_str(env, "A"), basis_points: 5000 },
-        Collaborator { address: b, alias: String::from_str(env, "B"), basis_points: 5000 },
+        Collaborator {
+            address: a,
+            alias: String::from_str(env, "A"),
+            basis_points: 5000,
+        },
+        Collaborator {
+            address: b,
+            alias: String::from_str(env, "B"),
+            basis_points: 5000,
+        },
     ]
 }
 
 /// Creates a project with a registered token and returns the (client, owner, token).
 /// Token allowlist is bypassed by using register_stellar_asset_contract which
 /// Soroban testutils accept without an admin allowlist entry.
-fn setup_project<'a>(env: &'a Env, project_id: &'a Symbol) -> (SplitNairaContractClient<'a>, Address, Address) {
+fn setup_project<'a>(
+    env: &'a Env,
+    project_id: &'a Symbol,
+) -> (SplitNairaContractClient<'a>, Address, Address) {
     let (client, _) = make_client(env);
     let token_admin = Address::generate(env);
     let token = env.register_stellar_asset_contract(token_admin);
@@ -151,8 +158,16 @@ fn test_create_project_zero_basis_points_returns_zero_share() {
 
     let collabs = vec![
         &env,
-        Collaborator { address: a, alias: String::from_str(&env, "A"), basis_points: 0 },
-        Collaborator { address: b, alias: String::from_str(&env, "B"), basis_points: 10000 },
+        Collaborator {
+            address: a,
+            alias: String::from_str(&env, "A"),
+            basis_points: 0,
+        },
+        Collaborator {
+            address: b,
+            alias: String::from_str(&env, "B"),
+            basis_points: 10000,
+        },
     ];
 
     let result = client.try_create_project(
@@ -181,8 +196,16 @@ fn test_create_project_invalid_split_returns_error() {
     // Sums to 9000, not 10000
     let collabs = vec![
         &env,
-        Collaborator { address: a, alias: String::from_str(&env, "A"), basis_points: 4000 },
-        Collaborator { address: b, alias: String::from_str(&env, "B"), basis_points: 5000 },
+        Collaborator {
+            address: a,
+            alias: String::from_str(&env, "A"),
+            basis_points: 4000,
+        },
+        Collaborator {
+            address: b,
+            alias: String::from_str(&env, "B"),
+            basis_points: 5000,
+        },
     ];
 
     let result = client.try_create_project(
@@ -209,7 +232,11 @@ fn test_create_project_one_collaborator_returns_too_few() {
 
     let collabs = vec![
         &env,
-        Collaborator { address: a, alias: String::from_str(&env, "A"), basis_points: 10000 },
+        Collaborator {
+            address: a,
+            alias: String::from_str(&env, "A"),
+            basis_points: 10000,
+        },
     ];
 
     let result = client.try_create_project(
@@ -288,11 +315,7 @@ fn test_update_collaborators_locked_project_returns_project_locked() {
 
     client.lock_project(&project_id, &owner);
 
-    let result = client.try_update_collaborators(
-        &project_id,
-        &owner,
-        &two_collabs(&env),
-    );
+    let result = client.try_update_collaborators(&project_id, &owner, &two_collabs(&env));
     assert_eq!(result, Err(Ok(SplitError::ProjectLocked)));
 }
 
@@ -305,11 +328,7 @@ fn test_update_collaborators_non_owner_returns_unauthorized() {
     let (client, _owner, _token) = setup_project(&env, &project_id);
     let attacker = Address::generate(&env);
 
-    let result = client.try_update_collaborators(
-        &project_id,
-        &attacker,
-        &two_collabs(&env),
-    );
+    let result = client.try_update_collaborators(&project_id, &attacker, &two_collabs(&env));
     assert_eq!(result, Err(Ok(SplitError::Unauthorized)));
 }
 

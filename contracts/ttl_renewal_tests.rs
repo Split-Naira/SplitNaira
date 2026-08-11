@@ -1,4 +1,4 @@
-﻿#![cfg(test)]
+#![cfg(test)]
 //! Issue #838 — Contract storage TTL renewal integration tests.
 //!
 //! Goal
@@ -67,8 +67,7 @@ use soroban_sdk::{
 };
 
 use crate::{
-    Collaborator, DataKey, SplitNairaContract, SplitNairaContractClient,
-    errors::SplitError,
+    errors::SplitError, Collaborator, DataKey, SplitNairaContract, SplitNairaContractClient,
 };
 
 fn setup_env_with_token() -> (Env, SplitNairaContractClient<'static>, Address) {
@@ -316,8 +315,7 @@ fn test_claim_renews_per_collaborator_ledger_after_ledger_advance() {
 
     let contract_id = env.current_contract_address();
 
-    env.ledger()
-        .with_mut(|info| info.sequence_number += 90_000);
+    env.ledger().with_mut(|info| info.sequence_number += 90_000);
 
     // The collaborator ledgers must still be present after the advance.
     assert!(has_persistent(
@@ -353,8 +351,7 @@ fn test_metadata_and_existence_remain_consistent_after_advance() {
 
     let owner = create_project(&env, &client, &token, &project_id, &collabs);
 
-    env.ledger()
-        .with_mut(|info| info.sequence_number += 75_000);
+    env.ledger().with_mut(|info| info.sequence_number += 75_000);
 
     assert!(client.project_exists(&project_id));
     assert!(!client.project_exists(&Symbol::new(&env, "missing")));

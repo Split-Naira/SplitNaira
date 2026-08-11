@@ -60,7 +60,6 @@ fn create_project_with_valid_addresses_succeeds() {
     assert_eq!(client.get_project_count(), 1);
 }
 
-
 use crate::{errors::SplitError, Collaborator, SplitNairaContract, SplitNairaContractClient};
 use soroban_sdk::{testutils::Address as _, vec, Address, Env, String, Symbol, Vec};
 

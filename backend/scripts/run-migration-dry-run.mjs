@@ -24,6 +24,18 @@ function parseDatabaseUrl(url) {
   };
 }
 
+function buildDatabaseUrlFromDbVars(env = process.env) {
+  if (!env.DB_HOST || !env.DB_USERNAME || !env.DB_PASSWORD || !env.DB_NAME) {
+    return undefined;
+  }
+
+  const username = encodeURIComponent(env.DB_USERNAME);
+  const password = encodeURIComponent(env.DB_PASSWORD);
+  const host = env.DB_HOST;
+  const port = env.DB_PORT || "5432";
+  const database = encodeURIComponent(env.DB_NAME);
+  return `postgresql://${username}:${password}@${host}:${port}/${database}`;
+}
 function buildAdminConnectionString(databaseUrl, env = process.env) {
   const adminDb = env.MIGRATION_DRY_RUN_ADMIN_DATABASE || env.MIGRATION_ADMIN_DATABASE || "postgres";
   if (env.MIGRATION_DRY_RUN_ADMIN_DATABASE_URL || env.MIGRATION_ADMIN_DATABASE_URL) {
@@ -36,7 +48,7 @@ function buildAdminConnectionString(databaseUrl, env = process.env) {
 }
 
 export function resolveMigrationConfig(env = process.env) {
-  const databaseUrl = env.MIGRATION_DRY_RUN_DATABASE_URL || env.DATABASE_URL;
+  const databaseUrl = env.MIGRATION_DRY_RUN_DATABASE_URL || buildDatabaseUrlFromDbVars(env) || env.DATABASE_URL;
   if (!databaseUrl) {
     throw new Error("DATABASE_URL or MIGRATION_DRY_RUN_DATABASE_URL is required to run migration dry-run checks.");
   }
