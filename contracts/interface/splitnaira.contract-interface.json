@@ -2,7 +2,7 @@
   "schema": "https://splitnaira.dev/schemas/contract-interface.v1.json",
   "schemaVersion": 1,
   "generatedBy": "contracts/scripts/generate-interface.mjs",
-  "sourceHash": "9d348cf0adc0064aa62e18daff0f62e4e0be53ba92db9212eeba87a6e1fea0e7",
+  "sourceHash": "a5093064e1cdba509a6402bad235fa4abf00bbbc8d52a81efc0e3436b68d3c4c",
   "sources": [
     "contracts/Cargo.toml",
     "contracts/lib.rs",
