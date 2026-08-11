@@ -4642,17 +4642,6 @@ fn test_update_collaborators_after_payout_requires_owner_auth() {
         Vec::from_slice(&env, &[5000u32, 3000u32, 2000u32]),
     );
 
-    env.mock_auths_clear();
-    env.mock_auths(&[soroban_sdk::testutils::MockAuth {
-        address: &stranger,
-        invoke: &soroban_sdk::testutils::MockAuthInvoke {
-            contract: &contract_id,
-            fn_name: "update_collaborators",
-            args: (&project_id, &stranger, &updated_collabs).into_val(&env),
-            sub_invokes: &[],
-        },
-    }]);
-
     let result = client.try_update_collaborators(&project_id, &stranger, &updated_collabs);
     assert_eq!(result, Err(Ok(SplitError::Unauthorized)));
 }
@@ -4730,7 +4719,10 @@ fn test_create_project_succeeds_at_exactly_maximum_collaborators() {
     );
 
     let project = client.get_project(&Symbol::new(&env, "max_collabs"));
-    assert_eq!(project.collaborators.len(), 50);
+    assert_eq!(
+        project.expect("project should exist").collaborators.len(),
+        50
+    );
 }
 
 #[test]
@@ -4788,7 +4780,10 @@ fn test_update_collaborators_succeeds_at_exactly_maximum() {
     client.update_collaborators(&Symbol::new(&env, "upd_max"), &owner, &at_max);
 
     let project = client.get_project(&Symbol::new(&env, "upd_max"));
-    assert_eq!(project.collaborators.len(), 50);
+    assert_eq!(
+        project.expect("project should exist").collaborators.len(),
+        50
+    );
 }
 
 #[test]

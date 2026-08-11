@@ -1,1232 +1,4568 @@
 {
-  "openapi": "3.0.1",
+  "components": {
+    "parameters": {},
+    "schemas": {
+      "AdminStatus": {
+        "properties": {
+          "admin": {
+            "nullable": true,
+            "type": "string"
+          },
+          "isPaused": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "admin",
+          "isPaused"
+        ],
+        "type": "object"
+      },
+      "ApiError": {
+        "example": {
+          "details": {
+            "path": [
+              "collaborators"
+            ]
+          },
+          "error": "VALIDATION_ERROR",
+          "message": "collaborators basisPoints must sum to exactly 10000",
+          "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+        },
+        "properties": {
+          "details": {
+            "additionalProperties": {
+              "nullable": true
+            },
+            "description": "Additional error context",
+            "type": "object"
+          },
+          "error": {
+            "description": "Machine-readable error code",
+            "type": "string"
+          },
+          "message": {
+            "description": "Human-readable error message",
+            "type": "string"
+          },
+          "requestId": {
+            "description": "Request correlation ID",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "ClaimableResponse": {
+        "properties": {
+          "claimable": {
+            "description": "Amount available to claim, in stroops",
+            "type": "string"
+          },
+          "claimed": {
+            "description": "Amount already claimed, in stroops",
+            "type": "string"
+          },
+          "collaborator": {
+            "description": "Stellar address of the collaborator",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "The project ID",
+            "type": "string"
+          },
+          "total": {
+            "description": "Total allocated (claimed + claimable), in stroops",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "collaborator",
+          "claimable",
+          "claimed",
+          "total"
+        ],
+        "type": "object"
+      },
+      "ComponentHealth": {
+        "properties": {
+          "latencyMs": {
+            "description": "Round-trip latency of the underlying check, in milliseconds",
+            "type": "number"
+          },
+          "message": {
+            "description": "Redacted, human-readable detail. Never contains secrets or raw connection strings.",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "up",
+              "degraded",
+              "down"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "EnvComponentHealth": {
+        "properties": {
+          "ok": {
+            "description": "Whether required environment variables are present and valid",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "type": "object"
+      },
+      "EventListenerComponentHealth": {
+        "properties": {
+          "consecutiveErrors": {
+            "description": "Number of consecutive failing polls",
+            "type": "integer"
+          },
+          "lastSuccessfulPoll": {
+            "description": "ISO 8601 timestamp of the last successful poll, or null",
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "stopped",
+              "healthy",
+              "degraded"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "lastSuccessfulPoll",
+          "consecutiveErrors"
+        ],
+        "type": "object"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "enum": [
+              "ok",
+              "degraded",
+              "not_ready"
+            ],
+            "type": "string"
+          },
+          "timestamp": {
+            "description": "ISO 8601 timestamp",
+            "type": "string"
+          },
+          "uptime": {
+            "description": "Server uptime in seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "MainnetReadinessResponse": {
+        "properties": {
+          "components": {
+            "properties": {
+              "cache": {
+                "properties": {
+                  "details": {
+                    "additionalProperties": {
+                      "nullable": true
+                    },
+                    "type": "object"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "type": "object"
+              },
+              "db": {
+                "properties": {
+                  "details": {
+                    "additionalProperties": {
+                      "nullable": true
+                    },
+                    "type": "object"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "type": "object"
+              },
+              "deploy": {
+                "properties": {
+                  "contractIdMatch": {
+                    "type": "boolean"
+                  },
+                  "databasePoolMax": {
+                    "type": "number"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "ok": {
+                    "type": "boolean"
+                  },
+                  "productionSecrets": {
+                    "properties": {
+                      "mainnetContractId": {
+                        "type": "boolean"
+                      },
+                      "renderBackendDeployHookUrl": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "mainnetContractId",
+                      "renderBackendDeployHookUrl"
+                    ],
+                    "type": "object"
+                  },
+                  "readCacheMaxEntries": {
+                    "type": "number"
+                  },
+                  "readCacheTtlMs": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "type": "object"
+              },
+              "env": {
+                "properties": {
+                  "details": {
+                    "additionalProperties": {
+                      "nullable": true
+                    },
+                    "type": "object"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "env",
+              "db",
+              "cache",
+              "deploy"
+            ],
+            "type": "object"
+          },
+          "details": {
+            "additionalProperties": {
+              "nullable": true
+            },
+            "type": "object"
+          },
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "not_ready"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "components"
+        ],
+        "type": "object"
+      },
+      "Project": {
+        "properties": {
+          "balance": {
+            "type": "string"
+          },
+          "collaborators": {
+            "items": {
+              "properties": {
+                "address": {
+                  "type": "string"
+                },
+                "alias": {
+                  "type": "string"
+                },
+                "basisPoints": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "address",
+                "alias",
+                "basisPoints"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "locked": {
+            "type": "boolean"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "projectType": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          },
+          "totalDistributed": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "title",
+          "projectType",
+          "owner",
+          "token",
+          "balance",
+          "totalDistributed",
+          "locked",
+          "collaborators"
+        ],
+        "type": "object"
+      },
+      "ReadinessComponents": {
+        "properties": {
+          "contract": {
+            "$ref": "#/components/schemas/ComponentHealth"
+          },
+          "db": {
+            "$ref": "#/components/schemas/ComponentHealth"
+          },
+          "env": {
+            "$ref": "#/components/schemas/EnvComponentHealth"
+          },
+          "eventListener": {
+            "$ref": "#/components/schemas/EventListenerComponentHealth"
+          },
+          "rpc": {
+            "$ref": "#/components/schemas/ComponentHealth"
+          }
+        },
+        "required": [
+          "env",
+          "db",
+          "rpc",
+          "contract"
+        ],
+        "type": "object"
+      },
+      "ReadinessResponse": {
+        "properties": {
+          "components": {
+            "$ref": "#/components/schemas/ReadinessComponents"
+          },
+          "error": {
+            "description": "Error code if not ready",
+            "type": "string"
+          },
+          "issues": {
+            "description": "List of configuration issues",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "message": {
+            "description": "Error message if not ready",
+            "type": "string"
+          },
+          "requestId": {
+            "description": "Request ID for tracing",
+            "type": "string"
+          },
+          "status": {
+            "description": "Issue #935 status/status-code policy: \"ready\" -> 200 (all dependencies up); \"degraded\" -> 200 (service still usable, but at least one dependency is slow or in a non-fatal failure state - investigate, don't page); \"not_ready\" -> 503 (env invalid or a dependency is fully down, unchanged from the legacy binary contract).",
+            "enum": [
+              "ready",
+              "degraded",
+              "not_ready"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "XdrResponse": {
+        "properties": {
+          "metadata": {
+            "properties": {
+              "contractId": {
+                "type": "string"
+              },
+              "networkPassphrase": {
+                "type": "string"
+              },
+              "operation": {
+                "type": "string"
+              },
+              "sourceAccount": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "contractId",
+              "networkPassphrase",
+              "sourceAccount",
+              "operation"
+            ],
+            "type": "object"
+          },
+          "xdr": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "xdr",
+          "metadata"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "adminApiKey": {
+        "description": "Payments admin API key for /splits/admin mutation endpoints",
+        "in": "header",
+        "name": "x-admin-api-key",
+        "type": "apiKey"
+      },
+      "bearerAuth": {
+        "bearerFormat": "JWT",
+        "description": "JWT obtained from POST /users/login",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
   "info": {
+    "description": "Premium royalty management API on Stellar network.",
     "title": "SplitNaira API",
-    "version": "0.1.0",
-    "description": "API for building unsigned Stellar/Soroban transactions and reading Split projects."
+    "version": "0.1.0"
+  },
+  "openapi": "3.0.0",
+  "paths": {
+    "/": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "status",
+                    "version"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "API metadata"
+          }
+        },
+        "summary": "Get API information",
+        "tags": [
+          "System"
+        ]
+      }
+    },
+    "/events": {
+      "get": {
+        "description": "Opens a Server-Sent Events stream and emits a `transaction_update` event each time the backend observes an update for the given `txHash`. Limited to 5 concurrent subscribers per `txHash` (configurable via `SSE_MAX_LISTENERS_PER_TXHASH`); exceeding it returns 429.\n\nExample frame:\n```\nevent: transaction_update\ndata: {\"txHash\":\"3389e9f0f1a65f19736cacf544c2e825313e8447f569233bb8db39aa607c8fc\",\"status\":\"pending\"}\n\n```",
+        "parameters": [
+          {
+            "description": "Transaction hash to observe",
+            "in": "query",
+            "name": "txHash",
+            "required": true,
+            "schema": {
+              "description": "Transaction hash to observe",
+              "example": "3389e9f0f1a65f19736cacf544c2e825313e8447f569233bb8db39aa607c8fc",
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "example": "event: transaction_update\ndata: {\"txHash\":\"3389e9f0f1a65f19736cacf544c2e825313e8447f569233bb8db39aa607c8fc\",\"status\":\"pending\"}\n\n",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "text/event-stream of `transaction_update` frames (connection stays open)"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "RESOURCE_LIMIT_EXCEEDED",
+                  "details": {
+                    "limit": 5,
+                    "txHash": "3389e9f0f1a65f19736cacf544c2e825313e8447f569233bb8db39aa607c8fc"
+                  },
+                  "error": "too_many_event_listeners",
+                  "message": "Too many event stream subscribers for this transaction.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Too many concurrent subscribers for this txHash"
+          }
+        },
+        "summary": "Observe transaction status updates for a submitted XDR (SSE)",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/events/transactions/{txHash}": {
+      "get": {
+        "description": "Opens a Server-Sent Events stream and emits one `transaction:confirmed` event with the full transaction record once `EventListenerService` observes it on-chain. Sends a `: heartbeat` comment every 15s to keep intermediary proxies from closing the connection.\n\nExample frame:\n```\nevent: transaction:confirmed\ndata: {\"txHash\":\"3389e9f0f1a65f19736cacf544c2e825313e8447f569233bb8db39aa607c8fc\",\"roundId\":\"afrobeats_001\",\"recipient\":\"GCZTK3PNYXCVF7Z3ELVELEJZ7BVGPGPVJ3NVZNI7O6DVCHPA4JU6LXRV\",\"amount\":\"1000\",\"token\":\"native\",\"timestamp\":1732012800,\"status\":\"completed\"}\n\n```",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "txHash",
+            "required": true,
+            "schema": {
+              "example": "3389e9f0f1a65f19736cacf544c2e825313e8447f569233bb8db39aa607c8fc",
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "example": "event: transaction:confirmed\ndata: {\"txHash\":\"3389e9f0f1a65f19736cacf544c2e825313e8447f569233bb8db39aa607c8fc\",\"roundId\":\"afrobeats_001\",\"recipient\":\"GCZTK3PNYXCVF7Z3ELVELEJZ7BVGPGPVJ3NVZNI7O6DVCHPA4JU6LXRV\",\"amount\":\"1000\",\"token\":\"native\",\"timestamp\":1732012800,\"status\":\"completed\"}\n\n",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "text/event-stream of a single `transaction:confirmed` frame (connection stays open until then)"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          }
+        },
+        "summary": "Observe a single transaction until it's confirmed (SSE)",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Alias for /health/ready. Returns 200 for both \"ready\" and \"degraded\" (service still usable); 503 only for \"not_ready\" (Issue #935).",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            },
+            "description": "Server is ready to accept traffic, or degraded but still usable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            },
+            "description": "Server is not ready"
+          }
+        },
+        "summary": "Get readiness status (alias for /health/ready)",
+        "tags": [
+          "Health"
+        ]
+      }
+    },
+    "/health/live": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "ok"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Server is alive"
+          }
+        },
+        "summary": "Liveness check (Kubernetes compatible)",
+        "tags": [
+          "Health"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "description": "Issue #935: returns 200 with status \"ready\" (all dependencies up) or \"degraded\" (usable, but db/rpc/contract/eventListener is slow or non-fatally impaired); returns 503 with status \"not_ready\" only when env is invalid or a dependency is fully down. See docs/runbooks/observability.md for the on-call interpretation of each state.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            },
+            "description": "Server is ready to accept traffic, or degraded but still usable"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            },
+            "description": "Server is not ready (missing configuration or a dependency is down)"
+          }
+        },
+        "summary": "Readiness check (Kubernetes compatible)",
+        "tags": [
+          "Health"
+        ]
+      }
+    },
+    "/ops/mainnet-readiness": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MainnetReadinessResponse"
+                }
+              }
+            },
+            "description": "Mainnet readiness validation passed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MainnetReadinessResponse"
+                }
+              }
+            },
+            "description": "Mainnet readiness validation failed"
+          }
+        },
+        "summary": "Mainnet readiness validation for deployment and ops workflows",
+        "tags": [
+          "Operations"
+        ]
+      }
+    },
+    "/splits": {
+      "get": {
+        "description": "Returns a paginated list of on-chain split projects with optional search and type filters.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "nullable": true,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Project"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "List of projects"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "RATE_LIMIT_EXCEEDED",
+                  "message": "Too many requests. Please retry after the rate limit window.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          }
+        },
+        "summary": "List all split projects",
+        "tags": [
+          "Splits"
+        ]
+      },
+      "post": {
+        "description": "Builds an unsigned Soroban transaction XDR to create a new revenue-split project on-chain. The caller must sign the returned XDR with the `owner` wallet and submit it themselves; this endpoint never holds a private key. Supports an optional `Idempotency-Key` header (Issue #888) so retried requests don't produce duplicate project-creation attempts.",
+        "parameters": [
+          {
+            "description": "Client-generated unique token identifying this create-split request (Issue #888). Replaying the same key with an identical payload returns the original response instead of resubmitting; replaying it with a different payload returns 409 IDEMPOTENCY_KEY_CONFLICT. Keys expire after IDEMPOTENCY_KEY_TTL_MS (default 24h), after which the request is treated as new.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "description": "Client-generated unique token identifying this create-split request (Issue #888). Replaying the same key with an identical payload returns the original response instead of resubmitting; replaying it with a different payload returns 409 IDEMPOTENCY_KEY_CONFLICT. Keys expire after IDEMPOTENCY_KEY_TTL_MS (default 24h), after which the request is treated as new.",
+              "example": "550e8400-e29b-41d4-a716-446655440000",
+              "maxLength": 255,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_.:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "collaborators": [
+                  {
+                    "address": "GCZTK3PNYXCVF7Z3ELVELEJZ7BVGPGPVJ3NVZNI7O6DVCHPA4JU6LXRV",
+                    "alias": "Producer",
+                    "basisPoints": 6000
+                  },
+                  {
+                    "address": "GBG234UA6RBPDD5K6FHMQXHUXB5ALOENQGH24Y3W4ERX2YJNQ4MK4V25",
+                    "alias": "Vocalist",
+                    "basisPoints": 4000
+                  }
+                ],
+                "owner": "GBJRKIYXAAFD3NZCWJXGUTNKYUQFZC2ANS6LRMBPJCE4IZSMJJMZPQBT",
+                "projectId": "afrobeats_001",
+                "projectType": "music",
+                "title": "Afrobeats Collective Vol. 1",
+                "token": "CDOVDY3MZDG7PHCGVP7EP2EKQ2ENV26DZW6FKLBRN42LOGIZGXZV3WX5"
+              },
+              "schema": {
+                "properties": {
+                  "collaborators": {
+                    "items": {
+                      "properties": {
+                        "address": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "alias": {
+                          "maxLength": 100,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "basisPoints": {
+                          "exclusiveMinimum": true,
+                          "maximum": 10000,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "address",
+                        "alias",
+                        "basisPoints"
+                      ],
+                      "type": "object"
+                    },
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  "owner": {
+                    "description": "owner",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "projectId": {
+                    "maxLength": 32,
+                    "minLength": 1,
+                    "pattern": "^[a-zA-Z0-9_]+$",
+                    "type": "string"
+                  },
+                  "projectType": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "token": {
+                    "description": "token",
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "owner",
+                  "projectId",
+                  "title",
+                  "projectType",
+                  "token",
+                  "collaborators"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "metadata": {
+                    "contractId": "CAGR5U5IBEPFVJDZPZUXXNCPXAHNZ6TWVIUTI5RLRH3SZSU4O2VXDOPF",
+                    "networkPassphrase": "Test SDF Network ; September 2015",
+                    "operation": "create_project",
+                    "sourceAccount": "GBJRKIYXAAFD3NZCWJXGUTNKYUQFZC2ANS6LRMBPJCE4IZSMJJMZPQBT"
+                  },
+                  "xdr": "AAAAAgAAAAC5tRUXpDqRcTvpvKF...(truncated unsigned transaction envelope)"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/XdrResponse"
+                }
+              }
+            },
+            "description": "Unsigned transaction XDR ready for the owner to sign and submit"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "details": {
+                    "path": [
+                      "collaborators"
+                    ]
+                  },
+                  "error": "VALIDATION_ERROR",
+                  "message": "collaborators basisPoints must sum to exactly 10000",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "IDEMPOTENCY_KEY_CONFLICT",
+                  "error": "IDEMPOTENCY_KEY_CONFLICT",
+                  "message": "Idempotency-Key was already used with a different request payload.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict with existing resource"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          }
+        },
+        "summary": "Create a new split project",
+        "tags": [
+          "Splits"
+        ]
+      }
+    },
+    "/splits/admin/allow-token": {
+      "post": {
+        "description": "Builds an unsigned XDR to add a token to the contract allowlist. Requires admin API key.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "admin": {
+                    "description": "admin",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "token": {
+                    "description": "token",
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "admin",
+                  "token"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/XdrResponse"
+                }
+              }
+            },
+            "description": "Unsigned transaction XDR"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "UNAUTHORIZED",
+                  "message": "Missing or invalid bearer token / admin API key.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "FORBIDDEN",
+                  "message": "You do not have permission to perform this action.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "SERVICE_UNAVAILABLE",
+                  "message": "The service is temporarily unavailable. Please try again shortly.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Service temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "adminApiKey": []
+          }
+        ],
+        "summary": "Allow a payment token",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/splits/admin/allowlist": {
+      "get": {
+        "description": "Returns the contract admin address, total allowed token count, and a paginated token allowlist.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "nullable": true,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "admin": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer"
+                    },
+                    "tokens": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "admin",
+                    "count",
+                    "tokens"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Token allowlist page"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "UNAUTHORIZED",
+                  "message": "Missing or invalid bearer token / admin API key.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "FORBIDDEN",
+                  "message": "You do not have permission to perform this action.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          }
+        },
+        "security": [
+          {
+            "adminApiKey": []
+          }
+        ],
+        "summary": "List allowed payment tokens",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/splits/admin/cache-stats": {
+      "get": {
+        "description": "Returns internal read-cache hit/miss statistics for diagnostics.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "evictions": {
+                      "type": "integer"
+                    },
+                    "hits": {
+                      "type": "integer"
+                    },
+                    "misses": {
+                      "type": "integer"
+                    },
+                    "ttlMs": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "hits",
+                    "misses",
+                    "evictions",
+                    "ttlMs"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Cache statistics"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "UNAUTHORIZED",
+                  "message": "Missing or invalid bearer token / admin API key.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "adminApiKey": []
+          }
+        ],
+        "summary": "Get read cache statistics",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/splits/admin/disallow-token": {
+      "post": {
+        "description": "Builds an unsigned XDR to remove a token from the contract allowlist. Requires admin API key.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "admin": {
+                    "description": "admin",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "token": {
+                    "description": "token",
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "admin",
+                  "token"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/XdrResponse"
+                }
+              }
+            },
+            "description": "Unsigned transaction XDR"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "UNAUTHORIZED",
+                  "message": "Missing or invalid bearer token / admin API key.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "FORBIDDEN",
+                  "message": "You do not have permission to perform this action.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "SERVICE_UNAVAILABLE",
+                  "message": "The service is temporarily unavailable. Please try again shortly.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Service temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "adminApiKey": []
+          }
+        ],
+        "summary": "Disallow a payment token",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/splits/admin/is-token-allowed": {
+      "get": {
+        "description": "Returns whether a specific token contract address is on the allowlist.",
+        "parameters": [
+          {
+            "description": "token contract address to check",
+            "in": "query",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "description": "token contract address to check",
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "isAllowed": {
+                      "type": "boolean"
+                    },
+                    "token": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "token",
+                    "isAllowed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Token allowlist check result"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "UNAUTHORIZED",
+                  "message": "Missing or invalid bearer token / admin API key.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "FORBIDDEN",
+                  "message": "You do not have permission to perform this action.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          }
+        },
+        "security": [
+          {
+            "adminApiKey": []
+          }
+        ],
+        "summary": "Check if a token is allowed",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/splits/admin/pause-distributions": {
+      "post": {
+        "description": "Builds an unsigned XDR to pause contract-wide fund distributions. Requires admin API key.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "admin": {
+                    "description": "admin",
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "admin"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/XdrResponse"
+                }
+              }
+            },
+            "description": "Unsigned transaction XDR"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "UNAUTHORIZED",
+                  "message": "Missing or invalid bearer token / admin API key.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "FORBIDDEN",
+                  "message": "You do not have permission to perform this action.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "SERVICE_UNAVAILABLE",
+                  "message": "The service is temporarily unavailable. Please try again shortly.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Service temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "adminApiKey": []
+          }
+        ],
+        "summary": "Pause all distributions",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/splits/admin/status": {
+      "get": {
+        "description": "Returns the current contract admin address and whether distributions are paused.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminStatus"
+                }
+              }
+            },
+            "description": "Admin status"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "UNAUTHORIZED",
+                  "message": "Missing or invalid bearer token / admin API key.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "FORBIDDEN",
+                  "message": "You do not have permission to perform this action.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          }
+        },
+        "security": [
+          {
+            "adminApiKey": []
+          }
+        ],
+        "summary": "Get admin contract status",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/splits/admin/token-count": {
+      "get": {
+        "description": "Returns the total number of tokens on the contract allowlist.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "count": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "count"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Allowed token count"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "UNAUTHORIZED",
+                  "message": "Missing or invalid bearer token / admin API key.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "FORBIDDEN",
+                  "message": "You do not have permission to perform this action.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          }
+        },
+        "security": [
+          {
+            "adminApiKey": []
+          }
+        ],
+        "summary": "Get allowed token count",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/splits/admin/unallocated": {
+      "get": {
+        "description": "Returns the unallocated balance held by the contract for a given token.",
+        "parameters": [
+          {
+            "description": "token contract address",
+            "in": "query",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "description": "token contract address",
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    },
+                    "unallocated": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "token",
+                    "unallocated"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unallocated balance"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "UNAUTHORIZED",
+                  "message": "Missing or invalid bearer token / admin API key.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "FORBIDDEN",
+                  "message": "You do not have permission to perform this action.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          }
+        },
+        "security": [
+          {
+            "adminApiKey": []
+          }
+        ],
+        "summary": "Get unallocated token balance",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/splits/admin/unpause-distributions": {
+      "post": {
+        "description": "Builds an unsigned XDR to resume contract-wide fund distributions. Requires admin API key.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "admin": {
+                    "description": "admin",
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "admin"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/XdrResponse"
+                }
+              }
+            },
+            "description": "Unsigned transaction XDR"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "UNAUTHORIZED",
+                  "message": "Missing or invalid bearer token / admin API key.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "FORBIDDEN",
+                  "message": "You do not have permission to perform this action.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "SERVICE_UNAVAILABLE",
+                  "message": "The service is temporarily unavailable. Please try again shortly.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Service temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "adminApiKey": []
+          }
+        ],
+        "summary": "Unpause distributions",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/splits/admin/withdraw-unallocated": {
+      "post": {
+        "description": "Builds an unsigned XDR to recover unallocated token balance from the contract. Requires admin API key.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "admin": {
+                    "description": "admin",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "amount": {
+                    "description": "amount in stroops to recover",
+                    "exclusiveMinimum": true,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "to": {
+                    "description": "destination address",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "token": {
+                    "description": "token contract address",
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "admin",
+                  "token",
+                  "to",
+                  "amount"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/XdrResponse"
+                }
+              }
+            },
+            "description": "Unsigned transaction XDR"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "UNAUTHORIZED",
+                  "message": "Missing or invalid bearer token / admin API key.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "SERVICE_UNAVAILABLE",
+                  "message": "The service is temporarily unavailable. Please try again shortly.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Service temporarily unavailable"
+          }
+        },
+        "security": [
+          {
+            "adminApiKey": []
+          }
+        ],
+        "summary": "Withdraw unallocated tokens",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/splits/{projectId}": {
+      "get": {
+        "description": "Fetches the current on-chain state for a single split project including collaborators and balances.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "maxLength": 32,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9_]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            },
+            "description": "Project details"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "NOT_FOUND",
+                  "message": "Project afrobeats_001 does not exist.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          }
+        },
+        "summary": "Get project details by ID",
+        "tags": [
+          "Splits"
+        ]
+      }
+    },
+    "/splits/{projectId}/claim": {
+      "post": {
+        "description": "Builds an unsigned XDR allowing a collaborator to claim their allocated share from a project.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "maxLength": 32,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9_]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "claimer": {
+                    "description": "collaborator address performing the claim",
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "claimer"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/XdrResponse"
+                }
+              }
+            },
+            "description": "Unsigned transaction XDR"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "NOT_FOUND",
+                  "message": "Project afrobeats_001 does not exist.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          }
+        },
+        "summary": "Claim collaborator payout",
+        "tags": [
+          "Splits"
+        ]
+      }
+    },
+    "/splits/{projectId}/claimable/{collaborator}": {
+      "get": {
+        "description": "Returns the claimable, claimed, and total allocated amounts for a collaborator on a project.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "maxLength": 32,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9_]+$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Stellar address of the collaborator",
+            "in": "path",
+            "name": "collaborator",
+            "required": true,
+            "schema": {
+              "description": "Stellar address of the collaborator",
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimableResponse"
+                }
+              }
+            },
+            "description": "Claimable payout information"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "NOT_FOUND",
+                  "message": "Project afrobeats_001 does not exist.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          }
+        },
+        "summary": "Get claimable payout information for a collaborator",
+        "tags": [
+          "Splits"
+        ]
+      }
+    },
+    "/splits/{projectId}/collaborators": {
+      "put": {
+        "description": "Builds an unsigned XDR to replace the collaborator list and revenue share allocations. Fails validation if any address repeats or shares don't sum to 10,000 basis points; the frontend CreateSplitWizard performs the same duplicate/casing checks client-side, but this endpoint is the source of truth.",
+        "parameters": [
+          {
+            "description": "Project ID",
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project ID",
+              "example": "afrobeats_001",
+              "maxLength": 32,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9_]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "collaborators": [
+                  {
+                    "address": "GCZTK3PNYXCVF7Z3ELVELEJZ7BVGPGPVJ3NVZNI7O6DVCHPA4JU6LXRV",
+                    "alias": "Producer",
+                    "basisPoints": 5000
+                  },
+                  {
+                    "address": "GBG234UA6RBPDD5K6FHMQXHUXB5ALOENQGH24Y3W4ERX2YJNQ4MK4V25",
+                    "alias": "Vocalist",
+                    "basisPoints": 5000
+                  }
+                ],
+                "owner": "GBJRKIYXAAFD3NZCWJXGUTNKYUQFZC2ANS6LRMBPJCE4IZSMJJMZPQBT"
+              },
+              "schema": {
+                "properties": {
+                  "collaborators": {
+                    "items": {
+                      "properties": {
+                        "address": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "alias": {
+                          "maxLength": 100,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "basisPoints": {
+                          "exclusiveMinimum": true,
+                          "maximum": 10000,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "address",
+                        "alias",
+                        "basisPoints"
+                      ],
+                      "type": "object"
+                    },
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  "owner": {
+                    "description": "owner",
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "owner",
+                  "collaborators"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "metadata": {
+                    "contractId": "CAGR5U5IBEPFVJDZPZUXXNCPXAHNZ6TWVIUTI5RLRH3SZSU4O2VXDOPF",
+                    "networkPassphrase": "Test SDF Network ; September 2015",
+                    "operation": "update_collaborators",
+                    "sourceAccount": "GBJRKIYXAAFD3NZCWJXGUTNKYUQFZC2ANS6LRMBPJCE4IZSMJJMZPQBT"
+                  },
+                  "xdr": "AAAAAgAAAAC5tRUXpDqRcTvpvKF...(truncated unsigned transaction envelope)"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/XdrResponse"
+                }
+              }
+            },
+            "description": "Unsigned transaction XDR"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "details": {
+                    "path": [
+                      "collaborators"
+                    ]
+                  },
+                  "error": "VALIDATION_ERROR",
+                  "message": "duplicate collaborator address found",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "NOT_FOUND",
+                  "message": "Project afrobeats_001 does not exist.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          }
+        },
+        "summary": "Update project collaborators",
+        "tags": [
+          "Splits"
+        ]
+      }
+    },
+    "/splits/{projectId}/deposit": {
+      "post": {
+        "description": "Builds an unsigned XDR to deposit tokens into a split project's escrow balance.",
+        "parameters": [
+          {
+            "description": "Project ID",
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project ID",
+              "example": "afrobeats_001",
+              "maxLength": 32,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9_]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "amount": 50000000,
+                "from": "GCZTK3PNYXCVF7Z3ELVELEJZ7BVGPGPVJ3NVZNI7O6DVCHPA4JU6LXRV"
+              },
+              "schema": {
+                "properties": {
+                  "amount": {
+                    "description": "deposit amount in stroops",
+                    "exclusiveMinimum": true,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "from": {
+                    "description": "from",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "token": {
+                    "description": "token",
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "from",
+                  "amount",
+                  "token"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "metadata": {
+                    "contractId": "CAGR5U5IBEPFVJDZPZUXXNCPXAHNZ6TWVIUTI5RLRH3SZSU4O2VXDOPF",
+                    "networkPassphrase": "Test SDF Network ; September 2015",
+                    "operation": "deposit",
+                    "sourceAccount": "GBJRKIYXAAFD3NZCWJXGUTNKYUQFZC2ANS6LRMBPJCE4IZSMJJMZPQBT"
+                  },
+                  "xdr": "AAAAAgAAAAC5tRUXpDqRcTvpvKF...(truncated unsigned transaction envelope)"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/XdrResponse"
+                }
+              }
+            },
+            "description": "Unsigned transaction XDR"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "details": {
+                    "path": [
+                      "amount"
+                    ]
+                  },
+                  "error": "VALIDATION_ERROR",
+                  "message": "amount must be greater than 0",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "NOT_FOUND",
+                  "message": "Project afrobeats_001 does not exist.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          }
+        },
+        "summary": "Deposit funds into a project",
+        "tags": [
+          "Splits"
+        ]
+      }
+    },
+    "/splits/{projectId}/distribute": {
+      "post": {
+        "description": "Builds an unsigned XDR to distribute accumulated project funds according to collaborator shares.",
+        "parameters": [
+          {
+            "description": "Project ID",
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project ID",
+              "example": "afrobeats_001",
+              "maxLength": 32,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9_]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "sourceAddress": "GBJRKIYXAAFD3NZCWJXGUTNKYUQFZC2ANS6LRMBPJCE4IZSMJJMZPQBT"
+              },
+              "schema": {
+                "properties": {
+                  "sourceAddress": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "metadata": {
+                    "contractId": "CAGR5U5IBEPFVJDZPZUXXNCPXAHNZ6TWVIUTI5RLRH3SZSU4O2VXDOPF",
+                    "networkPassphrase": "Test SDF Network ; September 2015",
+                    "operation": "distribute",
+                    "sourceAccount": "GBJRKIYXAAFD3NZCWJXGUTNKYUQFZC2ANS6LRMBPJCE4IZSMJJMZPQBT"
+                  },
+                  "xdr": "AAAAAgAAAAC5tRUXpDqRcTvpvKF...(truncated unsigned transaction envelope)"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/XdrResponse"
+                }
+              }
+            },
+            "description": "Unsigned transaction XDR"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "details": {
+                    "path": [
+                      "projectId"
+                    ]
+                  },
+                  "error": "VALIDATION_ERROR",
+                  "message": "Invalid projectId format.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "NOT_FOUND",
+                  "message": "Project afrobeats_001 does not exist.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          }
+        },
+        "summary": "Distribute project funds to collaborators",
+        "tags": [
+          "Splits"
+        ]
+      }
+    },
+    "/splits/{projectId}/history": {
+      "get": {
+        "description": "Returns paginated on-chain distribution (`round`) and payout (`payment`) events for a project, newest first. Pass the previous response's `nextCursor` back as the `cursor` query parameter to page forward.",
+        "parameters": [
+          {
+            "description": "Project ID",
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Project ID",
+              "example": "afrobeats_001",
+              "maxLength": 32,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9_]+$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "default": "",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "items": [
+                    {
+                      "amount": "3000000",
+                      "id": "0000012345678901234-0000000001",
+                      "ledgerCloseTime": "1732012800",
+                      "recipient": "GCZTK3PNYXCVF7Z3ELVELEJZ7BVGPGPVJ3NVZNI7O6DVCHPA4JU6LXRV",
+                      "txHash": "3389e9f0f1a65f19736cacf544c2e825313e8447f569233bb8db39aa607c8fc",
+                      "type": "payment"
+                    },
+                    {
+                      "amount": "5000000",
+                      "id": "0000012345678901233-0000000001",
+                      "ledgerCloseTime": "1732012700",
+                      "round": 3,
+                      "txHash": "3389e9f0f1a65f19736cacf544c2e825313e8447f569233bb8db39aa607c8fc",
+                      "type": "round"
+                    }
+                  ],
+                  "nextCursor": "0000012345678901233-0000000001"
+                },
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "nullable": true
+                      },
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "History items"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "details": {
+                    "message": "Check cursor and limit parameters."
+                  },
+                  "error": "VALIDATION_ERROR",
+                  "message": "Invalid query parameters.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "NOT_FOUND",
+                  "message": "Project afrobeats_001 does not exist.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          }
+        },
+        "summary": "Get project transaction history",
+        "tags": [
+          "Splits"
+        ]
+      }
+    },
+    "/splits/{projectId}/lock": {
+      "post": {
+        "description": "Builds an unsigned XDR to permanently lock a project, preventing further metadata or collaborator changes.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "maxLength": 32,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9_]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "owner": {
+                    "description": "owner",
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "owner"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/XdrResponse"
+                }
+              }
+            },
+            "description": "Unsigned transaction XDR"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "NOT_FOUND",
+                  "message": "Project afrobeats_001 does not exist.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          }
+        },
+        "summary": "Lock a project permanently",
+        "tags": [
+          "Splits"
+        ]
+      }
+    },
+    "/splits/{projectId}/metadata": {
+      "patch": {
+        "description": "Builds an unsigned XDR to update a project's title and project type. Text fields are server-side sanitized.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "maxLength": 32,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9_]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "owner": {
+                    "description": "owner",
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "projectType": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "owner",
+                  "title",
+                  "projectType"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/XdrResponse"
+                }
+              }
+            },
+            "description": "Unsigned transaction XDR"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "NOT_FOUND",
+                  "message": "Project afrobeats_001 does not exist.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "BAD_GATEWAY",
+                  "message": "The Stellar network RPC call failed. Please retry.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Upstream RPC or contract error"
+          }
+        },
+        "summary": "Update project metadata (title/category)",
+        "tags": [
+          "Splits"
+        ]
+      }
+    },
+    "/transactions/history": {
+      "get": {
+        "description": "Returns paginated payout records with optional wallet, date, and status filters.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "walletAddress",
+            "required": false,
+            "schema": {
+              "pattern": "^G[A-Z2-7]{55}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "required": false,
+            "schema": {
+              "exclusiveMinimum": true,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "required": false,
+            "schema": {
+              "exclusiveMinimum": true,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "pending",
+                "completed",
+                "failed"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "nullable": true,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    },
+                    "total": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "transactions": {
+                      "items": {
+                        "properties": {
+                          "amount": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "recipient": {
+                            "type": "string"
+                          },
+                          "roundId": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "enum": [
+                              "pending",
+                              "completed",
+                              "failed"
+                            ],
+                            "type": "string"
+                          },
+                          "timestamp": {
+                            "type": "integer"
+                          },
+                          "token": {
+                            "type": "string"
+                          },
+                          "txHash": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "roundId",
+                          "recipient",
+                          "amount",
+                          "token",
+                          "timestamp",
+                          "txHash",
+                          "status"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "transactions",
+                    "total",
+                    "limit",
+                    "offset"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Paginated transaction history"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Query payout transaction history",
+        "tags": [
+          "Transactions"
+        ]
+      }
+    },
+    "/transactions/recipient/{walletAddress}": {
+      "get": {
+        "description": "Returns all payout records sent to the given Stellar wallet address.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "walletAddress",
+            "required": true,
+            "schema": {
+              "pattern": "^G[A-Z2-7]{55}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "total": {
+                      "type": "integer"
+                    },
+                    "transactions": {
+                      "items": {
+                        "properties": {
+                          "amount": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "recipient": {
+                            "type": "string"
+                          },
+                          "roundId": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "enum": [
+                              "pending",
+                              "completed",
+                              "failed"
+                            ],
+                            "type": "string"
+                          },
+                          "timestamp": {
+                            "type": "integer"
+                          },
+                          "token": {
+                            "type": "string"
+                          },
+                          "txHash": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "roundId",
+                          "recipient",
+                          "amount",
+                          "token",
+                          "timestamp",
+                          "txHash",
+                          "status"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "walletAddress": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "transactions",
+                    "total",
+                    "walletAddress"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Recipient transaction list"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "List transactions for a recipient",
+        "tags": [
+          "Transactions"
+        ]
+      }
+    },
+    "/transactions/{txHash}": {
+      "get": {
+        "description": "Returns a single payout record matching the Stellar transaction hash.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "txHash",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "amount": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "recipient": {
+                      "type": "string"
+                    },
+                    "roundId": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "enum": [
+                        "pending",
+                        "completed",
+                        "failed"
+                      ],
+                      "type": "string"
+                    },
+                    "timestamp": {
+                      "type": "integer"
+                    },
+                    "token": {
+                      "type": "string"
+                    },
+                    "txHash": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "roundId",
+                    "recipient",
+                    "amount",
+                    "token",
+                    "timestamp",
+                    "txHash",
+                    "status"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Transaction record"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "NOT_FOUND",
+                  "message": "Project afrobeats_001 does not exist.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Get transaction by hash",
+        "tags": [
+          "Transactions"
+        ]
+      }
+    },
+    "/users/login": {
+      "post": {
+        "description": "Authenticates a registered user and returns a JWT bearer token.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "walletAddress": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "walletAddress"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "alias": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "isActive": {
+                      "type": "boolean"
+                    },
+                    "role": {
+                      "enum": [
+                        "company",
+                        "customer",
+                        "driver"
+                      ],
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "walletAddress": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "walletAddress",
+                    "role",
+                    "isActive",
+                    "createdAt",
+                    "updatedAt",
+                    "token"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authenticated user with JWT"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "NOT_FOUND",
+                  "message": "Project afrobeats_001 does not exist.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Log in by wallet address",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/users/me": {
+      "get": {
+        "description": "Returns the profile of the user identified by the JWT bearer token.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "alias": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "isActive": {
+                      "type": "boolean"
+                    },
+                    "role": {
+                      "enum": [
+                        "company",
+                        "customer",
+                        "driver"
+                      ],
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "walletAddress": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "walletAddress",
+                    "role",
+                    "isActive",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authenticated user profile"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "UNAUTHORIZED",
+                  "message": "Missing or invalid bearer token / admin API key.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "NOT_FOUND",
+                  "message": "Project afrobeats_001 does not exist.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get authenticated user profile",
+        "tags": [
+          "Users"
+        ]
+      },
+      "patch": {
+        "description": "Updates email or alias for the authenticated user.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "alias": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "email": {
+                    "format": "email",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "alias": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "isActive": {
+                      "type": "boolean"
+                    },
+                    "role": {
+                      "enum": [
+                        "company",
+                        "customer",
+                        "driver"
+                      ],
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "walletAddress": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "walletAddress",
+                    "role",
+                    "isActive",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Updated user profile"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "UNAUTHORIZED",
+                  "message": "Missing or invalid bearer token / admin API key.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "NOT_FOUND",
+                  "message": "Project afrobeats_001 does not exist.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Update authenticated user profile",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/users/register": {
+      "post": {
+        "description": "Creates a user profile linked to a Stellar wallet address.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "alias": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "email": {
+                    "format": "email",
+                    "type": "string"
+                  },
+                  "role": {
+                    "default": "customer",
+                    "enum": [
+                      "company",
+                      "customer",
+                      "driver"
+                    ],
+                    "type": "string"
+                  },
+                  "walletAddress": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "walletAddress"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "alias": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "isActive": {
+                      "type": "boolean"
+                    },
+                    "role": {
+                      "enum": [
+                        "company",
+                        "customer",
+                        "driver"
+                      ],
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "walletAddress": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "walletAddress",
+                    "role",
+                    "isActive",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Registered user profile"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "CONFLICT",
+                  "message": "A project with ID \"afrobeats_001\" already exists.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict with existing resource"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Register a new user",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/users/{walletAddress}": {
+      "get": {
+        "description": "Looks up a public user profile by Stellar wallet address.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "walletAddress",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "alias": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "isActive": {
+                      "type": "boolean"
+                    },
+                    "role": {
+                      "enum": [
+                        "company",
+                        "customer",
+                        "driver"
+                      ],
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "walletAddress": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "walletAddress",
+                    "role",
+                    "isActive",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "User profile"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "NOT_FOUND",
+                  "message": "Project afrobeats_001 does not exist.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Get user by wallet address",
+        "tags": [
+          "Users"
+        ]
+      }
+    }
   },
   "servers": [
     {
       "url": "http://localhost:3001"
     }
-  ],
-  "tags": [
-    {
-      "name": "health"
-    },
-    {
-      "name": "splits"
-    }
-  ],
-  "components": {
-    "securitySchemes": {},
-    "schemas": {
-      "RequestIdError": {
-        "type": "object",
-        "required": [
-          "error",
-          "message",
-          "requestId"
-        ],
-        "properties": {
-          "error": {
-            "type": "string",
-            "example": "validation_error"
-          },
-          "message": {
-            "type": "string",
-            "example": "Invalid request payload."
-          },
-          "requestId": {
-            "type": "string",
-            "example": "c9d9f4d9-2c0a-4f7c-92cf-7d3db4f0d4b4"
-          },
-          "details": {
-            "description": "Optional validation details; shape varies by endpoint.",
-            "type": "object",
-            "additionalProperties": true
-          },
-          "status": {
-            "type": "string",
-            "example": "not_ready"
-          }
-        },
-        "additionalProperties": false
-      },
-      "BuildTransactionMetadata": {
-        "type": "object",
-        "required": [
-          "contractId",
-          "networkPassphrase",
-          "sourceAccount",
-          "sequenceNumber",
-          "fee",
-          "operation"
-        ],
-        "properties": {
-          "contractId": {
-            "type": "string",
-            "example": "C1234abcd..."
-          },
-          "networkPassphrase": {
-            "type": "string",
-            "example": "Test SDF Network ; September 2015"
-          },
-          "sourceAccount": {
-            "type": "string",
-            "example": "GABCDEF12345..."
-          },
-          "sequenceNumber": {
-            "oneOf": [
-              { "type": "integer" },
-              { "type": "string" }
-            ],
-            "example": 123
-          },
-          "fee": {
-            "oneOf": [
-              { "type": "integer" },
-              { "type": "string" }
-            ],
-            "example": 100
-          },
-          "operation": {
-            "type": "string",
-            "description": "The operation being performed. Possible values: create_project, lock_project, update_collaborators, distribute, allow_token, disallow_token, pause_distributions, unpause_distributions",
-            "example": "create_project"
-          }
-        },
-        "additionalProperties": true
-      },
-      "BuildTransactionResponse": {
-        "type": "object",
-        "required": [
-          "xdr",
-          "metadata"
-        ],
-        "properties": {
-          "xdr": {
-            "type": "string",
-            "description": "Unsigned (prepared) transaction XDR; the caller must sign and submit."
-          },
-          "metadata": {
-            "$ref": "#/components/schemas/BuildTransactionMetadata"
-          }
-        },
-        "additionalProperties": false
-      },
-      "HealthResponse": {
-        "type": "object",
-        "required": [
-          "status",
-          "uptime",
-          "timestamp"
-        ],
-        "properties": {
-          "status": { "type": "string", "example": "ok" },
-          "uptime": { "type": "number", "example": 12.34 },
-          "timestamp": { "type": "string", "format": "date-time" }
-        },
-        "additionalProperties": false
-      },
-      "ReadyResponse": {
-        "type": "object",
-        "required": [
-          "status"
-        ],
-        "properties": {
-          "status": { "type": "string", "example": "ready" }
-        },
-        "additionalProperties": false
-      },
-      "SplitCollaborator": {
-        "type": "object",
-        "required": [
-          "address",
-          "alias",
-          "basisPoints"
-        ],
-        "properties": {
-          "address": { "type": "string", "example": "GABCDEF12345..." },
-          "alias": { "type": "string", "example": "Burna B." },
-          "basisPoints": { "type": "integer", "example": 5000 }
-        },
-        "additionalProperties": false
-      },
-      "SplitProject": {
-        "type": "object",
-        "required": [
-          "projectId",
-          "title",
-          "projectType",
-          "token",
-          "owner",
-          "collaborators",
-          "locked",
-          "totalDistributed",
-          "distributionRound"
-        ],
-        "properties": {
-          "projectId": { "type": "string", "example": "afrobeats_001" },
-          "title": { "type": "string", "example": "Afrobeats Compilation" },
-          "projectType": { "type": "string", "example": "music" },
-          "token": { "type": "string", "example": "CDEF1234..." },
-          "owner": { "type": "string", "example": "GABCDEF12345..." },
-          "collaborators": {
-            "type": "array",
-            "items": { "$ref": "#/components/schemas/SplitCollaborator" },
-            "example": [
-              { "address": "GAAAA...", "alias": "Artist A", "basisPoints": 6000 },
-              { "address": "GBBBB...", "alias": "Artist B", "basisPoints": 4000 }
-            ]
-          },
-          "locked": { "type": "boolean", "example": false },
-          "totalDistributed": { "type": "string", "example": "0" },
-          "distributionRound": { "type": "integer", "example": 0 }
-        },
-        "additionalProperties": false
-      },
-      "CreateSplitCollaboratorInput": {
-        "type": "object",
-        "required": [
-          "address",
-          "alias",
-          "basisPoints"
-        ],
-        "properties": {
-          "address": { "type": "string", "example": "GABCDEF12345..." },
-          "alias": { "type": "string", "example": "Burna B." },
-          "basisPoints": { "type": "integer", "example": 5000 }
-        },
-        "additionalProperties": false
-      },
-      "CreateSplitRequest": {
-        "type": "object",
-        "required": [
-          "owner",
-          "projectId",
-          "title",
-          "projectType",
-          "token",
-          "collaborators"
-        ],
-        "properties": {
-          "owner": { "type": "string", "example": "GABCDEF12345..." },
-          "projectId": { "type": "string", "example": "afrobeats_001" },
-          "title": { "type": "string", "example": "Afrobeats Compilation" },
-          "projectType": { "type": "string", "example": "music" },
-          "token": { "type": "string", "example": "CDEF1234..." },
-          "collaborators": {
-            "type": "array",
-            "minItems": 2,
-            "items": { "$ref": "#/components/schemas/CreateSplitCollaboratorInput" },
-            "example": [
-              { "address": "GAAAA...", "alias": "Artist A", "basisPoints": 6000 },
-              { "address": "GBBBB...", "alias": "Artist B", "basisPoints": 4000 }
-            ]
-          }
-        },
-        "additionalProperties": false
-      },
-      "LockProjectRequest": {
-        "type": "object",
-        "required": [
-          "owner"
-        ],
-        "properties": {
-          "owner": { "type": "string", "example": "GABCDEF12345..." }
-        },
-        "additionalProperties": false
-      },
-      "UpdateCollaboratorsRequest": {
-        "type": "object",
-        "required": [
-          "owner",
-          "collaborators"
-        ],
-        "properties": {
-          "owner": { "type": "string", "example": "GABCDEF12345..." },
-          "collaborators": {
-            "type": "array",
-            "minItems": 2,
-            "items": { "$ref": "#/components/schemas/CreateSplitCollaboratorInput" },
-            "example": [
-              { "address": "GAAAA...", "alias": "Artist A", "basisPoints": 6000 },
-              { "address": "GBBBB...", "alias": "Artist B", "basisPoints": 4000 }
-            ]
-          }
-        },
-        "additionalProperties": false
-      },
-      "DistributeRequest": {
-        "type": "object",
-        "properties": {
-          "sourceAddress": { "type": "string", "example": "GABCDEF12345..." }
-        },
-        "additionalProperties": false
-      },
-      "AdminTokenRequest": {
-        "type": "object",
-        "required": ["admin", "token"],
-        "properties": {
-          "admin": { "type": "string", "example": "GADMIN12345..." },
-          "token": { "type": "string", "example": "CTOKEN1234..." }
-        },
-        "additionalProperties": false
-      },
-      "AdminPauseRequest": {
-        "type": "object",
-        "required": ["admin"],
-        "properties": {
-          "admin": { "type": "string", "example": "GADMIN12345..." }
-        },
-        "additionalProperties": false
-      },
-      "HistoryEvent": {
-        "oneOf": [
-          {
-            "type": "object",
-            "required": ["type", "round", "amount", "txHash", "ledgerCloseTime", "id"],
-            "properties": {
-              "type": { "type": "string", "enum": ["round"] },
-              "round": { "type": "integer", "example": 1 },
-              "amount": { "type": "string", "example": "1000000" },
-              "txHash": { "type": "string", "example": "abc123..." },
-              "ledgerCloseTime": { "type": "string", "format": "date-time" },
-              "id": { "type": "string", "example": "event123" }
-            },
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "required": ["type", "recipient", "amount", "txHash", "ledgerCloseTime", "id"],
-            "properties": {
-              "type": { "type": "string", "enum": ["payment"] },
-              "recipient": { "type": "string", "example": "GAAAA..." },
-              "amount": { "type": "string", "example": "500000" },
-              "txHash": { "type": "string", "example": "def456..." },
-              "ledgerCloseTime": { "type": "string", "format": "date-time" },
-              "id": { "type": "string", "example": "event456" }
-            },
-            "additionalProperties": false
-          }
-        ]
-      },
-      "HistoryResponse": {
-        "type": "object",
-        "required": ["items"],
-        "properties": {
-          "items": { "type": "array", "items": { "$ref": "#/components/schemas/HistoryEvent" } },
-          "nextCursor": { "type": "string", "nullable": true, "example": "cursor123" }
-        },
-        "additionalProperties": false
-      }
-    }
-  },
-  "paths": {
-    "/health": {
-      "get": {
-        "tags": [
-          "health"
-        ],
-        "summary": "Health check",
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/HealthResponse" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/health/live": {
-      "get": {
-        "tags": [
-          "health"
-        ],
-        "summary": "Liveness check",
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/health/ready": {
-      "get": {
-        "tags": [
-          "health"
-        ],
-        "summary": "Readiness check",
-        "responses": {
-          "200": {
-            "description": "Ready",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/ReadyResponse" }
-              }
-            }
-          },
-          "503": {
-            "description": "Not ready",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/splits": {
-      "get": {
-        "tags": [
-          "splits"
-        ],
-        "summary": "List split projects",
-        "parameters": [
-          {
-            "name": "start",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "default": 0,
-              "example": 0
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "default": 10,
-              "minimum": 1,
-              "maximum": 100,
-              "example": 10
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "List of projects",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": { "$ref": "#/components/schemas/SplitProject" }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "splits"
-        ],
-        "summary": "Build unsigned transaction to create a split project",
-        "description": "Accepts an optional Idempotency-Key header (Issue #888). Replaying the same key with an identical payload returns the original response instead of resubmitting; replaying it with a different payload returns 409 IDEMPOTENCY_KEY_CONFLICT. Keys expire after IDEMPOTENCY_KEY_TTL_MS (default 24h).",
-        "parameters": [
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "example": "550e8400-e29b-41d4-a716-446655440000"
-            },
-            "description": "Client-generated unique token identifying this create-split request."
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/CreateSplitRequest" },
-              "example": {
-                "owner": "GABCDEF12345...",
-                "projectId": "afrobeats_001",
-                "title": "Afrobeats Compilation",
-                "projectType": "music",
-                "token": "CDEF1234...",
-                "collaborators": [
-                  { "address": "GAAAA...", "alias": "Artist A", "basisPoints": 6000 },
-                  { "address": "GBBBB...", "alias": "Artist B", "basisPoints": 4000 }
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Transaction built",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "409": {
-            "description": "Idempotency-Key was already used with a different request payload",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" },
-                "example": {
-                  "error": "IDEMPOTENCY_KEY_CONFLICT",
-                  "code": "IDEMPOTENCY_KEY_CONFLICT",
-                  "message": "Idempotency-Key was already used with a different request payload."
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/splits/{projectId}": {
-      "get": {
-        "tags": [
-          "splits"
-        ],
-        "summary": "Fetch split project by ID",
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "example": "afrobeats_001"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Project found",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/SplitProject" }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "404": {
-            "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/splits/{projectId}/history": {
-      "get": {
-        "tags": [
-          "splits"
-        ],
-        "summary": "List split project history events with cursor pagination",
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "example": "afrobeats_001"
-            }
-          },
-          {
-            "name": "cursor",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Opaque cursor returned by previous page. Omit for the first page."
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 200,
-              "default": 100
-            },
-            "description": "Maximum number of events per page."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Events page",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "required": ["items"],
-                  "properties": {
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "additionalProperties": true
-                      }
-                    },
-                    "nextCursor": {
-                      "type": "string",
-                      "nullable": true,
-                      "description": "Cursor for the next page, or null if no more results."
-                    }
-                  },
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/splits/{projectId}/lock": {
-      "post": {
-        "tags": [
-          "splits"
-        ],
-        "summary": "Build unsigned transaction to lock a split project",
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "example": "afrobeats_001"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/LockProjectRequest" },
-              "example": {
-                "owner": "GABCDEF12345..."
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Transaction built",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/splits/{projectId}/collaborators": {
-      "put": {
-        "tags": [
-          "splits"
-        ],
-        "summary": "Build unsigned transaction to update collaborators",
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "example": "afrobeats_001"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/UpdateCollaboratorsRequest" },
-              "example": {
-                "owner": "GABCDEF12345...",
-                "collaborators": [
-                  { "address": "GAAAA...", "alias": "Artist A", "basisPoints": 6000 },
-                  { "address": "GBBBB...", "alias": "Artist B", "basisPoints": 4000 }
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Transaction built",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/splits/{projectId}/distribute": {
-      "post": {
-        "tags": [
-          "splits"
-        ],
-        "summary": "Build unsigned transaction to distribute funds",
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "example": "afrobeats_001"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/DistributeRequest" },
-              "example": {
-                "sourceAddress": "GABCDEF12345..."
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Transaction built",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/splits/{projectId}/history": {
-      "get": {
-        "tags": [
-          "splits"
-        ],
-        "summary": "Get distribution history",
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "example": "afrobeats_001"
-            }
-          },
-          {
-            "name": "cursor",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "default": "",
-              "example": ""
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "default": 100,
-              "minimum": 1,
-              "maximum": 200,
-              "example": 100
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "History",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/HistoryResponse" }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/splits/{projectId}/claimable/{collaborator}": {
-      "get": {
-        "tags": [
-          "splits"
-        ],
-        "summary": "Get claimable payout information for a collaborator",
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "example": "afrobeats_001"
-            }
-          },
-          {
-            "name": "collaborator",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "example": "GACCOUNT...",
-              "description": "Stellar address of the collaborator"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Claimable payout information",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "required": [
-                    "projectId",
-                    "collaborator",
-                    "claimable",
-                    "claimed",
-                    "total"
-                  ],
-                  "properties": {
-                    "projectId": {
-                      "type": "string",
-                      "example": "afrobeats_001"
-                    },
-                    "collaborator": {
-                      "type": "string",
-                      "example": "GACCOUNT...",
-                      "description": "Stellar address of the collaborator"
-                    },
-                    "claimable": {
-                      "type": "string",
-                      "example": "1000000",
-                      "description": "Amount claimable by the collaborator (in stroops)"
-                    },
-                    "claimed": {
-                      "type": "string",
-                      "example": "500000",
-                      "description": "Amount already claimed by the collaborator (in stroops)"
-                    },
-                    "total": {
-                      "type": "string",
-                      "example": "2000000",
-                      "description": "Total amount allocated to the collaborator (in stroops)"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "404": {
-            "description": "Project not found or collaborator has no claimable info",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/splits/admin/allow-token": {
-      "post": {
-        "tags": ["splits"],
-        "summary": "Build unsigned transaction to add a token to the allowlist",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/AdminTokenRequest" },
-              "example": {
-                "admin": "GADMIN12345...",
-                "token": "CTOKEN1234..."
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Transaction built",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/splits/admin/disallow-token": {
-      "post": {
-        "tags": ["splits"],
-        "summary": "Build unsigned transaction to remove a token from the allowlist",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/AdminTokenRequest" },
-              "example": {
-                "admin": "GADMIN12345...",
-                "token": "CTOKEN1234..."
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Transaction built",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/splits/admin/pause-distributions": {
-      "post": {
-        "tags": ["splits"],
-        "summary": "Build unsigned transaction to pause distributions",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/AdminPauseRequest" },
-              "example": {
-                "admin": "GADMIN12345..."
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Transaction built",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/splits/admin/unpause-distributions": {
-      "post": {
-        "tags": ["splits"],
-        "summary": "Build unsigned transaction to unpause distributions",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/AdminPauseRequest" },
-              "example": {
-                "admin": "GADMIN12345..."
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Transaction built",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/BuildTransactionResponse" }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/RequestIdError" }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
+  ]
 }
-

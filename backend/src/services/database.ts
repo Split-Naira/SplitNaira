@@ -6,6 +6,11 @@ import { TransactionRecord } from "../entities/Transaction.js";
 import { ServiceState } from "../entities/ServiceState.js";
 import { AuditLog } from "../entities/AuditLog.js";
 import { LedgerBlock } from "../entities/LedgerBlock.js";
+import { InitialUserAndTransactionRecord1760000000000 } from "../migrations/1760000000000-InitialUserAndTransactionRecord.js";
+import { AddServiceState1760000000001 } from "../migrations/1760000000001-AddServiceState.js";
+import { AddAuditLog1760000000003 } from "../migrations/1760000000003-AddAuditLog.js";
+import { AddUserUpdatedAt1760000000004 } from "../migrations/1760000000004-AddUserUpdatedAt.js";
+import { AddUniqueIndexTransactionHash1760000000005 } from "../migrations/1760000000005-AddUniqueIndexTransactionHash.js";
 import { logger } from "./logger.js";
 
 let AppDataSource: DataSource | null = null;
@@ -36,7 +41,13 @@ export function createDataSource(): DataSource {
     synchronize: false,
     logging: process.env.NODE_ENV === "development",
     entities: [User, TransactionRecord, ServiceState, AuditLog, LedgerBlock],
-    migrations: ["src/migrations/*.ts"],
+    migrations: [
+      InitialUserAndTransactionRecord1760000000000,
+      AddServiceState1760000000001,
+      AddAuditLog1760000000003,
+      AddUserUpdatedAt1760000000004,
+      AddUniqueIndexTransactionHash1760000000005,
+    ],
     migrationsTableName: "migrations",
     extra: {
       max: poolMax,

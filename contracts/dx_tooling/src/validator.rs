@@ -1,6 +1,6 @@
 extern crate alloc;
 use alloc::format;
-use alloc::string::{String as RustString, ToString};
+use alloc::string::String as RustString;
 use alloc::vec::Vec as RustVec;
 
 use crate::errors::err;
