@@ -9,7 +9,7 @@
  *  - Timeout behaviour
  *  - listProjects query-string construction
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as Sentry from "@sentry/nextjs";
 import { ApiClient, ApiError } from "../lib/api-client";
 

@@ -74,8 +74,9 @@ app.use(
 // Authorization header (see middleware/auth-jwt.ts), never cookies, so the
 // browser never needs to send credentials cross-origin.
 app.use(cors({ origin: corsOrigin, credentials: false }));
-app.use(express.json({ limit: "1mb" }));
 app.use(requestIdMiddleware);
+app.use(express.json({ limit: "1mb" }));
+app.use(express.text({ type: "text/plain", limit: "1mb" }));
 app.use(metricsMiddleware);
 app.use(requestTimeout());
 

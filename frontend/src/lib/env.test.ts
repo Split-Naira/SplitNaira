@@ -147,21 +147,22 @@ describe("validateEnv()", () => {
 
   it("throws when CONTRACT_ID is absent during a production build", async () => {
     vi.resetModules();
-    const savedNodeEnv = process.env.NODE_ENV;
-    const savedNextPhase = process.env.NEXT_PHASE;
+    const mutableEnv = process.env as Record<string, string | undefined>;
+    const savedNodeEnv = mutableEnv.NODE_ENV;
+    const savedNextPhase = mutableEnv.NEXT_PHASE;
     const { NEXT_PUBLIC_CONTRACT_ID: _omit, ...rest } = VALID_ENV;
-    Object.assign(process.env, rest, { NODE_ENV: "production", NEXT_PHASE: "phase-production-build" });
-    delete process.env.NEXT_PUBLIC_CONTRACT_ID;
+    Object.assign(mutableEnv, rest, { NODE_ENV: "production", NEXT_PHASE: "phase-production-build" });
+    delete mutableEnv.NEXT_PUBLIC_CONTRACT_ID;
 
     try {
       const mod = await import("./env");
       expect(() => mod.validateEnv()).toThrowError(/NEXT_PUBLIC_CONTRACT_ID/);
     } finally {
       vi.resetModules();
-      if (savedNodeEnv === undefined) delete process.env.NODE_ENV;
-      else process.env.NODE_ENV = savedNodeEnv;
-      if (savedNextPhase === undefined) delete process.env.NEXT_PHASE;
-      else process.env.NEXT_PHASE = savedNextPhase;
+      if (savedNodeEnv === undefined) delete mutableEnv.NODE_ENV;
+      else mutableEnv.NODE_ENV = savedNodeEnv;
+      if (savedNextPhase === undefined) delete mutableEnv.NEXT_PHASE;
+      else mutableEnv.NEXT_PHASE = savedNextPhase;
     }
   });
 

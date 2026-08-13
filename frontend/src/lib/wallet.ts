@@ -1,7 +1,11 @@
 "use client";
 
-import { StellarWalletsKit } from "@creit.tech/stellar-wallets-kit";
-
+import {
+  getAddress,
+  getNetwork,
+  requestAccess,
+  signTransaction,
+} from "@stellar/freighter-api";
 
 export { createSorobanRpcServer, submitSorobanTransactionAndPoll } from "./soroban-transaction";
 
@@ -11,7 +15,15 @@ export interface WalletState {
   network: string | null;
 }
 
+type FreighterResult = {
+  error?: { message?: string };
+};
 
+function throwIfFreighterError(result: FreighterResult): void {
+  if (result.error) {
+    throw new Error(result.error.message ?? "Freighter returned an error.");
+  }
+}
 
 function parseNetwork(network: string): string {
   const n = network.toLowerCase();
@@ -23,19 +35,29 @@ function parseNetwork(network: string): string {
   return network;
 }
 
+async function readNetwork(fallback: string | null = null): Promise<string | null> {
+  try {
+    const result = await getNetwork();
+    throwIfFreighterError(result);
+    return result.network ? parseNetwork(result.network) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function getWalletState(): Promise<WalletState> {
   try {
-    const { address } = await StellarWalletsKit.getAddress();
-    const rawNetwork = StellarWalletsKit.getNetwork
-      ? await StellarWalletsKit.getNetwork()
-      : null;
-    const resolvedNetwork = typeof rawNetwork === "object" && rawNetwork !== null
-      ? (rawNetwork as Record<string, unknown>).network
-      : rawNetwork;
+    const result = await getAddress();
+    throwIfFreighterError(result);
+
+    if (!result.address) {
+      return { connected: false, address: null, network: null };
+    }
+
     return {
       connected: true,
-      address: address ?? null,
-      network: typeof resolvedNetwork === "string" ? parseNetwork(resolvedNetwork) : null,
+      address: result.address,
+      network: await readNetwork(),
     };
   } catch {
     return { connected: false, address: null, network: null };
@@ -44,27 +66,27 @@ export async function getWalletState(): Promise<WalletState> {
 
 export async function connectWallet(network?: string): Promise<WalletState> {
   const targetNetwork = network ?? "TESTNET";
-  StellarWalletsKit.setNetwork(targetNetwork as unknown as Parameters<typeof StellarWalletsKit.setNetwork>[0]);
-  const { address } = await StellarWalletsKit.authModal();
-  const rawNetwork = StellarWalletsKit.getNetwork
-    ? await StellarWalletsKit.getNetwork()
-    : targetNetwork;
-  const resolvedNetwork = typeof rawNetwork === "object" && rawNetwork !== null
-    ? (rawNetwork as Record<string, unknown>).network
-    : rawNetwork;
+  const result = await requestAccess();
+  throwIfFreighterError(result);
+
+  if (!result.address) {
+    throw new Error("Freighter did not return a wallet address.");
+  }
+
   return {
     connected: true,
-    address: address ?? null,
-    network: typeof resolvedNetwork === "string" ? parseNetwork(resolvedNetwork) : targetNetwork,
+    address: result.address,
+    network: await readNetwork(targetNetwork),
   };
 }
 
 export async function signWithWallet(xdr: string, networkPassphrase: string): Promise<string> {
-  const { signedTxXdr } = await StellarWalletsKit.signTransaction(xdr, {
-    networkPassphrase,
-  });
-  if (!signedTxXdr) {
+  const result = await signTransaction(xdr, { networkPassphrase });
+  throwIfFreighterError(result);
+
+  if (!result.signedTxXdr) {
     throw new Error("Wallet did not return a signed transaction.");
   }
-  return signedTxXdr;
+
+  return result.signedTxXdr;
 }
