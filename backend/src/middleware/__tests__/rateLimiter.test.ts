@@ -1,85 +1,49 @@
-import request from 'supertest';
-import express, { Express, Request, Response } from 'express';
-import { rateLimiter } from '../rateLimiter'; // Adjust path to match your rate-limiter middleware location
+import express from "express";
+import request from "supertest";
+import { describe, expect, it } from "vitest";
+import { writeLimiter } from "../rate-limit.js";
 
-describe('Rate Limiter Middleware Header & Response Tests', () => {
-  let app: Express;
+function makeApp() {
+  const app = express();
 
-  beforeEach(() => {
-    app = express();
-    app.use(express.json());
-
-    // Middleware to attach correlation ID for testing
-    app.use((req: Request, res: Response, next) => {
-      const correlationId = req.headers['x-correlation-id'] || 'test-correlation-id-123';
-      req.headers['x-correlation-id'] = correlationId as string;
-      res.setHeader('x-correlation-id', correlationId as string);
-      next();
-    });
-
-    // Protected route with a tight limit for testing (e.g., 3 requests max)
-    app.use('/api/protected', rateLimiter({ maxRequests: 3, windowMs: 60 * 1000 }));
-    app.get('/api/protected', (req: Request, res: Response) => {
-      res.status(200).json({ success: true, message: 'Protected resource accessed' });
-    });
+  app.use((req, res, next) => {
+    res.locals.requestId = req.header("x-request-id") ?? "test-request-id";
+    next();
   });
 
-  it('should return rate-limit headers on normal requests', async () => {
-    const response = await request(app)
-      .get('/api/protected')
-      .set('x-correlation-id', 'corr-req-1');
-
-    expect(response.status).toBe(200);
-    expect(response.headers).toHaveProperty('x-ratelimit-limit');
-    expect(response.headers).toHaveProperty('x-ratelimit-remaining');
-    expect(response.headers).toHaveProperty('x-ratelimit-reset');
-
-    expect(response.headers['x-ratelimit-limit']).toBe('3');
-    expect(response.headers['x-ratelimit-remaining']).toBe('2');
+  app.use("/api/protected", writeLimiter);
+  app.get("/api/protected", (_req, res) => {
+    res.status(200).json({ success: true });
   });
 
-  it('should accurately decrement remaining count in near-limit state', async () => {
-    // Request 1
-    const req1 = await request(app).get('/api/protected');
-    expect(req1.headers['x-ratelimit-remaining']).toBe('2');
+  return app;
+}
 
-    // Request 2 (Near Limit)
-    const req2 = await request(app).get('/api/protected');
-    expect(req2.headers['x-ratelimit-remaining']).toBe('1');
+describe("rate-limit middleware", () => {
+  it("returns standard headers and the active 429 API error shape", async () => {
+    const app = makeApp();
+    const requestId = "rate-limit-test-request";
 
-    // Request 3 (At Limit)
-    const req3 = await request(app).get('/api/protected');
-    expect(req3.headers['x-ratelimit-remaining']).toBe('0');
-    expect(req3.status).toBe(200);
-  });
+    const firstResponse = await request(app).get("/api/protected").set("x-request-id", requestId);
+    expect(firstResponse.status).toBe(200);
+    expect(firstResponse.headers).toHaveProperty("ratelimit-limit");
+    expect(firstResponse.headers).toHaveProperty("ratelimit-remaining");
 
-  it('should return 429 with stable error shape and correlation ID when limit is exceeded', async () => {
-    const correlationId = 'corr-exceeded-456';
+    const limit = Number.parseInt(String(firstResponse.headers["ratelimit-limit"]), 10);
+    expect(limit).toBeGreaterThan(0);
 
-    // Exhaust limit (3 requests)
-    for (let i = 0; i < 3; i++) {
-      await request(app).get('/api/protected').set('x-correlation-id', correlationId);
+    for (let i = 1; i < limit; i += 1) {
+      await request(app).get("/api/protected").set("x-request-id", requestId);
     }
 
-    // Exceeded Request (4th call)
-    const response = await request(app)
-      .get('/api/protected')
-      .set('x-correlation-id', correlationId);
+    const limitedResponse = await request(app).get("/api/protected").set("x-request-id", requestId);
 
-    expect(response.status).toBe(429);
-    expect(response.headers['x-correlation-id']).toBe(correlationId);
-
-    // Validate rate-limit header state on 429
-    expect(response.headers['x-ratelimit-remaining']).toBe('0');
-    expect(response.headers).toHaveProperty('retry-after');
-
-    // Assert stable error response shape
-    expect(response.body).toMatchObject({
-      error: {
-        code: 'TOO_MANY_REQUESTS',
-        message: expect.stringMatching(/rate limit exceeded/i),
-        correlationId: correlationId,
-      },
+    expect(limitedResponse.status).toBe(429);
+    expect(limitedResponse.headers).toHaveProperty("retry-after");
+    expect(limitedResponse.body).toMatchObject({
+      error: "rate_limited",
+      code: "RATE_LIMITED",
+      requestId
     });
   });
 });

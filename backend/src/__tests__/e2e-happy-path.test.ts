@@ -118,8 +118,16 @@ vi.mock("../services/stellar.js", () => {
     getStellarRpcServer: () => serverMock,
     executeWithRetry: async <T>(fn: () => Promise<T>) => fn(),
     RequestValidationError,
-    // Cache stubs — no-ops so tests remain stateless
-    getCached: () => undefined,
+    // Cache stubs — seed project reads used by deposit token verification.
+    getCached: (key: string) => key === "project:e2e_happy_001" ? {
+      projectId: "e2e_happy_001",
+      title: "E2E Happy Path Project",
+      projectType: "music",
+      owner: "GOWNER000000000000000000000000000000000000000000000000001",
+      token: "CTOKEN00000000000000000000000000000000000000000000000001",
+      collaborators: [],
+      balance: "0"
+    } : undefined,
     setCached: () => undefined,
     invalidateCache: () => undefined,
     invalidateCacheByPrefix: () => undefined,
@@ -219,7 +227,7 @@ describe("E2E happy path: create → deposit → distribute → history", () => 
 
     const res = await request(app)
       .post(`/splits/${PROJECT_ID}/deposit`)
-      .send({ from: COLLAB_A, amount: DEPOSIT_AMOUNT });
+      .send({ from: COLLAB_A, amount: DEPOSIT_AMOUNT, token: TOKEN });
 
     expect(res.status, `[deposit] unexpected status: ${JSON.stringify(res.body)}`).toBe(200);
     expect(res.body.xdr).toBe("XDR_DEPOSIT_E2E");
@@ -361,7 +369,7 @@ describe("E2E happy path: create → deposit → distribute → history", () => 
     prepareTransactionMock.mockResolvedValue(makeXdrMock("deposit", "XDR_FULL_DEPOSIT"));
     const depositRes = await request(app)
       .post(`/splits/${PROJECT_ID}/deposit`)
-      .send({ from: COLLAB_A, amount: DEPOSIT_AMOUNT });
+      .send({ from: COLLAB_A, amount: DEPOSIT_AMOUNT, token: TOKEN });
     expect(depositRes.status, `[full-flow deposit] ${JSON.stringify(depositRes.body)}`).toBe(200);
 
     // Step 3: distribute

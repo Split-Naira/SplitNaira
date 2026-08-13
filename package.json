@@ -39,7 +39,7 @@
     "node": ">=18",
     "npm": ">=8"
   },
-  "dependencies": {
-    "lightningcss-win32-x64-msvc": "^1.33.0"
+  "overrides": {
+    "axios": "1.19.0"
   }
 }

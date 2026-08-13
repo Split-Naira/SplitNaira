@@ -37,6 +37,9 @@
   ],
   "exclude": [
     "node_modules",
-    "src/common"
+    "src/common",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/**/__tests__/**"
   ]
 }

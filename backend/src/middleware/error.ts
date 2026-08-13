@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import type { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
 import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
@@ -72,7 +73,10 @@ export function errorHandler(
     return next(err);
   }
 
-  const requestId = res.locals.requestId;
+  const requestId = res.locals.requestId ?? req.header("x-request-id") ?? req.header("x-correlation-id") ?? randomUUID();
+  res.locals.requestId = requestId;
+  res.setHeader("x-request-id", requestId);
+  res.setHeader("x-correlation-id", requestId);
 
   // Real instanceof check instead of duck-typing on err.name/err.issues —
   // ZodError is a real exported class, so this is both simpler and more
@@ -113,6 +117,22 @@ export function errorHandler(
         ...(err.details && typeof err.details === "object" ? err.details : {}),
         ...(err.remediation ? { remediation: err.remediation } : {}),
       },
+    });
+  }
+
+  const parseError = err as { type?: string; status?: number; body?: unknown };
+  if (parseError.type === "entity.parse.failed" && parseError.status === 400) {
+    logger.warn("Malformed JSON request body", {
+      requestId,
+      path: req.originalUrl,
+      method: req.method,
+    });
+    return res.status(400).json({
+      error: "validation_error",
+      code: "VALIDATION_ERROR",
+      message: "Malformed JSON request body.",
+      requestId,
+      details: {},
     });
   }
 

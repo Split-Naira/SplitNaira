@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { useSafeQuery } from "../useSafeQuery";
 
-vi.mock("../api/safeFetch", () => ({
+vi.mock("../../api/safeFetch", () => ({
   safeFetch: vi.fn(),
 }));
 
-import { safeFetch } from "../api/safeFetch";
+import { safeFetch } from "../../api/safeFetch";
 
 describe("useSafeQuery", () => {
   beforeEach(() => {

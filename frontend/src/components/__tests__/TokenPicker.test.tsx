@@ -54,7 +54,7 @@ describe("TokenPicker", () => {
           required
         />,
       );
-      const select = screen.getByLabelText(/asset token/i);
+      const select = screen.getByLabelText(/asset token/i) as HTMLSelectElement;
       expect(select.required).toBe(true);
       expect(select.getAttribute("aria-required")).toBe("true");
     });
@@ -102,7 +102,7 @@ describe("TokenPicker", () => {
       fireEvent.change(screen.getByLabelText(/asset token/i), {
         target: { value: "custom" },
       });
-      const input = screen.getByLabelText(/custom token contract/i);
+      const input = screen.getByLabelText(/custom token contract/i) as HTMLInputElement;
       expect(input.required).toBe(true);
       expect(input.getAttribute("aria-required")).toBe("true");
     });

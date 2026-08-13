@@ -80,13 +80,14 @@ function regenerateSpec() {
   console.log(`\u23f3 Regenerating OpenAPI spec into ${tempDir}`);
 
   const result = spawnSync(
-    "npm",
+    process.platform === "win32" ? "npm.cmd" : "npm",
     ["run", "generate:openapi", "--workspace=backend"],
     {
       cwd: repoRoot,
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, OPENAPI_OUTPUT_DIR: tempDir },
+      shell: process.platform === "win32",
     },
   );
 
@@ -156,9 +157,9 @@ function main() {
   const committedYamlCanonical = canonicalJson(yaml.parse(committedYamlRaw));
 
   const tempJsonCanonical = readFileSync(TEMP_JSON, "utf-8");
-  const committedJsonCanonical = canonicalJson(
+  const committedJsonCanonical = `${canonicalJson(
     JSON.parse(readFileSync(COMMITTED_JSON, "utf-8")),
-  );
+  )}\n`;
 
   const drifted = [];
   if (tempYamlCanonical !== committedYamlCanonical) {

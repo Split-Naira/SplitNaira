@@ -1,5 +1,5 @@
-import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { TransactionReceipt } from '../TransactionReceipt';
 
 describe('TransactionReceipt', () => {
@@ -11,8 +11,8 @@ describe('TransactionReceipt', () => {
   });
 
   it('displays recovery buttons when pending becomes stale', () => {
-    const handleRetry = jest.fn();
-    const handleRefresh = jest.fn();
+    const handleRetry = vi.fn();
+    const handleRefresh = vi.fn();
 
     render(
       <TransactionReceipt
@@ -36,7 +36,7 @@ describe('TransactionReceipt', () => {
   });
 
   it('renders failed state with explicit retry option', () => {
-    const handleRetry = jest.fn();
+    const handleRetry = vi.fn();
     render(
       <TransactionReceipt
         status="failed"

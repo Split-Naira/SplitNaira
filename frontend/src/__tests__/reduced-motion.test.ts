@@ -107,8 +107,7 @@ describe("PageTransition under reduced motion", () => {
     render(
       createElement(
         PageTransition,
-        { motionKey: "test-page" },
-        createElement("p", { "data-testid": "child-content" }, "Visible content")
+        { motionKey: "test-page", children: createElement("p", { "data-testid": "child-content" }, "Visible content") }
       )
     );
 
@@ -127,8 +126,7 @@ describe("PageTransition under reduced motion", () => {
       render(
         createElement(
           PageTransition,
-          { motionKey: "rm-test" },
-          createElement("span", null, "content")
+          { motionKey: "rm-test", children: createElement("span", null, "content") }
         )
       )
     ).not.toThrow();

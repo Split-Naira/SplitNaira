@@ -9,13 +9,24 @@ pub fn deploy_contract(artifact: &ContractArtifact) -> Option<u64> {
     Some(artifact.version as u64 + 1000)
 }
 
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
-use std::process::Command;
+#[cfg(feature = "std")]
 use chrono::Utc;
+#[cfg(feature = "std")]
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "std")]
+use std::boxed::Box;
+#[cfg(feature = "std")]
+use std::collections::HashMap;
+#[cfg(feature = "std")]
+use std::fs::{File, OpenOptions};
+#[cfg(feature = "std")]
+use std::io::{Read, Write};
+#[cfg(feature = "std")]
+use std::process::Command;
+#[cfg(feature = "std")]
+use std::string::{String, ToString};
 
+#[cfg(feature = "std")]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct DeploymentRecord {
@@ -27,9 +38,11 @@ pub struct DeploymentRecord {
     pub deployed_at: String,
 }
 
+#[cfg(feature = "std")]
 pub type DeploymentsRegistry = HashMap<String, Option<DeploymentRecord>>;
 
 /// Resolves the current workspace git commit SHA hash signature via shell executions.
+#[cfg(feature = "std")]
 fn get_current_git_sha() -> String {
     Command::new("git")
         .args(&["rev-parse", "--short", "HEAD"])
@@ -39,6 +52,7 @@ fn get_current_git_sha() -> String {
 }
 
 /// Appends contract operational metrics to deployments.json registry database file.
+#[cfg(feature = "std")]
 pub fn record_successful_deployment(
     network: &str,
     contract_id: &str,
@@ -47,7 +61,7 @@ pub fn record_successful_deployment(
     deployer: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let file_path = "../deployments.json";
-    
+
     // Read and parse current state mapping indices
     let mut registry: DeploymentsRegistry = match File::open(file_path) {
         Ok(mut file) => {
@@ -76,7 +90,7 @@ pub fn record_successful_deployment(
         .create(true)
         .truncate(true)
         .open(file_path)?;
-        
+
     let json_bytes = serde_json::to_string_pretty(&registry)?;
     file.write_all(json_bytes.as_bytes())?;
 

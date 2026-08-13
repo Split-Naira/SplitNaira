@@ -3,8 +3,7 @@
  *
  * Validates that the backend rejects oversized JSON payloads with a stable
  * 413 (Payload Too Large) response and includes a correlation ID for
- * diagnostics. The configured limit is 1 MB (see `app.use(express.json({ limit: "1mb" }))`
- * in src/index.ts).
+ * diagnostics. The configured body-parser limit is 1 MB for JSON and text payloads.
  *
  * Related: GitHub Issue #840
  */
@@ -21,8 +20,9 @@ describe("Request Body Size Limit (Issue #840)", () => {
   beforeEach(() => {
     app = express();
     app.use(requestIdMiddleware);
-    // Match the production express.json configuration exactly
+    // Match the production body-parser configuration exactly.
     app.use(express.json({ limit: "1mb" }));
+    app.use(express.text({ type: "text/plain", limit: "1mb" }));
 
     // A simple echo route to test with
     app.post("/api/echo", (_req, res) => {
@@ -141,7 +141,7 @@ describe("Request Body Size Limit (Issue #840)", () => {
 
   // ─── Non-JSON content types ─────────────────────────────────────────────
 
-  it("does not parse non-JSON oversized payloads as JSON (Content-Type matters)", async () => {
+  it("rejects oversized text payloads with the same stable 413 shape", async () => {
     const largeData = "x".repeat(1_048_577);
 
     const res = await request(app)
@@ -149,9 +149,11 @@ describe("Request Body Size Limit (Issue #840)", () => {
       .send(largeData)
       .set("Content-Type", "text/plain");
 
-    // express.json() only parses application/json content types.
-    // Non-JSON requests bypass the JSON size limit, so the body is undefined
-    // and the request should succeed (200) rather than being rejected.
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(413);
+    expect(res.body).toMatchObject({
+      error: "payload_too_large",
+      code: "PAYLOAD_TOO_LARGE",
+    });
+    expect(res.headers["x-request-id"]).toBeDefined();
   });
 });

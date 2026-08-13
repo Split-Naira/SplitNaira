@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { Client } from "pg";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -24,10 +24,22 @@ function parseDatabaseUrl(url) {
   };
 }
 
-function buildAdminConnectionString(databaseUrl) {
-  const adminDb = process.env.MIGRATION_ADMIN_DATABASE || "postgres";
-  if (process.env.MIGRATION_ADMIN_DATABASE_URL) {
-    return process.env.MIGRATION_ADMIN_DATABASE_URL;
+function buildDatabaseUrlFromDbVars(env = process.env) {
+  if (!env.DB_HOST || !env.DB_USERNAME || !env.DB_PASSWORD || !env.DB_NAME) {
+    return undefined;
+  }
+
+  const username = encodeURIComponent(env.DB_USERNAME);
+  const password = encodeURIComponent(env.DB_PASSWORD);
+  const host = env.DB_HOST;
+  const port = env.DB_PORT || "5432";
+  const database = encodeURIComponent(env.DB_NAME);
+  return `postgresql://${username}:${password}@${host}:${port}/${database}`;
+}
+function buildAdminConnectionString(databaseUrl, env = process.env) {
+  const adminDb = env.MIGRATION_DRY_RUN_ADMIN_DATABASE || env.MIGRATION_ADMIN_DATABASE || "postgres";
+  if (env.MIGRATION_DRY_RUN_ADMIN_DATABASE_URL || env.MIGRATION_ADMIN_DATABASE_URL) {
+    return env.MIGRATION_DRY_RUN_ADMIN_DATABASE_URL || env.MIGRATION_ADMIN_DATABASE_URL;
   }
 
   const parsed = new URL(databaseUrl);
@@ -35,18 +47,33 @@ function buildAdminConnectionString(databaseUrl) {
   return parsed.toString();
 }
 
-async function resetDatabase(databaseUrl) {
-  const targetDatabase = parseDatabaseUrl(databaseUrl).database;
-  const adminConnectionString = buildAdminConnectionString(databaseUrl);
+export function resolveMigrationConfig(env = process.env) {
+  const databaseUrl = env.MIGRATION_DRY_RUN_DATABASE_URL || buildDatabaseUrlFromDbVars(env) || env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error("DATABASE_URL or MIGRATION_DRY_RUN_DATABASE_URL is required to run migration dry-run checks.");
+  }
 
-  console.log(`[migration:dry-run] Resetting database ${targetDatabase} for a fresh migration run`);
+  return {
+    databaseUrl,
+    adminConnectionString: buildAdminConnectionString(databaseUrl, env),
+    databaseName: env.MIGRATION_DRY_RUN_DATABASE_NAME || parseDatabaseUrl(databaseUrl).database,
+  };
+}
+
+async function resetDatabase(databaseUrl) {
+  const { databaseName, adminConnectionString } = resolveMigrationConfig({
+    ...process.env,
+    DATABASE_URL: databaseUrl,
+  });
+
+  console.log(`[migration:dry-run] Resetting database ${databaseName} for a fresh migration run`);
 
   const client = new Client({ connectionString: adminConnectionString });
   await client.connect();
 
   try {
-    await client.query(`DROP DATABASE IF EXISTS "${targetDatabase}" WITH (FORCE)`);
-    await client.query(`CREATE DATABASE "${targetDatabase}"`);
+    await client.query(`DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`);
+    await client.query(`CREATE DATABASE "${databaseName}"`);
   } finally {
     await client.end();
   }
@@ -80,10 +107,8 @@ async function main() {
   ensureEnv("CONTRACT_ID", "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
   ensureEnv("SIMULATOR_ACCOUNT", "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF");
 
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    throw new Error("DATABASE_URL is required to run migration dry-run checks.");
-  }
+  const { databaseUrl } = resolveMigrationConfig(process.env);
+  process.env.DATABASE_URL = databaseUrl;
 
   console.log("[migration:dry-run] Starting TypeORM migration verification against a fresh database");
   await resetDatabase(databaseUrl);
@@ -91,8 +116,11 @@ async function main() {
   console.log("[migration:dry-run] Completed successfully.");
 }
 
-main().catch((error) => {
-  console.error("[migration:dry-run] Failed.");
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
-});
+const invokedPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : "";
+if (import.meta.url === invokedPath) {
+  main().catch((error) => {
+    console.error("[migration:dry-run] Failed.");
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  });
+}

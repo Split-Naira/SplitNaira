@@ -40,7 +40,7 @@ describe("Frontend API Pagination", () => {
 
     await getProjectHistory("project-id", "my-cursor");
 
-    const calledUrl = mockFetch.mock.calls[0][0];
+    const calledUrl = String(mockFetch.mock.calls[0][0]);
     const url = new URL(calledUrl);
     expect(url.searchParams.get("cursor")).toBe("my-cursor");
   });
