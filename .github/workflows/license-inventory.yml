@@ -1,0 +1,31 @@
+name: Dependency License Inventory
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  license-check:
+    name: Generate dependency license inventory
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Generate license inventory
+        run: npx license-checker --summary --excludePrivatePackages
+
+      - name: Fail on disallowed licenses
+        run: |
+          npx license-checker --excludePrivatePackages \
+            --failOn "GPL-2.0;GPL-3.0;AGPL-3.0"
