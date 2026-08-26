@@ -1,0 +1,36 @@
+name: Package Manager Guard
+
+on:
+  pull_request:
+    paths:
+      - "**/package.json"
+      - "**/package-lock.json"
+      - "**/yarn.lock"
+      - "**/pnpm-lock.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Reject non-npm lockfiles
+        run: |
+          if find . -name "yarn.lock" -o -name "pnpm-lock.yaml" | grep -q .; then
+            echo "::error::This repo standardizes on npm. Remove yarn.lock/pnpm-lock.yaml and use npm install."
+            exit 1
+          fi
+
+      - name: Warn on out-of-sync workspace lockfiles
+        run: |
+          for f in package-lock.json frontend/package-lock.json backend/package-lock.json; do
+            if [ -f "$f" ] && ! git diff --quiet HEAD~1 -- "$(dirname "$f")/package.json" 2>/dev/null; then
+              if git diff --quiet HEAD~1 -- "$f" 2>/dev/null; then
+                echo "::warning::$f may be out of sync with its package.json changes."
+              fi
+            fi
+          done
