@@ -1,0 +1,34 @@
+name: Preview Locale Smoke Test
+
+on:
+  deployment_status:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: github.event.deployment_status.state == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check localized routes render
+        env:
+          PREVIEW_URL: ${{ github.event.deployment_status.target_url }}
+        run: |
+          routes=("/" "/en" "/fr" "/settings" "/dashboard")
+          for route in "${routes[@]}"; do
+            url="${PREVIEW_URL%/}${route}"
+            status=$(curl -s -o /tmp/body.html -w "%{http_code}" "$url")
+            if [ "$status" -ge 400 ]; then
+              echo "::error::$url returned HTTP $status"
+              exit 1
+            fi
+            if grep -qi "application error" /tmp/body.html; then
+              echo "::error::$url rendered a client error boundary"
+              exit 1
+            fi
+            echo "OK: $url ($status)"
+          done
