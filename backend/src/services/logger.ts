@@ -35,6 +35,7 @@ const SCRUB_KEYS = new Set([
   "databaseurl",
   "sentry_dsn",
   "sentrydsn",
+  "walletaddress",
 ]);
 
 function scrubSecrets(obj: Record<string, unknown>): Record<string, unknown> {
