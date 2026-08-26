@@ -110,6 +110,16 @@ With that flag set, backend admin reads remain available for diagnostics, while 
 
 The endpoint returns `503` when any component is unavailable so Render/load balancers do not route traffic to an instance with missing config, an unreachable database, an unreachable Soroban RPC, or an invalid/unreachable contract.
 
+The mainnet deploy workflow also runs `scripts/check-mainnet-readiness.mjs`
+after the normal readiness smoke test. It verifies the response JSON contract
+(`status`, non-empty `requestId`, and `env`/`db`/`cache`/`deploy` component
+booleans) and requires `200 ready` in deployment-gate mode. Run the same
+synthetic check manually with:
+
+```bash
+BACKEND_URL=https://api.example.com REQUIRE_READY=true node scripts/check-mainnet-readiness.mjs
+```
+
 ---
 
 ## CORS Configuration

@@ -239,7 +239,10 @@ describe("Route Integration Tests", () => {
       expect(res.body.status).toBe("ready");
       expect(res.body.components.env.ok).toBe(true);
       expect(res.body.components.db.ok).toBe(true);
+      expect(res.body.components.cache.ok).toBe(true);
       expect(res.body.components.deploy.ok).toBe(true);
+      expect(typeof res.body.requestId).toBe("string");
+      expect(res.body.requestId.length).toBeGreaterThan(0);
     });
 
     it("should return 503 when production secrets are missing in production", async () => {

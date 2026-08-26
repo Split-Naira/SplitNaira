@@ -2,7 +2,7 @@ import { Router } from "express";
 import { getEnvDiagnostics } from "../config/env.js";
 import { getDataSource } from "../services/database.js";
 import { getCacheStats } from "../services/stellar.js";
-import { getServiceHealth } from "../services/EventListenerService.js";
+import { getLedgerLag, getServiceHealth } from "../services/EventListenerService.js";
 import { createPayoutHistoryService } from "../services/PayoutHistoryService.js";
 
 const payoutHistory = createPayoutHistoryService();
@@ -58,7 +58,7 @@ opsRouter.post("/backfill", async (req, res) => {
 
 opsRouter.get("/status", (_req, res) => {
   res.json({
-    eventListener: getServiceHealth(),
+    eventListener: { ...getServiceHealth(), ledgerLag: getLedgerLag() },
     database: { connected: getDataSource().isInitialized },
   });
 });

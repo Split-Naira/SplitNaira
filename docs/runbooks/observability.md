@@ -90,6 +90,32 @@ Exposed series:
 - `splitnaira_rpc_retry_max_attempts_reached_total` — times the retry budget was fully consumed without success (Issue #836)
 - `splitnaira_rpc_retry_duration_ms_total` — cumulative sleeper delay between RPC retry attempts in milliseconds (Issue #836)
 - `splitnaira_rpc_retry_outcomes_total{operation,outcome,endpoint}` — final outcome of RPC retry sequences labelled by operation and endpoint (Issue #836)
+- `splitnaira_event_listener_ledger_lag` — ledgers between the newest ledger observed by the event listener and its last processed ledger
+- `splitnaira_event_listener_last_processed_ledger` — last ledger the listener processed
+- `splitnaira_event_listener_latest_observed_ledger` — latest ledger reported by the listener's Soroban RPC poll
+
+### Background listener ledger lag
+
+**Owner:** Backend on-call owns the listener and metric; Platform on-call owns
+the Prometheus scrape and alert route. The listener persists both its opaque
+Soroban event cursor and its last processed ledger in `service_state`, so the
+lag signal survives a process restart.
+
+`splitnaira_event_listener_ledger_lag` is emitted only after the listener has
+observed a latest ledger and processed an event ledger. Its absence during an
+idle cursor-only startup is expected; use `/ops/status` to inspect the
+`eventListener.ledgerLag` fields while it warms up. A value of zero is healthy.
+
+Recommended alerts:
+
+| Severity | Expression | First response |
+|----------|------------|----------------|
+| Warning | `splitnaira_event_listener_ledger_lag > 20 for 5m` | Check `/ops/status`, RPC retry metrics, and listener logs. |
+| Critical | `splitnaira_event_listener_ledger_lag > 100 for 10m` | Page Backend on-call; check DB health and consider the stuck-payouts runbook. |
+
+The listener's 10,000-ledger catch-up cap remains a safety guard, not an SLO:
+if it is hit, investigate the outage window because older events may need a
+targeted backfill.
 
 Contract-level telemetry is also available through on-chain event topics emitted by the SplitNaira contract. Analytics consumers should combine backend metrics with contract event streams for richer Insights.
 
@@ -100,6 +126,24 @@ Scrape from internal network only; do not expose publicly without auth.
 Every request receives `x-request-id` and `x-correlation-id` (same value). Clients may send either header; the value is echoed in responses and included in error payloads as `requestId`.
 
 Structured logs (Winston JSON when `LOG_FORMAT=json`) include `requestId` on error paths.
+
+### Request ID log-query cookbook
+
+Use the request ID from the `x-request-id` response header or error body as the
+primary investigation key. It is safe to share with support; do not put bearer
+tokens, API keys, or raw request bodies into queries or tickets.
+
+| Log system | Query | Use |
+|------------|-------|-----|
+| Render log search | `requestId:"<REQUEST_ID>"` | Find structured application and request logs for one request. |
+| Grafana Loki | `{service="splitnaira-backend"} | json | requestId="<REQUEST_ID>"` | Restrict to the backend stream, then parse JSON fields. |
+| Elastic / Kibana KQL | `service.name : "splitnaira-backend" and requestId : "<REQUEST_ID>"` | Correlate API, retry, and error records. |
+| CloudWatch Logs Insights | `fields @timestamp, level, message, requestId | filter requestId = "<REQUEST_ID>" | sort @timestamp asc` | Produce a chronological incident timeline. |
+
+If the first query finds only an HTTP access line, expand the time range by two
+minutes and search both `requestId` and the returned `x-correlation-id` (they
+are aliases). For a failed write, next search its `txHash` or `projectId` from
+the structured record; never search or paste its authorization header.
 
 ## Post-Deploy Smoke Check
 
@@ -122,6 +166,8 @@ When `BACKEND_METRICS_URL` is also configured, the smoke check validates the ana
    `not_ready` (treat as an outage); see "Degraded-mode readiness contract"
    above.
 4. Review metrics around the failure window (`splitnaira_validation_failures_total` spikes indicate schema drift).
+5. For missing payout updates, compare `splitnaira_event_listener_ledger_lag`
+   with `/ops/status` before initiating a manual backfill.
 
 ## Rollback
 
