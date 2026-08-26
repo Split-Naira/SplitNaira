@@ -8,7 +8,7 @@ Royalty splitting for Nigeria's creative economy, powered by Stellar and Soroban
 [![Wave Program](https://img.shields.io/badge/Stellar-Wave%20Program-blue)](https://drips.network/wave/stellar)
 ## Status
 SplitNaira is in active development. This repo currently contains:
-
+..
 - `contracts/` Soroban smart contract and tests
 - `frontend/` Next.js + Tailwind scaffold
 - `backend/` Express API scaffold
