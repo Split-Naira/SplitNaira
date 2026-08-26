@@ -13,6 +13,7 @@ import {
   getRpcRetryMaxAttemptsReachedTotal,
   getRpcRetrySnapshots,
 } from "../services/metrics.js";
+import { getLedgerLag } from "../services/EventListenerService.js";
 
 export const metricsRouter = Router();
 
@@ -104,6 +105,29 @@ lines.push(`sse_connections_active ${getSseConnectionsActive()}`);
     lines.push(
       `splitnaira_rpc_retry_outcomes_total{operation=${quoteLabelValue(operation)},outcome=${quoteLabelValue(outcome)},endpoint=${quoteLabelValue(endpoint)}} ${count}`,
     );
+  }
+
+  const eventListenerLag = getLedgerLag();
+  lines.push(
+    "# HELP splitnaira_event_listener_ledger_lag Number of ledgers between the latest observed ledger and the last ledger processed by the background event listener.",
+  );
+  lines.push("# TYPE splitnaira_event_listener_ledger_lag gauge");
+  if (eventListenerLag.lag !== null) {
+    lines.push(`splitnaira_event_listener_ledger_lag ${eventListenerLag.lag}`);
+  }
+  lines.push(
+    "# HELP splitnaira_event_listener_last_processed_ledger Last Soroban ledger processed by the background event listener.",
+  );
+  lines.push("# TYPE splitnaira_event_listener_last_processed_ledger gauge");
+  if (eventListenerLag.lastProcessedLedger !== null) {
+    lines.push(`splitnaira_event_listener_last_processed_ledger ${eventListenerLag.lastProcessedLedger}`);
+  }
+  lines.push(
+    "# HELP splitnaira_event_listener_latest_observed_ledger Latest Soroban ledger observed by the background event listener.",
+  );
+  lines.push("# TYPE splitnaira_event_listener_latest_observed_ledger gauge");
+  if (eventListenerLag.latestLedger !== null) {
+    lines.push(`splitnaira_event_listener_latest_observed_ledger ${eventListenerLag.latestLedger}`);
   }
 
   return lines.join("\n");

@@ -32,5 +32,7 @@ describe("GET /metrics", () => {
     expect(res.text).toContain("splitnaira_http_requests_inflight");
     expect(res.text).toContain('splitnaira_http_requests_total{method="GET",route="/ping",status="200"} 1');
     expect(res.text).toContain('splitnaira_http_request_duration_seconds_count{method="GET",route="/ping"} 1');
+    expect(res.text).toContain("# TYPE splitnaira_event_listener_ledger_lag gauge");
+    expect(res.text).toContain("# TYPE splitnaira_event_listener_last_processed_ledger gauge");
   });
 });

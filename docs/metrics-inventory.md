@@ -133,7 +133,7 @@ Source: `frontend/src/hooks/useWallet.ts` captures Sentry errors. No Prometheus 
 
 ## 6. Payout / Transaction Metrics
 
-Source: `services/PayoutHistoryService.ts`, `services/EventListenerService.ts`. No dedicated metrics exported.
+Source: `services/PayoutHistoryService.ts`, `services/EventListenerService.ts`.
 
 | Metric | Type | Labels | Owner | Alert Threshold | Status |
 |--------|------|--------|-------|----------------|--------|
@@ -142,10 +142,15 @@ Source: `services/PayoutHistoryService.ts`, `services/EventListenerService.ts`. 
 | `payouts_failed_total` | counter | `token`, `reason` | Backend | Any >0 | ❌ Missing |
 | `tx_submit_duration_seconds` | histogram | — | Backend | P99 > 30s | ❌ Missing |
 | `tx_poll_cycles_total` | counter | `status` | Backend | — | ❌ Missing |
+| `splitnaira_event_listener_ledger_lag` | gauge | — | Backend / Platform | >20 for 5m warning; >100 for 10m critical | ✅ Live |
+| `splitnaira_event_listener_last_processed_ledger` | gauge | — | Backend | — | ✅ Live |
+| `splitnaira_event_listener_latest_observed_ledger` | gauge | — | Backend | — | ✅ Live |
 
 ### Existing Coverage
 - Soroban transaction submit and poll errors captured in Sentry (`soroban-transaction.ts`).
 - Payout history service logs errors via Winston logger.
+- Listener ledger position is persisted alongside its cursor and exposed through
+  `/metrics`; see the [observability runbook](./runbooks/observability.md#background-listener-ledger-lag).
 
 ### TODO (follow-up)
 - Instrument `submitSorobanTransactionAndPoll()` with duration histogram and status counters.

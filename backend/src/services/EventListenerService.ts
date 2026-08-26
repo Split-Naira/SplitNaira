@@ -24,6 +24,10 @@ const STARTUP_LOOKBACK_LEDGERS = 100;
 // Key under which the polling cursor is persisted in ServiceState so it
 // survives process restarts.
 export const EVENT_LISTENER_CURSOR_KEY = "event_listener_cursor";
+// The cursor is opaque, so retain the corresponding ledger separately for
+// operational lag monitoring across restarts.
+export const EVENT_LISTENER_LAST_PROCESSED_LEDGER_KEY =
+  "event_listener_last_processed_ledger";
 
 export type ServiceStatus = "stopped" | "healthy" | "degraded";
 
@@ -36,6 +40,34 @@ let cursor: string | null = null;
 let consecutiveErrors = 0;
 let lastSuccessfulPoll: string | null = null;
 let currentPollDelayMs = NORMAL_POLL_INTERVAL_MS;
+let latestObservedLedger: number | null = null;
+let lastProcessedLedger: number | null = null;
+let lastLedgerObservationAt: string | null = null;
+
+export interface EventListenerLedgerLag {
+  latestLedger: number | null;
+  lastProcessedLedger: number | null;
+  lag: number | null;
+  observedAt: string | null;
+}
+
+/**
+ * Returns the listener's distance from the latest ledger seen in a successful
+ * `getEvents` response. `lag` is null until the worker has processed an event
+ * ledger (for example immediately after a cursor-only restart).
+ */
+export function getLedgerLag(): EventListenerLedgerLag {
+  const lag = latestObservedLedger !== null && lastProcessedLedger !== null
+    ? Math.max(0, latestObservedLedger - lastProcessedLedger)
+    : null;
+
+  return {
+    latestLedger: latestObservedLedger,
+    lastProcessedLedger,
+    lag,
+    observedAt: lastLedgerObservationAt,
+  };
+}
 
 /**
  * (Re)arms the polling timer at the requested cadence. Idempotent: if the timer
@@ -91,6 +123,13 @@ export async function startEventListenerService() {
     const server = getStellarRpcServer();
     const stateRepo = getDataSource().getRepository(ServiceState);
     const persistedCursor = await stateRepo.findOneBy({ key: EVENT_LISTENER_CURSOR_KEY });
+    const persistedLedger = await stateRepo.findOneBy({
+      key: EVENT_LISTENER_LAST_PROCESSED_LEDGER_KEY,
+    });
+    const parsedPersistedLedger = Number(persistedLedger?.value);
+    lastProcessedLedger = Number.isSafeInteger(parsedPersistedLedger) && parsedPersistedLedger >= 0
+      ? parsedPersistedLedger
+      : null;
 
     if (persistedCursor?.value) {
       cursor = persistedCursor.value;
@@ -219,6 +258,28 @@ export async function pollEvents() {
     const response = await executeWithRetry(() => server.getEvents(filterOptions), {
       operation: "getEvents"
     });
+    // `latestLedger` and each event's `ledger` are supplied by Soroban RPC,
+    // but are optional in the SDK response type for compatibility with older
+    // RPC servers.
+    const ledgerResponse = response as typeof response & {
+      latestLedger?: number;
+      events?: Array<{ ledger?: number }>;
+    };
+    if (Number.isSafeInteger(ledgerResponse.latestLedger)) {
+      latestObservedLedger = ledgerResponse.latestLedger!;
+      lastLedgerObservationAt = new Date().toISOString();
+    }
+    const responseEvents = ledgerResponse.events ?? [];
+    // An empty successful query has scanned through `latestLedger`, even if
+    // the contract emitted no matching events. Treat that as caught up so a
+    // quiet contract still exports a useful zero-lag gauge.
+    const batchLastProcessedLedger = Math.max(
+      lastProcessedLedger ?? 0,
+      ...(responseEvents
+        .map((event) => event.ledger)
+        .filter((ledger): ledger is number => Number.isSafeInteger(ledger))),
+      responseEvents.length === 0 ? latestObservedLedger ?? 0 : 0,
+    );
 
     const newRecords: TransactionRecord[] = [];
 
@@ -302,7 +363,11 @@ export async function pollEvents() {
     // Persist the new records AND the advanced cursor in a single transaction,
     // so after a restart we never skip events relative to what was committed,
     // nor re-process a batch that was already committed (Issue #619).
-    if (newRecords.length > 0 || (nextCursor && nextCursor !== cursor)) {
+    if (
+      newRecords.length > 0 ||
+      (nextCursor && nextCursor !== cursor) ||
+      batchLastProcessedLedger > (lastProcessedLedger ?? 0)
+    ) {
       await dataSource.transaction(async (manager) => {
         if (newRecords.length > 0) {
           await manager.upsert(TransactionRecord, newRecords, {
@@ -314,6 +379,16 @@ export async function pollEvents() {
           await manager.upsert(
             ServiceState,
             { key: EVENT_LISTENER_CURSOR_KEY, value: nextCursor },
+            { conflictPaths: ["key"] }
+          );
+        }
+        if (batchLastProcessedLedger > (lastProcessedLedger ?? 0)) {
+          await manager.upsert(
+            ServiceState,
+            {
+              key: EVENT_LISTENER_LAST_PROCESSED_LEDGER_KEY,
+              value: String(batchLastProcessedLedger),
+            },
             { conflictPaths: ["key"] }
           );
         }
@@ -345,6 +420,9 @@ export async function pollEvents() {
     if (nextCursor) {
       cursor = nextCursor;
       startLedger = null;
+    }
+    if (batchLastProcessedLedger > (lastProcessedLedger ?? 0)) {
+      lastProcessedLedger = batchLastProcessedLedger;
     }
     recordPollSuccess();
   } catch (error) {

@@ -10,6 +10,7 @@ Deployment-focused runbooks for the Stellar Wave release program. Each document 
 | [Frontend release operations](./frontend-release-ops.md) | Release Operations — frontend | #439 |
 | [TTL refresh operations](./ttl-refresh-operations.md) | Operations — TTL management | #363 |
 | [Observability](./observability.md) | CI/CD — observability | #407 |
+| [New token onboarding review](./token-onboarding-review.md) | Operations — token allowlist | Backlog Wave 6 |
 | [CI/CD security](./cicd-security.md) | CI/CD — security hardening | #402 |
 | [CI/CD incident management](./incident-management.md) | CI/CD — incident management | #520 |
 | [Stuck payouts incident response](./stuck-payouts.md) | Operations & Support — payouts | #861 |

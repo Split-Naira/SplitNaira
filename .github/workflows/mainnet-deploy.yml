@@ -176,6 +176,13 @@ jobs:
           SMOKE_TIMEOUT_MS: 300000
         run: node scripts/deploy-smoke-check.mjs
 
+      - name: Validate mainnet readiness response shape
+        if: vars.BACKEND_SMOKE_URL != ''
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_SMOKE_URL }}
+          REQUIRE_READY: "true"
+        run: node scripts/check-mainnet-readiness.mjs
+
       - name: Skip smoke check when BACKEND_SMOKE_URL is unset
         if: vars.BACKEND_SMOKE_URL == ''
         run: echo "BACKEND_SMOKE_URL not configured — skipping post-deploy smoke check."
