@@ -356,6 +356,164 @@ components:
       required:
         - status
         - components
+    AdminStatusResponse:
+      type: object
+      properties:
+        admin:
+          type: string
+          nullable: true
+          description: Current contract admin Stellar address or null
+        isPaused:
+          type: boolean
+          description: Whether contract distributions are globally paused
+      required:
+        - admin
+        - isPaused
+    AdminIsTokenAllowedResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Token contract address checked
+        isAllowed:
+          type: boolean
+          description: Whether token is allowlisted
+      required:
+        - token
+        - isAllowed
+    AdminTokenCountResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: Number of allowlisted tokens
+      required:
+        - count
+    AdminUnallocatedResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Token contract address
+        unallocated:
+          type: string
+          description: Recoverable unallocated stroops as string
+      required:
+        - token
+        - unallocated
+    AdminCacheStatsResponse:
+      type: object
+      properties:
+        size:
+          type: integer
+          description: Number of active cached entries
+        keys:
+          type: array
+          items:
+            type: string
+          description: Cached key prefixes or names
+        hits:
+          type: integer
+          description: Cache hit count
+        misses:
+          type: integer
+          description: Cache miss count
+        hitRate:
+          type: number
+          description: Cache hit ratio
+        ttlMs:
+          type: integer
+          description: Configured cache TTL in milliseconds
+      required:
+        - size
+        - keys
+        - ttlMs
+    AdminUnsignedXdrResponse:
+      type: object
+      properties:
+        xdr:
+          type: string
+          description: Base64 encoded unsigned transaction envelope
+        metadata:
+          type: object
+          properties:
+            contractId:
+              type: string
+              description: Deployed contract ID
+            networkPassphrase:
+              type: string
+              description: Stellar network passphrase
+            sourceAccount:
+              type: string
+              description: Admin source account address
+            sequenceNumber:
+              type: string
+              description: Account sequence number
+            fee:
+              type: string
+              description: Transaction fee in stroops
+            operation:
+              type: string
+              description: Invoked contract method name
+            auditContext:
+              type: object
+              additionalProperties:
+                nullable: true
+              description: Audit logging context metadata
+          required:
+            - contractId
+            - networkPassphrase
+            - sourceAccount
+            - operation
+      required:
+        - xdr
+        - metadata
+    OpsStatusResponse:
+      type: object
+      properties:
+        eventListener:
+          type: object
+          properties:
+            status:
+              type: string
+              description: EventListener lifecycle status
+            lastSuccessfulPoll:
+              type: string
+              nullable: true
+              description: ISO timestamp of last successful poll
+            consecutiveErrors:
+              type: integer
+              description: Count of consecutive poll failures
+            ledgerLag:
+              type: number
+              description: Lag behind latest ledger
+          required:
+            - status
+        database:
+          type: object
+          properties:
+            connected:
+              type: boolean
+              description: Whether database data-source is initialized
+          required:
+            - connected
+      required:
+        - eventListener
+        - database
+    OpsBackfillResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Whether backfill operation completed
+        message:
+          type: string
+          description: Human-readable status message
+        error:
+          type: string
+          description: Error details if backfill failed
+      required:
+        - success
   parameters: {}
 paths:
   /splits:
@@ -1555,9 +1713,9 @@ paths:
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
   /splits/admin/allow-token:
     post:
-      summary: Allow a payment token
-      description: Builds an unsigned XDR to add a token to the contract allowlist.
-        Requires admin API key.
+      summary: Allow a token on the contract
+      description: Builds an unsigned transaction XDR to add a token to the allowlist.
+        Requires admin authorization.
       tags:
         - Admin
       security:
@@ -1579,13 +1737,16 @@ paths:
               required:
                 - admin
                 - token
+            example:
+              admin: GBJRKIYXAAFD3NZCWJXGUTNKYUQFZC2ANS6LRMBPJCE4IZSMJJMZPQBT
+              token: CDOVDY3MZDG7PHCGVP7EP2EKQ2ENV26DZW6FKLBRN42LOGIZGXZV3WX5
       responses:
         "200":
           description: Unsigned transaction XDR
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/XdrResponse"
+                $ref: "#/components/schemas/AdminUnsignedXdrResponse"
         "400":
           description: Validation error
           content:
@@ -1602,16 +1763,6 @@ paths:
                 error: UNAUTHORIZED
                 message: Missing or invalid bearer token / admin API key.
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
-        "403":
-          description: Access denied
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-              example:
-                error: FORBIDDEN
-                message: You do not have permission to perform this action.
-                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
         "500":
           description: Internal server error
           content:
@@ -1621,16 +1772,6 @@ paths:
               example:
                 error: INTERNAL_ERROR
                 message: An unexpected error occurred. Please try again later.
-                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
-        "502":
-          description: Upstream RPC or contract error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-              example:
-                error: BAD_GATEWAY
-                message: The Stellar network RPC call failed. Please retry.
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
         "503":
           description: Service temporarily unavailable
@@ -1644,9 +1785,9 @@ paths:
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
   /splits/admin/disallow-token:
     post:
-      summary: Disallow a payment token
-      description: Builds an unsigned XDR to remove a token from the contract
-        allowlist. Requires admin API key.
+      summary: Disallow a token on the contract
+      description: Builds an unsigned transaction XDR to remove a token from the
+        allowlist. Requires admin authorization.
       tags:
         - Admin
       security:
@@ -1668,13 +1809,16 @@ paths:
               required:
                 - admin
                 - token
+            example:
+              admin: GBJRKIYXAAFD3NZCWJXGUTNKYUQFZC2ANS6LRMBPJCE4IZSMJJMZPQBT
+              token: CDOVDY3MZDG7PHCGVP7EP2EKQ2ENV26DZW6FKLBRN42LOGIZGXZV3WX5
       responses:
         "200":
           description: Unsigned transaction XDR
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/XdrResponse"
+                $ref: "#/components/schemas/AdminUnsignedXdrResponse"
         "400":
           description: Validation error
           content:
@@ -1691,16 +1835,6 @@ paths:
                 error: UNAUTHORIZED
                 message: Missing or invalid bearer token / admin API key.
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
-        "403":
-          description: Access denied
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-              example:
-                error: FORBIDDEN
-                message: You do not have permission to perform this action.
-                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
         "500":
           description: Internal server error
           content:
@@ -1710,16 +1844,6 @@ paths:
               example:
                 error: INTERNAL_ERROR
                 message: An unexpected error occurred. Please try again later.
-                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
-        "502":
-          description: Upstream RPC or contract error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-              example:
-                error: BAD_GATEWAY
-                message: The Stellar network RPC call failed. Please retry.
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
         "503":
           description: Service temporarily unavailable
@@ -1733,9 +1857,9 @@ paths:
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
   /splits/admin/pause-distributions:
     post:
-      summary: Pause all distributions
-      description: Builds an unsigned XDR to pause contract-wide fund distributions.
-        Requires admin API key.
+      summary: Pause all contract distributions
+      description: Builds an unsigned transaction XDR to pause contract-wide
+        distributions. Requires admin authorization.
       tags:
         - Admin
       security:
@@ -1752,13 +1876,15 @@ paths:
                   description: admin
               required:
                 - admin
+            example:
+              admin: GBJRKIYXAAFD3NZCWJXGUTNKYUQFZC2ANS6LRMBPJCE4IZSMJJMZPQBT
       responses:
         "200":
           description: Unsigned transaction XDR
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/XdrResponse"
+                $ref: "#/components/schemas/AdminUnsignedXdrResponse"
         "400":
           description: Validation error
           content:
@@ -1775,16 +1901,6 @@ paths:
                 error: UNAUTHORIZED
                 message: Missing or invalid bearer token / admin API key.
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
-        "403":
-          description: Access denied
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-              example:
-                error: FORBIDDEN
-                message: You do not have permission to perform this action.
-                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
         "500":
           description: Internal server error
           content:
@@ -1794,16 +1910,6 @@ paths:
               example:
                 error: INTERNAL_ERROR
                 message: An unexpected error occurred. Please try again later.
-                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
-        "502":
-          description: Upstream RPC or contract error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-              example:
-                error: BAD_GATEWAY
-                message: The Stellar network RPC call failed. Please retry.
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
         "503":
           description: Service temporarily unavailable
@@ -1817,9 +1923,9 @@ paths:
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
   /splits/admin/unpause-distributions:
     post:
-      summary: Unpause distributions
-      description: Builds an unsigned XDR to resume contract-wide fund distributions.
-        Requires admin API key.
+      summary: Unpause contract distributions
+      description: Builds an unsigned transaction XDR to unpause contract-wide
+        distributions. Requires admin authorization.
       tags:
         - Admin
       security:
@@ -1836,13 +1942,15 @@ paths:
                   description: admin
               required:
                 - admin
+            example:
+              admin: GBJRKIYXAAFD3NZCWJXGUTNKYUQFZC2ANS6LRMBPJCE4IZSMJJMZPQBT
       responses:
         "200":
           description: Unsigned transaction XDR
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/XdrResponse"
+                $ref: "#/components/schemas/AdminUnsignedXdrResponse"
         "400":
           description: Validation error
           content:
@@ -1859,16 +1967,6 @@ paths:
                 error: UNAUTHORIZED
                 message: Missing or invalid bearer token / admin API key.
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
-        "403":
-          description: Access denied
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-              example:
-                error: FORBIDDEN
-                message: You do not have permission to perform this action.
-                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
         "500":
           description: Internal server error
           content:
@@ -1878,16 +1976,6 @@ paths:
               example:
                 error: INTERNAL_ERROR
                 message: An unexpected error occurred. Please try again later.
-                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
-        "502":
-          description: Upstream RPC or contract error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-              example:
-                error: BAD_GATEWAY
-                message: The Stellar network RPC call failed. Please retry.
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
         "503":
           description: Service temporarily unavailable
@@ -1901,20 +1989,20 @@ paths:
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
   /splits/admin/status:
     get:
-      summary: Get admin contract status
-      description: Returns the current contract admin address and whether
-        distributions are paused.
+      summary: Get contract admin and pause status
+      description: Returns the current contract admin address and pause state.
+        Protected by payments admin authorization.
       tags:
         - Admin
       security:
         - adminApiKey: []
       responses:
         "200":
-          description: Admin status
+          description: Admin and distribution pause status
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AdminStatus"
+                $ref: "#/components/schemas/AdminStatusResponse"
         "401":
           description: Authentication required
           content:
@@ -1924,16 +2012,6 @@ paths:
               example:
                 error: UNAUTHORIZED
                 message: Missing or invalid bearer token / admin API key.
-                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
-        "403":
-          description: Access denied
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-              example:
-                error: FORBIDDEN
-                message: You do not have permission to perform this action.
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
         "500":
           description: Internal server error
@@ -1945,20 +2023,11 @@ paths:
                 error: INTERNAL_ERROR
                 message: An unexpected error occurred. Please try again later.
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
-        "502":
-          description: Upstream RPC or contract error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-              example:
-                error: BAD_GATEWAY
-                message: The Stellar network RPC call failed. Please retry.
-                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
   /splits/admin/is-token-allowed:
     get:
-      summary: Check if a token is allowed
-      description: Returns whether a specific token contract address is on the allowlist.
+      summary: Check if a token is allowlisted
+      description: Queries whether a given token address is allowed on the contract.
+        Protected by payments admin authorization.
       tags:
         - Admin
       security:
@@ -1974,19 +2043,11 @@ paths:
           in: query
       responses:
         "200":
-          description: Token allowlist check result
+          description: Token allowlist status
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  token:
-                    type: string
-                  isAllowed:
-                    type: boolean
-                required:
-                  - token
-                  - isAllowed
+                $ref: "#/components/schemas/AdminIsTokenAllowedResponse"
         "400":
           description: Validation error
           content:
@@ -2003,16 +2064,6 @@ paths:
                 error: UNAUTHORIZED
                 message: Missing or invalid bearer token / admin API key.
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
-        "403":
-          description: Access denied
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-              example:
-                error: FORBIDDEN
-                message: You do not have permission to perform this action.
-                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
         "500":
           description: Internal server error
           content:
@@ -2023,20 +2074,11 @@ paths:
                 error: INTERNAL_ERROR
                 message: An unexpected error occurred. Please try again later.
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
-        "502":
-          description: Upstream RPC or contract error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-              example:
-                error: BAD_GATEWAY
-                message: The Stellar network RPC call failed. Please retry.
-                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
   /splits/admin/token-count:
     get:
       summary: Get allowed token count
-      description: Returns the total number of tokens on the contract allowlist.
+      description: Returns the total number of allowlisted tokens. Protected by
+        payments admin authorization.
       tags:
         - Admin
       security:
@@ -2047,12 +2089,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  count:
-                    type: integer
-                required:
-                  - count
+                $ref: "#/components/schemas/AdminTokenCountResponse"
         "401":
           description: Authentication required
           content:
@@ -2062,16 +2099,6 @@ paths:
               example:
                 error: UNAUTHORIZED
                 message: Missing or invalid bearer token / admin API key.
-                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
-        "403":
-          description: Access denied
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-              example:
-                error: FORBIDDEN
-                message: You do not have permission to perform this action.
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
         "500":
           description: Internal server error
@@ -2083,20 +2110,11 @@ paths:
                 error: INTERNAL_ERROR
                 message: An unexpected error occurred. Please try again later.
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
-        "502":
-          description: Upstream RPC or contract error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-              example:
-                error: BAD_GATEWAY
-                message: The Stellar network RPC call failed. Please retry.
-                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
   /splits/admin/unallocated:
     get:
       summary: Get unallocated token balance
-      description: Returns the unallocated balance held by the contract for a given token.
+      description: Returns the recoverable unallocated token balance on the contract.
+        Protected by payments admin authorization.
       tags:
         - Admin
       security:
@@ -2112,19 +2130,11 @@ paths:
           in: query
       responses:
         "200":
-          description: Unallocated balance
+          description: Unallocated token balance in stroops
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  token:
-                    type: string
-                  unallocated:
-                    type: string
-                required:
-                  - token
-                  - unallocated
+                $ref: "#/components/schemas/AdminUnallocatedResponse"
         "400":
           description: Validation error
           content:
@@ -2141,16 +2151,6 @@ paths:
                 error: UNAUTHORIZED
                 message: Missing or invalid bearer token / admin API key.
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
-        "403":
-          description: Access denied
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-              example:
-                error: FORBIDDEN
-                message: You do not have permission to perform this action.
-                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
         "500":
           description: Internal server error
           content:
@@ -2161,21 +2161,11 @@ paths:
                 error: INTERNAL_ERROR
                 message: An unexpected error occurred. Please try again later.
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
-        "502":
-          description: Upstream RPC or contract error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-              example:
-                error: BAD_GATEWAY
-                message: The Stellar network RPC call failed. Please retry.
-                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
   /splits/admin/withdraw-unallocated:
     post:
-      summary: Withdraw unallocated tokens
-      description: Builds an unsigned XDR to recover unallocated token balance from
-        the contract. Requires admin API key.
+      summary: Withdraw unallocated contract funds
+      description: Builds an unsigned transaction XDR to recover unallocated funds.
+        Includes audit context.
       tags:
         - Admin
       security:
@@ -2208,13 +2198,18 @@ paths:
                 - token
                 - to
                 - amount
+            example:
+              admin: GBJRKIYXAAFD3NZCWJXGUTNKYUQFZC2ANS6LRMBPJCE4IZSMJJMZPQBT
+              token: CDOVDY3MZDG7PHCGVP7EP2EKQ2ENV26DZW6FKLBRN42LOGIZGXZV3WX5
+              to: GCZTK3PNYXCVF7Z3ELVELEJZ7BVGPGPVJ3NVZNI7O6DVCHPA4JU6LXRV
+              amount: 500000
       responses:
         "200":
-          description: Unsigned transaction XDR
+          description: Unsigned transaction XDR with audit context
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/XdrResponse"
+                $ref: "#/components/schemas/AdminUnsignedXdrResponse"
         "400":
           description: Validation error
           content:
@@ -2241,16 +2236,6 @@ paths:
                 error: INTERNAL_ERROR
                 message: An unexpected error occurred. Please try again later.
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
-        "502":
-          description: Upstream RPC or contract error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-              example:
-                error: BAD_GATEWAY
-                message: The Stellar network RPC call failed. Please retry.
-                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
         "503":
           description: Service temporarily unavailable
           content:
@@ -2263,8 +2248,8 @@ paths:
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
   /splits/admin/cache-stats:
     get:
-      summary: Get read cache statistics
-      description: Returns internal read-cache hit/miss statistics for diagnostics.
+      summary: Get read-cache diagnostic stats
+      description: Returns in-memory read cache statistics and TTL configuration.
       tags:
         - Admin
       security:
@@ -2275,21 +2260,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  hits:
-                    type: integer
-                  misses:
-                    type: integer
-                  evictions:
-                    type: integer
-                  ttlMs:
-                    type: integer
-                required:
-                  - hits
-                  - misses
-                  - evictions
-                  - ttlMs
+                $ref: "#/components/schemas/AdminCacheStatsResponse"
         "401":
           description: Authentication required
           content:
@@ -3086,6 +3057,62 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MainnetReadinessResponse"
+  /ops/status:
+    get:
+      summary: Get operational service health and lag
+      description: Returns status of the event listener service, ledger lag, and
+        database connection.
+      tags:
+        - Operations
+      responses:
+        "200":
+          description: Operations status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpsStatusResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                error: INTERNAL_ERROR
+                message: An unexpected error occurred. Please try again later.
+                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
+  /ops/backfill:
+    post:
+      summary: Trigger event history backfill
+      description: Backfills missed ledger events starting from a given ledger sequence.
+      tags:
+        - Operations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fromLedger:
+                  type: integer
+                  description: Starting ledger sequence number
+      responses:
+        "200":
+          description: Backfill outcome
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpsBackfillResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                error: INTERNAL_ERROR
+                message: An unexpected error occurred. Please try again later.
+                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
   /:
     get:
       summary: Get API information

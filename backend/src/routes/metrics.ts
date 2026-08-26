@@ -15,6 +15,13 @@ import {
 } from "../services/metrics.js";
 import { getLedgerLag } from "../services/EventListenerService.js";
 
+/**
+ * Streaming / Raw Output Routes Note (Issue #524/Admin API response validation):
+ *
+ * The `/metrics` endpoint exports lines formatted according to the Prometheus text-based
+ * exposition format (`text/plain; version=0.0.4`) rather than JSON. This endpoint is
+ * intentionally exempt from `withResponseValidation` JSON middleware.
+ */
 export const metricsRouter = Router();
 
 const SERVICE_VERSION = process.env.npm_package_version ?? "unknown";

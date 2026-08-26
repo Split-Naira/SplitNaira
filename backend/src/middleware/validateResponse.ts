@@ -32,6 +32,13 @@ export function resetValidationFailureCount(): void {
  *
  * Enable strict mode: set STRICT_RESPONSE_VALIDATION=true
  * Disable in production: set STRICT_RESPONSE_VALIDATION=false (not recommended)
+ *
+ * NOTE on Streaming Routes:
+ * Persistent streaming routes (such as SSE endpoints `GET /events`,
+ * `GET /events/transactions/:txHash`, and Prometheus `GET /metrics`) stream
+ * chunks directly over open connections with `text/event-stream` or `text/plain`
+ * content types. These are intentionally exempt from `withResponseValidation`
+ * single-payload JSON checking.
  */
 export function withResponseValidation<T>(
   schema: z.ZodType<T>,
@@ -41,6 +48,13 @@ export function withResponseValidation<T>(
     const originalJson = res.json.bind(res);
 
     res.json = (body: unknown) => {
+      // Bypasses schema validation for error responses (4xx, 5xx), which follow
+      // their own standardized error envelope schemas and should not trigger false
+      // mismatches against success schemas.
+      if (res.statusCode >= 400) {
+        return originalJson(body);
+      }
+
       const result = schema.safeParse(body);
 
       if (!result.success) {

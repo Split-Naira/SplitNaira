@@ -8,6 +8,15 @@ import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
 // 15s keeps intermediary proxies from closing an otherwise-idle connection.
 const HEARTBEAT_INTERVAL_MS = 15_000;
 
+/**
+ * Streaming Routes Note (Issue #524/Admin API response validation):
+ *
+ * All SSE endpoints in this router (`GET /events`, `GET /events/transactions/:txHash`)
+ * maintain long-lived persistent HTTP connections using chunked `text/event-stream`
+ * transfers rather than single-object JSON envelopes. Consequently, these streaming routes
+ * are intentionally unvalidated by the `withResponseValidation` middleware.
+ * Payload schemas within individual stream events are validated at the domain event layer.
+ */
 export const eventsRouter = Router();
 
 function createSseHeaders(res: Response) {

@@ -4,6 +4,12 @@ import { getDataSource } from "../services/database.js";
 import { getCacheStats } from "../services/stellar.js";
 import { getLedgerLag, getServiceHealth } from "../services/EventListenerService.js";
 import { createPayoutHistoryService } from "../services/PayoutHistoryService.js";
+import { withResponseValidation } from "../middleware/validateResponse.js";
+import {
+  OpsStatusResponseSchema,
+  OpsBackfillResponseSchema,
+  MainnetReadinessResponseSchema,
+} from "../schemas/admin.schemas.js";
 
 const payoutHistory = createPayoutHistoryService();
 
@@ -38,32 +44,40 @@ export interface MainnetReadinessResponse {
   };
 }
 
-opsRouter.post("/backfill", async (req, res) => {
-  try {
-    const { fromLedger } = req.body;
+opsRouter.post(
+  "/backfill",
+  withResponseValidation(OpsBackfillResponseSchema, async (req, res) => {
+    try {
+      const { fromLedger } = req.body;
 
-    await payoutHistory.backfill(fromLedger);
+      await payoutHistory.backfill(fromLedger);
 
+      res.json({
+        success: true,
+        message: "Backfill completed",
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  })
+);
+
+opsRouter.get(
+  "/status",
+  withResponseValidation(OpsStatusResponseSchema, (_req, res) => {
     res.json({
-      success: true,
-      message: "Backfill completed",
+      eventListener: { ...getServiceHealth(), ledgerLag: getLedgerLag() },
+      database: { connected: getDataSource().isInitialized },
     });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-});
+  })
+);
 
-opsRouter.get("/status", (_req, res) => {
-  res.json({
-    eventListener: { ...getServiceHealth(), ledgerLag: getLedgerLag() },
-    database: { connected: getDataSource().isInitialized },
-  });
-});
-
-opsRouter.get("/mainnet-readiness", async (_req, res) => {
+opsRouter.get(
+  "/mainnet-readiness",
+  withResponseValidation(MainnetReadinessResponseSchema, async (_req, res) => {
   const requestId = res.locals.requestId;
   const envDiagnostics = getEnvDiagnostics();
 

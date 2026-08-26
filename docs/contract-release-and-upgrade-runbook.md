@@ -94,7 +94,7 @@ Alternatively, trigger the smoke test via GitHub Actions without checking out lo
 
 ## 7. Upgrade process
 
-Before starting an upgrade, complete the ADR for the upgrade: [docs/adr/0001-contract-upgrade-decision-record.md](../adr/0001-contract-upgrade-decision-record.md). The ADR must cover compatibility, storage migration, event schema impact, test evidence, and rollback plan before the release sign-off checklist is approved.
+Before starting an upgrade, review the [Contract Storage Layout and Migrations](./contract-storage-layout-and-migrations.md) guide and complete the ADR for the upgrade: [docs/adr/0001-contract-upgrade-decision-record.md](../adr/0001-contract-upgrade-decision-record.md). The ADR must cover compatibility, storage migration, event schema impact, test evidence, and rollback plan before the release sign-off checklist is approved.
 
 1. New release path:
    - Build new WASM as above.
