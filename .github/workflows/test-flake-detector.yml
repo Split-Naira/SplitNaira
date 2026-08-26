@@ -1,0 +1,33 @@
+name: Backend Test Flake Detector
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 7 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  flake-detect:
+    name: Run backend Vitest suite repeatedly
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Run backend tests 5 times
+        working-directory: backend
+        run: |
+          for i in 1 2 3 4 5; do
+            echo "::group::Run $i"
+            npm run test || { echo "Flaky failure detected on run $i"; exit 1; }
+            echo "::endgroup::"
+          done
