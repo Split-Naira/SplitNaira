@@ -1,0 +1,32 @@
+name: Markdown Format Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**/*.md"
+      - "runbooks/**/*.md"
+      - "*.md"
+  pull_request:
+    paths:
+      - "docs/**/*.md"
+      - "runbooks/**/*.md"
+      - "*.md"
+
+permissions:
+  contents: read
+
+jobs:
+  format-check:
+    name: Check Markdown formatting
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Check formatting with Prettier
+        run: npx prettier --check "docs/**/*.md" "runbooks/**/*.md" "*.md"
