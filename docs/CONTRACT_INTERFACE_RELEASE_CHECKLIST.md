@@ -9,6 +9,7 @@ Use this checklist for any change that can affect the contract interface artifac
 
 ## 2) Contract and interface source updates
 - [ ] Update Rust contract sources in `contracts/` (`lib.rs`, `events.rs`, `errors.rs`, supporting modules).
+- [ ] Verify storage layout compatibility and migration expectations against [Contract Storage Layout and Migrations](./contract-storage-layout-and-migrations.md).
 - [ ] Run contract quality gates:
   - [ ] `cd contracts && cargo test`
   - [ ] `cd contracts && cargo fmt -- --check`

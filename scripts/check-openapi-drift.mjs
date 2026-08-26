@@ -86,6 +86,7 @@ function regenerateSpec() {
       cwd: repoRoot,
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
+      shell: true,
       env: { ...process.env, OPENAPI_OUTPUT_DIR: tempDir },
     },
   );

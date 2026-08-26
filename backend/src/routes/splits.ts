@@ -48,6 +48,16 @@ import {
 } from "../schemas/splits.js";
 
 import {
+  AdminStatusResponseSchema,
+  AdminIsTokenAllowedResponseSchema,
+  AdminTokenCountResponseSchema,
+  AdminUnallocatedResponseSchema,
+  AdminCacheStatsResponseSchema,
+  AdminUnsignedXdrResponseSchema
+} from "../schemas/admin.schemas.js";
+import { withResponseValidation } from "../middleware/validateResponse.js";
+
+import {
   buildHistoryTopicFilters,
   decodeRoundHistoryEventValue,
   decodePaymentHistoryEventValue
@@ -95,6 +105,15 @@ export {
   withdrawUnallocatedSchema,
   claimSchema
 } from "../schemas/splits.js";
+
+export {
+  AdminStatusResponseSchema,
+  AdminIsTokenAllowedResponseSchema,
+  AdminTokenCountResponseSchema,
+  AdminUnallocatedResponseSchema,
+  AdminCacheStatsResponseSchema,
+  AdminUnsignedXdrResponseSchema
+} from "../schemas/admin.schemas.js";
 
 export {
   toCollaboratorScVal,
@@ -592,57 +611,63 @@ splitsRouter.get("/:projectId/claimable/:address", async (req: Request, res: Res
   }
 });
 
-splitsRouter.post("/admin/allow-token", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const requestId = res.locals.requestId;
-    const parsed = adminTokenSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
-    }
-
+splitsRouter.post(
+  "/admin/allow-token",
+  withResponseValidation(AdminUnsignedXdrResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await buildAllowTokenUnsignedXdr(parsed.data);
-      logPaymentsAdminAction(res, "allow_token", {
-        admin: parsed.data.admin,
-        token: parsed.data.token
-      });
-      return res.status(200).json(result);
-    } catch (error) {
-      if (error instanceof RequestValidationError) {
-        return sendValidationError(res, requestId, error.message);
+      const requestId = res.locals.requestId;
+      const parsed = adminTokenSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
       }
-      throw error;
-    }
-  } catch (error) {
-    return next(error);
-  }
-});
 
-splitsRouter.post("/admin/disallow-token", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const requestId = res.locals.requestId;
-    const parsed = adminTokenSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
+      try {
+        const result = await buildAllowTokenUnsignedXdr(parsed.data);
+        logPaymentsAdminAction(res, "allow_token", {
+          admin: parsed.data.admin,
+          token: parsed.data.token
+        });
+        return res.status(200).json(result);
+      } catch (error) {
+        if (error instanceof RequestValidationError) {
+          return sendValidationError(res, requestId, error.message);
+        }
+        throw error;
+      }
+    } catch (error) {
+      return next(error);
     }
+  })
+);
 
+splitsRouter.post(
+  "/admin/disallow-token",
+  withResponseValidation(AdminUnsignedXdrResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await buildDisallowTokenUnsignedXdr(parsed.data);
-      logPaymentsAdminAction(res, "disallow_token", {
-        admin: parsed.data.admin,
-        token: parsed.data.token
-      });
-      return res.status(200).json(result);
-    } catch (error) {
-      if (error instanceof RequestValidationError) {
-        return sendValidationError(res, requestId, error.message);
+      const requestId = res.locals.requestId;
+      const parsed = adminTokenSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
       }
-      throw error;
+
+      try {
+        const result = await buildDisallowTokenUnsignedXdr(parsed.data);
+        logPaymentsAdminAction(res, "disallow_token", {
+          admin: parsed.data.admin,
+          token: parsed.data.token
+        });
+        return res.status(200).json(result);
+      } catch (error) {
+        if (error instanceof RequestValidationError) {
+          return sendValidationError(res, requestId, error.message);
+        }
+        throw error;
+      }
+    } catch (error) {
+      return next(error);
     }
-  } catch (error) {
-    return next(error);
-  }
-});
+  })
+);
 
 /**
  * @openapi
@@ -651,55 +676,61 @@ splitsRouter.post("/admin/disallow-token", async (req: Request, res: Response, n
  * description: Builds an unsigned XDR to pause contract-wide fund distributions. Requires admin API key.
  * tags: [Admin]
  */
-splitsRouter.post("/admin/pause-distributions", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const requestId = res.locals.requestId;
-    const parsed = pauseDistributionsSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
-    }
-
+splitsRouter.post(
+  "/admin/pause-distributions",
+  withResponseValidation(AdminUnsignedXdrResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await buildPauseDistributionsUnsignedXdr(parsed.data);
-      logPaymentsAdminAction(res, "pause_distributions", {
-        admin: parsed.data.admin
-      });
-      return res.status(200).json(result);
-    } catch (error) {
-      if (error instanceof RequestValidationError) {
-        return sendValidationError(res, requestId, error.message);
+      const requestId = res.locals.requestId;
+      const parsed = pauseDistributionsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
       }
-      throw error;
-    }
-  } catch (error) {
-    return next(error);
-  }
-});
 
-splitsRouter.post("/admin/unpause-distributions", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const requestId = res.locals.requestId;
-    const parsed = pauseDistributionsSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
+      try {
+        const result = await buildPauseDistributionsUnsignedXdr(parsed.data);
+        logPaymentsAdminAction(res, "pause_distributions", {
+          admin: parsed.data.admin
+        });
+        return res.status(200).json(result);
+      } catch (error) {
+        if (error instanceof RequestValidationError) {
+          return sendValidationError(res, requestId, error.message);
+        }
+        throw error;
+      }
+    } catch (error) {
+      return next(error);
     }
+  })
+);
 
+splitsRouter.post(
+  "/admin/unpause-distributions",
+  withResponseValidation(AdminUnsignedXdrResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await buildUnpauseDistributionsUnsignedXdr(parsed.data);
-      logPaymentsAdminAction(res, "unpause_distributions", {
-        admin: parsed.data.admin
-      });
-      return res.status(200).json(result);
-    } catch (error) {
-      if (error instanceof RequestValidationError) {
-        return sendValidationError(res, requestId, error.message);
+      const requestId = res.locals.requestId;
+      const parsed = pauseDistributionsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
       }
-      throw error;
+
+      try {
+        const result = await buildUnpauseDistributionsUnsignedXdr(parsed.data);
+        logPaymentsAdminAction(res, "unpause_distributions", {
+          admin: parsed.data.admin
+        });
+        return res.status(200).json(result);
+      } catch (error) {
+        if (error instanceof RequestValidationError) {
+          return sendValidationError(res, requestId, error.message);
+        }
+        throw error;
+      }
+    } catch (error) {
+      return next(error);
     }
-  } catch (error) {
-    return next(error);
-  }
-});
+  })
+);
 
 splitsRouter.get("/:projectId/history", async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -802,131 +833,146 @@ splitsRouter.get("/:projectId/history", async (req: Request, res: Response, next
 // Issue #152: Admin contract-state read routes
 // ============================================================
 
-splitsRouter.get("/admin/status", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const requestId = res.locals.requestId;
+splitsRouter.get(
+  "/admin/status",
+  withResponseValidation(AdminStatusResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const [adminRetval, pausedRetval] = await Promise.all([
-        simulateReadOnlyContractCall("get_admin"),
-        simulateReadOnlyContractCall("is_distributions_paused")
-      ]);
+      const requestId = res.locals.requestId;
+      try {
+        const [adminRetval, pausedRetval] = await Promise.all([
+          simulateReadOnlyContractCall("get_admin"),
+          simulateReadOnlyContractCall("is_distributions_paused")
+        ]);
 
-      const admin = adminRetval ? String(scValToNative(adminRetval)) : null;
-      const isPaused = pausedRetval ? Boolean(scValToNative(pausedRetval)) : false;
+        const admin = adminRetval ? String(scValToNative(adminRetval)) : null;
+        const isPaused = pausedRetval ? Boolean(scValToNative(pausedRetval)) : false;
 
-      return res.status(200).json({ admin, isPaused });
-    } catch (error) {
-      if (error instanceof RequestValidationError) {
-        return res.status(400).json({ error: "validation_error", message: error.message, requestId, details: {} });
+        return res.status(200).json({ admin, isPaused });
+      } catch (error) {
+        if (error instanceof RequestValidationError) {
+          return res.status(400).json({ error: "validation_error", message: error.message, requestId, details: {} });
+        }
+        throw error;
       }
-      throw error;
+    } catch (error) {
+      return next(error);
     }
-  } catch (error) {
-    return next(error);
-  }
-});
+  })
+);
 
-splitsRouter.get("/admin/is-token-allowed", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const requestId = res.locals.requestId;
-    const parsed = isTokenAllowedQuerySchema.safeParse(req.query);
-    if (!parsed.success) {
-      return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
-    }
-    const { token } = parsed.data;
-
+splitsRouter.get(
+  "/admin/is-token-allowed",
+  withResponseValidation(AdminIsTokenAllowedResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const retval = await simulateReadOnlyContractCall("is_token_allowed", [
-        Address.fromString(token).toScVal()
-      ]);
-      const isAllowed = retval ? Boolean(scValToNative(retval)) : false;
-      return res.status(200).json({ token, isAllowed });
-    } catch (error) {
-      if (error instanceof RequestValidationError) {
-        return res.status(400).json({ error: "validation_error", message: error.message, requestId, details: {} });
+      const requestId = res.locals.requestId;
+      const parsed = isTokenAllowedQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
       }
-      throw error;
-    }
-  } catch (error) {
-    return next(error);
-  }
-});
+      const { token } = parsed.data;
 
-splitsRouter.get("/admin/token-count", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const requestId = res.locals.requestId;
-    try {
-      const retval = await simulateReadOnlyContractCall("get_allowed_token_count");
-      const count = retval ? Number(scValToNative(retval)) : 0;
-      return res.status(200).json({ count });
-    } catch (error) {
-      if (error instanceof RequestValidationError) {
-        return res.status(400).json({ error: "validation_error", message: error.message, requestId, details: {} });
+      try {
+        const retval = await simulateReadOnlyContractCall("is_token_allowed", [
+          Address.fromString(token).toScVal()
+        ]);
+        const isAllowed = retval ? Boolean(scValToNative(retval)) : false;
+        return res.status(200).json({ token, isAllowed });
+      } catch (error) {
+        if (error instanceof RequestValidationError) {
+          return res.status(400).json({ error: "validation_error", message: error.message, requestId, details: {} });
+        }
+        throw error;
       }
-      throw error;
+    } catch (error) {
+      return next(error);
     }
-  } catch (error) {
-    return next(error);
-  }
-});
+  })
+);
+
+splitsRouter.get(
+  "/admin/token-count",
+  withResponseValidation(AdminTokenCountResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const requestId = res.locals.requestId;
+      try {
+        const retval = await simulateReadOnlyContractCall("get_allowed_token_count");
+        const count = retval ? Number(scValToNative(retval)) : 0;
+        return res.status(200).json({ count });
+      } catch (error) {
+        if (error instanceof RequestValidationError) {
+          return res.status(400).json({ error: "validation_error", message: error.message, requestId, details: {} });
+        }
+        throw error;
+      }
+    } catch (error) {
+      return next(error);
+    }
+  })
+);
 
 // ============================================================
 // Issue #166: Unallocated token recovery routes
 // ============================================================
 
-splitsRouter.get("/admin/unallocated", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const requestId = res.locals.requestId;
-    const parsed = unallocatedQuerySchema.safeParse(req.query);
-    if (!parsed.success) {
-      return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
-    }
-    const { token } = parsed.data;
-
+splitsRouter.get(
+  "/admin/unallocated",
+  withResponseValidation(AdminUnallocatedResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const retval = await simulateReadOnlyContractCall("get_unallocated_balance", [
-        Address.fromString(token).toScVal()
-      ]);
-      const unallocated = retval ? String(scValToNative(retval)) : "0";
-      return res.status(200).json({ token, unallocated });
-    } catch (error) {
-      if (error instanceof RequestValidationError) {
-        return res.status(400).json({ error: "validation_error", message: error.message, requestId, details: {} });
+      const requestId = res.locals.requestId;
+      const parsed = unallocatedQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
       }
-      throw error;
-    }
-  } catch (error) {
-    return next(error);
-  }
-});
+      const { token } = parsed.data;
 
-splitsRouter.post("/admin/withdraw-unallocated", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const requestId = res.locals.requestId;
-    const parsed = withdrawUnallocatedSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
+      try {
+        const retval = await simulateReadOnlyContractCall("get_unallocated_balance", [
+          Address.fromString(token).toScVal()
+        ]);
+        const unallocated = retval ? String(scValToNative(retval)) : "0";
+        return res.status(200).json({ token, unallocated });
+      } catch (error) {
+        if (error instanceof RequestValidationError) {
+          return res.status(400).json({ error: "validation_error", message: error.message, requestId, details: {} });
+        }
+        throw error;
+      }
+    } catch (error) {
+      return next(error);
     }
+  })
+);
 
+splitsRouter.post(
+  "/admin/withdraw-unallocated",
+  withResponseValidation(AdminUnsignedXdrResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await buildWithdrawUnallocatedUnsignedXdr(parsed.data);
-      logPaymentsAdminAction(res, "withdraw_unallocated", {
-        admin: parsed.data.admin,
-        token: parsed.data.token,
-        to: parsed.data.to,
-        amount: parsed.data.amount
-      });
-      return res.status(200).json(result);
-    } catch (error) {
-      if (error instanceof RequestValidationError) {
-        return res.status(400).json({ error: "validation_error", message: error.message, requestId, details: {} });
+      const requestId = res.locals.requestId;
+      const parsed = withdrawUnallocatedSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
       }
-      throw error;
+
+      try {
+        const result = await buildWithdrawUnallocatedUnsignedXdr(parsed.data);
+        logPaymentsAdminAction(res, "withdraw_unallocated", {
+          admin: parsed.data.admin,
+          token: parsed.data.token,
+          to: parsed.data.to,
+          amount: parsed.data.amount
+        });
+        return res.status(200).json(result);
+      } catch (error) {
+        if (error instanceof RequestValidationError) {
+          return res.status(400).json({ error: "validation_error", message: error.message, requestId, details: {} });
+        }
+        throw error;
+      }
+    } catch (error) {
+      return next(error);
     }
-  } catch (error) {
-    return next(error);
-  }
-});
+  })
+);
 
 
 // ============================================================
@@ -970,6 +1016,9 @@ splitsRouter.post("/:projectId/claim", async (req: Request, res: Response, next:
 // Cache diagnostics (non-sensitive internal endpoint)
 // ============================================================
 
-splitsRouter.get("/admin/cache-stats", (_req: Request, res: Response) => {
-  res.status(200).json({ ...getCacheStats(), ttlMs: READ_CACHE_TTL_MS });
-});
+splitsRouter.get(
+  "/admin/cache-stats",
+  withResponseValidation(AdminCacheStatsResponseSchema, (_req: Request, res: Response) => {
+    res.status(200).json({ ...getCacheStats(), ttlMs: READ_CACHE_TTL_MS });
+  })
+);

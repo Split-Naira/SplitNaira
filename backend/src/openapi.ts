@@ -1385,6 +1385,363 @@ registry.registerPath({
   },
 });
 
+// ─── Admin and Operations Endpoints ───────────────────────────────────────────
+
+const AdminStatusResponseSchema = registry.register(
+  "AdminStatusResponse",
+  z.object({
+    admin: z.string().nullable().describe("Current contract admin Stellar address or null"),
+    isPaused: z.boolean().describe("Whether contract distributions are globally paused"),
+  })
+);
+
+const AdminIsTokenAllowedResponseSchema = registry.register(
+  "AdminIsTokenAllowedResponse",
+  z.object({
+    token: z.string().describe("Token contract address checked"),
+    isAllowed: z.boolean().describe("Whether token is allowlisted"),
+  })
+);
+
+const AdminTokenCountResponseSchema = registry.register(
+  "AdminTokenCountResponse",
+  z.object({
+    count: z.number().int().describe("Number of allowlisted tokens"),
+  })
+);
+
+const AdminUnallocatedResponseSchema = registry.register(
+  "AdminUnallocatedResponse",
+  z.object({
+    token: z.string().describe("Token contract address"),
+    unallocated: z.string().describe("Recoverable unallocated stroops as string"),
+  })
+);
+
+const AdminCacheStatsResponseSchema = registry.register(
+  "AdminCacheStatsResponse",
+  z.object({
+    size: z.number().int().describe("Number of active cached entries"),
+    keys: z.array(z.string()).describe("Cached key prefixes or names"),
+    hits: z.number().int().optional().describe("Cache hit count"),
+    misses: z.number().int().optional().describe("Cache miss count"),
+    hitRate: z.number().optional().describe("Cache hit ratio"),
+    ttlMs: z.number().int().describe("Configured cache TTL in milliseconds"),
+  })
+);
+
+const AdminUnsignedXdrResponseSchema = registry.register(
+  "AdminUnsignedXdrResponse",
+  z.object({
+    xdr: z.string().describe("Base64 encoded unsigned transaction envelope"),
+    metadata: z.object({
+      contractId: z.string().describe("Deployed contract ID"),
+      networkPassphrase: z.string().describe("Stellar network passphrase"),
+      sourceAccount: z.string().describe("Admin source account address"),
+      sequenceNumber: z.string().optional().describe("Account sequence number"),
+      fee: z.string().optional().describe("Transaction fee in stroops"),
+      operation: z.string().describe("Invoked contract method name"),
+      auditContext: z.record(z.string(), z.any()).optional().describe("Audit logging context metadata"),
+    }),
+  })
+);
+
+const OpsStatusResponseSchema = registry.register(
+  "OpsStatusResponse",
+  z.object({
+    eventListener: z.object({
+      status: z.string().describe("EventListener lifecycle status"),
+      lastSuccessfulPoll: z.string().nullable().optional().describe("ISO timestamp of last successful poll"),
+      consecutiveErrors: z.number().int().optional().describe("Count of consecutive poll failures"),
+      ledgerLag: z.number().optional().describe("Lag behind latest ledger"),
+    }),
+    database: z.object({
+      connected: z.boolean().describe("Whether database data-source is initialized"),
+    }),
+  })
+);
+
+const OpsBackfillResponseSchema = registry.register(
+  "OpsBackfillResponse",
+  z.object({
+    success: z.boolean().describe("Whether backfill operation completed"),
+    message: z.string().optional().describe("Human-readable status message"),
+    error: z.string().optional().describe("Error details if backfill failed"),
+  })
+);
+
+registry.registerPath({
+  method: "get",
+  path: "/splits/admin/status",
+  summary: "Get contract admin and pause status",
+  description: "Returns the current contract admin address and pause state. Protected by payments admin authorization.",
+  tags: ["Admin"],
+  security: [{ adminApiKey: [] }],
+  responses: {
+    200: {
+      description: "Admin and distribution pause status",
+      content: { "application/json": { schema: AdminStatusResponseSchema } },
+    },
+    ...standardErrorResponses({ unauthorized: true, serverError: true }),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/splits/admin/is-token-allowed",
+  summary: "Check if a token is allowlisted",
+  description: "Queries whether a given token address is allowed on the contract. Protected by payments admin authorization.",
+  tags: ["Admin"],
+  security: [{ adminApiKey: [] }],
+  request: {
+    query: isTokenAllowedQuerySchema,
+  },
+  responses: {
+    200: {
+      description: "Token allowlist status",
+      content: { "application/json": { schema: AdminIsTokenAllowedResponseSchema } },
+    },
+    ...standardErrorResponses({ badRequest: true, unauthorized: true, serverError: true }),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/splits/admin/token-count",
+  summary: "Get allowed token count",
+  description: "Returns the total number of allowlisted tokens. Protected by payments admin authorization.",
+  tags: ["Admin"],
+  security: [{ adminApiKey: [] }],
+  responses: {
+    200: {
+      description: "Allowed token count",
+      content: { "application/json": { schema: AdminTokenCountResponseSchema } },
+    },
+    ...standardErrorResponses({ unauthorized: true, serverError: true }),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/splits/admin/unallocated",
+  summary: "Get unallocated token balance",
+  description: "Returns the recoverable unallocated token balance on the contract. Protected by payments admin authorization.",
+  tags: ["Admin"],
+  security: [{ adminApiKey: [] }],
+  request: {
+    query: unallocatedQuerySchema,
+  },
+  responses: {
+    200: {
+      description: "Unallocated token balance in stroops",
+      content: { "application/json": { schema: AdminUnallocatedResponseSchema } },
+    },
+    ...standardErrorResponses({ badRequest: true, unauthorized: true, serverError: true }),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/splits/admin/cache-stats",
+  summary: "Get read-cache diagnostic stats",
+  description: "Returns in-memory read cache statistics and TTL configuration.",
+  tags: ["Admin"],
+  security: [{ adminApiKey: [] }],
+  responses: {
+    200: {
+      description: "Cache statistics",
+      content: { "application/json": { schema: AdminCacheStatsResponseSchema } },
+    },
+    ...standardErrorResponses({ unauthorized: true, serverError: true }),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/splits/admin/allow-token",
+  summary: "Allow a token on the contract",
+  description: "Builds an unsigned transaction XDR to add a token to the allowlist. Requires admin authorization.",
+  tags: ["Admin"],
+  security: [{ adminApiKey: [] }],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: adminTokenSchema,
+          example: {
+            admin: EXAMPLE_OWNER,
+            token: EXAMPLE_TOKEN,
+          },
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Unsigned transaction XDR",
+      content: { "application/json": { schema: AdminUnsignedXdrResponseSchema } },
+    },
+    ...standardErrorResponses({ badRequest: true, unauthorized: true, unavailable: true, serverError: true }),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/splits/admin/disallow-token",
+  summary: "Disallow a token on the contract",
+  description: "Builds an unsigned transaction XDR to remove a token from the allowlist. Requires admin authorization.",
+  tags: ["Admin"],
+  security: [{ adminApiKey: [] }],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: adminTokenSchema,
+          example: {
+            admin: EXAMPLE_OWNER,
+            token: EXAMPLE_TOKEN,
+          },
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Unsigned transaction XDR",
+      content: { "application/json": { schema: AdminUnsignedXdrResponseSchema } },
+    },
+    ...standardErrorResponses({ badRequest: true, unauthorized: true, unavailable: true, serverError: true }),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/splits/admin/pause-distributions",
+  summary: "Pause all contract distributions",
+  description: "Builds an unsigned transaction XDR to pause contract-wide distributions. Requires admin authorization.",
+  tags: ["Admin"],
+  security: [{ adminApiKey: [] }],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: pauseDistributionsSchema,
+          example: {
+            admin: EXAMPLE_OWNER,
+          },
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Unsigned transaction XDR",
+      content: { "application/json": { schema: AdminUnsignedXdrResponseSchema } },
+    },
+    ...standardErrorResponses({ badRequest: true, unauthorized: true, unavailable: true, serverError: true }),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/splits/admin/unpause-distributions",
+  summary: "Unpause contract distributions",
+  description: "Builds an unsigned transaction XDR to unpause contract-wide distributions. Requires admin authorization.",
+  tags: ["Admin"],
+  security: [{ adminApiKey: [] }],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: pauseDistributionsSchema,
+          example: {
+            admin: EXAMPLE_OWNER,
+          },
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Unsigned transaction XDR",
+      content: { "application/json": { schema: AdminUnsignedXdrResponseSchema } },
+    },
+    ...standardErrorResponses({ badRequest: true, unauthorized: true, unavailable: true, serverError: true }),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/splits/admin/withdraw-unallocated",
+  summary: "Withdraw unallocated contract funds",
+  description: "Builds an unsigned transaction XDR to recover unallocated funds. Includes audit context.",
+  tags: ["Admin"],
+  security: [{ adminApiKey: [] }],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: withdrawUnallocatedSchema,
+          example: {
+            admin: EXAMPLE_OWNER,
+            token: EXAMPLE_TOKEN,
+            to: EXAMPLE_COLLAB_A,
+            amount: 500000,
+          },
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Unsigned transaction XDR with audit context",
+      content: { "application/json": { schema: AdminUnsignedXdrResponseSchema } },
+    },
+    ...standardErrorResponses({ badRequest: true, unauthorized: true, unavailable: true, serverError: true }),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/ops/status",
+  summary: "Get operational service health and lag",
+  description: "Returns status of the event listener service, ledger lag, and database connection.",
+  tags: ["Operations"],
+  responses: {
+    200: {
+      description: "Operations status",
+      content: { "application/json": { schema: OpsStatusResponseSchema } },
+    },
+    ...standardErrorResponses({ serverError: true }),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/ops/backfill",
+  summary: "Trigger event history backfill",
+  description: "Backfills missed ledger events starting from a given ledger sequence.",
+  tags: ["Operations"],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            fromLedger: z.number().int().optional().describe("Starting ledger sequence number"),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Backfill outcome",
+      content: { "application/json": { schema: OpsBackfillResponseSchema } },
+    },
+    ...standardErrorResponses({ serverError: true }),
+  },
+});
+
 // ─── Root Endpoint ────────────────────────────────────────────────────────────
 
 registry.registerPath({
@@ -1437,6 +1794,19 @@ export function generateOpenApi() {
   });
 }
 
+function sortKeysDeep(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeysDeep);
+  if (value && typeof value === "object") {
+    return Object.keys(value as Record<string, unknown>)
+      .sort()
+      .reduce((acc: Record<string, unknown>, key: string) => {
+        acc[key] = sortKeysDeep((value as Record<string, unknown>)[key]);
+        return acc;
+      }, {});
+  }
+  return value;
+}
+
 // Check if this file is being run directly
 const __filename = fileURLToPath(import.meta.url);
 const isDirectRun = process.argv[1] && (
@@ -1455,7 +1825,11 @@ if (isDirectRun) {
   if (!fs.existsSync(docsDir)) {
     fs.mkdirSync(docsDir, { recursive: true });
   }
-  const outputPath = path.join(docsDir, "openapi.yaml");
-  fs.writeFileSync(outputPath, yaml.stringify(spec));
-  logger.info(`OpenAPI spec generated at ${outputPath}`);
+  const yamlContent = yaml.stringify(spec);
+  const outputYamlPath = path.join(docsDir, "openapi.yaml");
+  fs.writeFileSync(outputYamlPath, yamlContent);
+  const outputJsonPath = path.join(docsDir, "openapi.json");
+  const parsedSpec = yaml.parse(yamlContent);
+  fs.writeFileSync(outputJsonPath, `${JSON.stringify(sortKeysDeep(parsedSpec), null, 2)}\n`);
+  logger.info(`OpenAPI spec generated at ${outputYamlPath} and ${outputJsonPath}`);
 }
