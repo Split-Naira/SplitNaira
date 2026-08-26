@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { rpc, Transaction, StrKey } from "@stellar/stellar-sdk";
 import { clsx } from "clsx";
 import { Controller, useFieldArray, useForm, type SubmitHandler } from "react-hook-form";
+import { useTranslations } from "next-intl";
 
 import {
   buildAllowTokenXdr,
@@ -123,6 +124,7 @@ export function SplitApp({
   isWriteDisabled?: boolean;
 } = {}) {
   const { wallet, connect, refresh } = useWallet();
+  const tWizardValidation = useTranslations("SplitApp.wizard.validation");
 
   const {
     control,
@@ -247,7 +249,7 @@ export function SplitApp({
       if (!addr) return;
 
       if (!StrKey.isValidEd25519PublicKey(addr) && !StrKey.isValidContract(addr)) {
-        errors[field.id] = "Invalid Stellar address (G...) or contract ID (C...)";
+        errors[field.id] = tWizardValidation("invalidAddressGeneral");
       } else {
         validEntries.push({ id: field.id, address: addr });
       }
@@ -255,7 +257,7 @@ export function SplitApp({
 
     const duplicateIds = findDuplicateCollaboratorAddressIds(validEntries);
     duplicateIds.forEach((id) => {
-      errors[id] = "Duplicate address";
+      errors[id] = tWizardValidation("duplicateAddress");
     });
 
     return errors;

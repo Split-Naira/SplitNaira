@@ -3,6 +3,7 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import { cleanup } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, expect, vi } from "vitest";
+import enMessages from "../../messages/en.json";
 
 expect.extend(matchers);
 
@@ -30,8 +31,42 @@ const messages: Record<string, string> = {
   "tabs.projects": "Projects",
 };
 
+function getNestedValue(obj: unknown, path: string): string | undefined {
+  if (!obj || typeof obj !== "object") return undefined;
+  const parts = path.split(".");
+  let current: any = obj;
+  for (const part of parts) {
+    if (current == null || typeof current !== "object") return undefined;
+    current = current[part];
+  }
+  return typeof current === "string" ? current : undefined;
+}
+
+function formatMessage(msg: string, values?: Record<string, any>): string {
+  if (!values) return msg;
+  let formatted = msg;
+  for (const [k, v] of Object.entries(values)) {
+    formatted = formatted.replace(new RegExp(`\\{${k}\\}`, "g"), String(v));
+  }
+  return formatted;
+}
+
 vi.mock("next-intl", () => ({
-  useTranslations: () => (key: string) => messages[key] ?? key,
+  useTranslations: (namespace?: string) => {
+    return (key: string, values?: Record<string, any>) => {
+      const fullKey = namespace ? `${namespace}.${key}` : key;
+      const resolved =
+        getNestedValue(enMessages, fullKey) ??
+        getNestedValue(enMessages, key) ??
+        messages[fullKey] ??
+        messages[key];
+
+      if (typeof resolved === "string") {
+        return formatMessage(resolved, values);
+      }
+      return key;
+    };
+  },
   NextIntlClientProvider: ({ children }: { children: ReactNode }) => children,
 }));
 

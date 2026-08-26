@@ -30,6 +30,27 @@
       "statusConnected": "Statut : connecté",
       "wallet": "Wallet",
       "network": "Réseau"
+    },
+    "wizard": {
+      "validation": {
+        "projectIdRequired": "L'identifiant du projet est requis.",
+        "titleRequired": "Le titre d'affichage est requis.",
+        "tokenRequired": "Le token d'actif est requis.",
+        "invalidTokenAddress": "Entrez une adresse de token Stellar valide.",
+        "projectTypeRequired": "La catégorie de média est requise.",
+        "addressRequired": "L'adresse du wallet est requise.",
+        "invalidAddress": "Entrez une adresse Stellar ou un ID de contrat valide.",
+        "invalidAddressGeneral": "Adresse Stellar (G...) ou ID de contrat (C...) invalide",
+        "duplicateAddress": "Adresse en double",
+        "aliasRequired": "L'alias est requis.",
+        "shareRequired": "La part est requise.",
+        "shareWholeInteger": "La part doit être un entier en points de base.",
+        "shareValidNumber": "La part doit être un nombre valide.",
+        "shareMax": "La part ne peut pas dépasser 10 000.",
+        "sharesValid": "Total des parts valide : 100 % alloué",
+        "underAllocated": "Sous-alloué : {remaining} PB restants",
+        "overAllocated": "Sur-alloué : {over} PB au-delà de la limite"
+      }
     }
   }
 }
