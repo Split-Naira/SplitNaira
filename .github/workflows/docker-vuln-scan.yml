@@ -1,0 +1,39 @@
+name: Docker Image Vulnerability Scan
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "backend/Dockerfile"
+      - "frontend/Dockerfile"
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Trivy scan for backend and frontend images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build backend image
+        run: docker build -t splitnaira-backend:scan ./backend
+
+      - name: Scan backend image
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: splitnaira-backend:scan
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+      - name: Build frontend image
+        run: docker build -t splitnaira-frontend:scan ./frontend
+
+      - name: Scan frontend image
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: splitnaira-frontend:scan
+          severity: HIGH,CRITICAL
+          exit-code: "1"
