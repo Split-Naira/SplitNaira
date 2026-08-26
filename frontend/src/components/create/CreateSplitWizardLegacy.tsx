@@ -3,6 +3,7 @@
 import { Controller, type Control, type UseFormRegister, type FieldErrors, type FieldArrayWithId } from "react-hook-form";
 import { clsx } from "clsx";
 import { StrKey } from "@stellar/stellar-sdk";
+import { useTranslations } from "next-intl";
 import type { SplitProject } from "@/lib/stellar";
 import type { WalletState } from "@/lib/wallet";
 import { TokenSelector } from "../TypeSelector";
@@ -71,6 +72,8 @@ export function CreateSplitWizard({
   setSearchProjectId,
   setFetchedProject,
 }: CreateSplitWizardProps) {
+  const t = useTranslations("SplitApp.wizard.validation");
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="glass-card rounded-[2.5rem] p-8 md:p-10 space-y-12">
       <div className="flex items-center justify-between border-b border-white/5 pb-6">
@@ -90,7 +93,7 @@ export function CreateSplitWizard({
             id="projectId"
             placeholder="e.g. dawn_of_nova_01"
             className="glass-input w-full rounded-2xl px-5 py-4 text-sm"
-            {...register("projectId", { required: "Project identifier is required." })}
+            {...register("projectId", { required: t("projectIdRequired") })}
           />
           {createFormErrors.projectId && (
             <p className="px-1 text-[10px] font-bold text-red-400 uppercase tracking-tighter">
@@ -109,7 +112,7 @@ export function CreateSplitWizard({
             id="title"
             placeholder="e.g. Dawn of Nova"
             className="glass-input w-full rounded-2xl px-5 py-4 text-sm"
-            {...register("title", { required: "Display title is required." })}
+            {...register("title", { required: t("titleRequired") })}
           />
           {createFormErrors.title && (
             <p className="px-1 text-[10px] font-bold text-red-400 uppercase tracking-tighter">
@@ -121,11 +124,11 @@ export function CreateSplitWizard({
           control={control}
           name="token"
           rules={{
-            required: "Asset token is required.",
+            required: t("tokenRequired"),
             validate: (value) =>
               StrKey.isValidEd25519PublicKey(value) || StrKey.isValidContract(value)
                 ? true
-                : "Enter a valid Stellar token address.",
+                : t("invalidTokenAddress"),
           }}
           render={({ field }) => (
             <TokenSelector
@@ -152,7 +155,7 @@ export function CreateSplitWizard({
             id="projectType"
             placeholder="e.g. Music, Film"
             className="glass-input w-full rounded-2xl px-5 py-4 text-sm"
-            {...register("projectType", { required: "Media category is required." })}
+            {...register("projectType", { required: t("projectTypeRequired") })}
           />
           {createFormErrors.projectType && (
             <p className="px-1 text-[10px] font-bold text-red-400 uppercase tracking-tighter">
@@ -206,11 +209,11 @@ export function CreateSplitWizard({
                       addressError ? "border-red-500/50 bg-red-500/5" : "",
                     )}
                     {...register(`collaborators.${index}.address`, {
-                      required: "Wallet address is required.",
+                      required: t("addressRequired"),
                       validate: (value) =>
                         StrKey.isValidEd25519PublicKey(value) || StrKey.isValidContract(value)
                           ? true
-                          : "Enter a valid Stellar address or contract ID.",
+                          : t("invalidAddress"),
                     })}
                   />
                   {addressError && (
@@ -234,7 +237,7 @@ export function CreateSplitWizard({
                       aliasError ? "border-red-500/50 bg-red-500/5" : "",
                     )}
                     {...register(`collaborators.${index}.alias`, {
-                      required: "Alias is required.",
+                      required: t("aliasRequired"),
                     })}
                   />
                   {aliasError && (
@@ -263,14 +266,14 @@ export function CreateSplitWizard({
                       basisPointsError ? "border-red-500/50 bg-red-500/5" : "",
                     )}
                     {...register(`collaborators.${index}.basisPoints`, {
-                      required: "Share is required.",
+                      required: t("shareRequired"),
                       validate: (value) => {
                         if (typeof value === "string" && (value.includes(".") || !/^\d+$/.test(value.trim()))) {
-                          return "Share must be a whole integer in basis points.";
+                          return t("shareWholeInteger");
                         }
                         const parsed = Number.parseInt(value, 10);
-                        if (!Number.isFinite(parsed) || parsed < 0) return "Share must be a valid number.";
-                        if (parsed > 10_000) return "Share cannot exceed 10,000.";
+                        if (!Number.isFinite(parsed) || parsed < 0) return t("shareValidNumber");
+                        if (parsed > 10_000) return t("shareMax");
                         return true;
                       },
                     })}
@@ -310,10 +313,14 @@ export function CreateSplitWizard({
                 )}
               >
                 {totalBasisPoints === 10000
-                  ? "Total shares valid: 100% allocated"
+                  ? t("sharesValid")
                   : totalBasisPoints < 10000
-                    ? `Under-allocated: ${(10000 - totalBasisPoints).toLocaleString()} BP remaining`
-                    : `Over-allocated: ${(totalBasisPoints - 10000).toLocaleString()} BP over limit`}
+                    ? t("underAllocated", {
+                        remaining: (10000 - totalBasisPoints).toLocaleString(),
+                      })
+                    : t("overAllocated", {
+                        over: (totalBasisPoints - 10000).toLocaleString(),
+                      })}
               </p>
             </div>
             <div
