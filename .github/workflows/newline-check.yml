@@ -1,0 +1,29 @@
+name: Newline Normalization Check
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main, develop ]
+
+jobs:
+  check-newlines:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify LF line endings on generated files
+        run: |
+          echo "Checking for CRLF line endings in source and generated files..."
+          # Find files containing Windows-style carriage returns (CRLF)
+          CRLF_FILES=$(git grep -I -l $'\r' || true)
+          
+          if [ -n "$CRLF_FILES" ]; then
+            echo "Error: The following files contain CRLF line endings instead of LF:"
+            echo "$CRLF_FILES"
+            echo "Please configure your git autocrlf settings or run dos2unix on these files."
+            exit 1
+          else
+            echo "All checked files use correct LF line endings."
+          fi
