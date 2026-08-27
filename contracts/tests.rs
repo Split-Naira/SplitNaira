@@ -260,6 +260,146 @@ fn test_create_project_fails_duplicate_id() {
 }
 
 #[test]
+fn test_create_project_duplicate_preserves_original_data() {
+    // #904: a rejected duplicate-creation attempt must not mutate the
+    // existing project in any way, even when the attacker/caller submits
+    // different data (title, type, collaborators) under the same id.
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let original_collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[5000u32, 5000u32]),
+    );
+
+    let project_id = Symbol::new(&env, "dup_preserve");
+
+    client.create_project(
+        &owner,
+        &project_id,
+        &String::from_str(&env, "Original Title"),
+        &String::from_str(&env, "film"),
+        &token,
+        &original_collabs,
+    );
+
+    let before = client.get_project(&project_id).unwrap();
+
+    // Attempt a duplicate creation with deliberately DIFFERENT data, to
+    // prove the guard rejects on id collision alone and can't be used to
+    // silently overwrite an existing project's fields.
+    let carol = Address::generate(&env);
+    let dave = Address::generate(&env);
+    let different_collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[carol.clone(), dave.clone()]),
+        Vec::from_slice(&env, &[3000u32, 7000u32]),
+    );
+
+    let result = client.try_create_project(
+        &owner,
+        &project_id,
+        &String::from_str(&env, "Hijacked Title"),
+        &String::from_str(&env, "music"),
+        &token,
+        &different_collabs,
+    );
+    assert_eq!(result, Err(Ok(SplitError::ProjectExists)));
+
+    let after = client.get_project(&project_id).unwrap();
+
+    // Every field on the stored project must be byte-for-byte identical
+    // to the pre-collision snapshot.
+    assert_eq!(after.title, before.title);
+    assert_eq!(after.project_type, before.project_type);
+    assert_eq!(after.owner, before.owner);
+    assert_eq!(after.token, before.token);
+    assert_eq!(after.locked, before.locked);
+    assert_eq!(after.total_distributed, before.total_distributed);
+    assert_eq!(after.distribution_round, before.distribution_round);
+    assert_eq!(after.collaborators.len(), before.collaborators.len());
+    for i in 0..before.collaborators.len() {
+        let before_c = before.collaborators.get(i).unwrap();
+        let after_c = after.collaborators.get(i).unwrap();
+        assert_eq!(after_c.address, before_c.address);
+        assert_eq!(after_c.alias, before_c.alias);
+        assert_eq!(after_c.basis_points, before_c.basis_points);
+    }
+
+    // The rejected caller's collaborators must never have been stored.
+    assert!(!after
+        .collaborators
+        .iter()
+        .any(|c| c.address == carol || c.address == dave));
+}
+
+#[test]
+fn test_create_project_fails_duplicate_id_different_caller() {
+    // #904: the id-collision guard must hold regardless of who the
+    // second caller is - a different address can't "steal" or overwrite
+    // an existing project_id it doesn't own.
+    let (env, _admin, token) = create_test_env();
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+
+    let original_owner = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let original_collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[alice.clone(), bob.clone()]),
+        Vec::from_slice(&env, &[5000u32, 5000u32]),
+    );
+
+    let project_id = Symbol::new(&env, "dup_diff_caller");
+
+    client.create_project(
+        &original_owner,
+        &project_id,
+        &String::from_str(&env, "Original Title"),
+        &String::from_str(&env, "film"),
+        &token,
+        &original_collabs,
+    );
+
+    // A completely different, unrelated address attempts to create a
+    // project under the same id.
+    let attacker = Address::generate(&env);
+    let carol = Address::generate(&env);
+    let dave = Address::generate(&env);
+    let attacker_collabs = make_collaborators(
+        &env,
+        Vec::from_slice(&env, &[carol.clone(), dave.clone()]),
+        Vec::from_slice(&env, &[2000u32, 8000u32]),
+    );
+
+    let result = client.try_create_project(
+        &attacker,
+        &project_id,
+        &String::from_str(&env, "Attacker Title"),
+        &String::from_str(&env, "music"),
+        &token,
+        &attacker_collabs,
+    );
+    assert_eq!(result, Err(Ok(SplitError::ProjectExists)));
+
+    // The original owner and collaborators remain in place; the
+    // different caller is never recorded as owner.
+    let project = client.get_project(&project_id).unwrap();
+    assert_eq!(project.owner, original_owner);
+    assert_ne!(project.owner, attacker);
+    assert!(!project
+        .collaborators
+        .iter()
+        .any(|c| c.address == carol || c.address == dave));
+}
+
+#[test]
 fn test_create_project_fails_duplicate_collaborator_address() {
     let (env, _admin, token) = create_test_env();
     let contract_id = env.register_contract(None, SplitNairaContract);

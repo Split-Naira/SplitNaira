@@ -254,6 +254,7 @@ npm run analyze
 ## Documentation
 
 - [Architecture Overview](./docs/ARCHITECTURE.md)
+- [Split Lifecycle Architecture](./docs/split-lifecycle-architecture.md)
 - [Deployment Runbook](./docs/deployment.md)
 - [Operational Runbooks](./docs/runbooks/README.md) (contracts, CI/CD, ops, frontend)
 - [Contributing Guide](./CONTRIBUTING.md)
@@ -265,6 +266,7 @@ npm run analyze
 - [User Onboarding Runbook](./docs/runbooks/user-onboarding.md)
 - [API Evolution Runbook](./docs/runbooks/api-evolution.md)
 - [Stuck Payouts Incident Response Runbook](./docs/runbooks/stuck-payouts.md)
+- [Data Deletion and Account Closure](./docs/data-deletion-and-account-closure.md)
 - [Changelog](./CHANGELOG.md)
 
 ## Release Versioning
