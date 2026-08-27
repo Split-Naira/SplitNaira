@@ -1,0 +1,53 @@
+name: Validate Release Branch Name
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+
+jobs:
+  validate-release-branch:
+    name: Validate release branch name
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate branch name
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          branch="${HEAD_REF}"
+
+          echo "Checking branch: ${branch}"
+
+          if [[ "${branch}" != release/* ]]; then
+            echo "Branch is not a release branch."
+            echo "No release branch naming validation is required."
+            exit 0
+          fi
+
+          if [[ "${branch}" =~ ^release/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Valid release branch name: ${branch}"
+            exit 0
+          fi
+
+          echo "::error::Invalid release branch name: ${branch}"
+          echo
+          echo "Release branches must follow:"
+          echo "  release/v<major>.<minor>.<patch>"
+          echo
+          echo "Examples:"
+          echo "  release/v1.0.0"
+          echo "  release/v1.2.3"
+          echo "  release/v10.4.21"
+          echo
+          echo "Please rename the branch to follow the release naming policy."
+
+          exit 1
