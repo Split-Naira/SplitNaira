@@ -89,6 +89,104 @@ The Render deploy hook is a trigger URL used by GitHub Actions to start backend 
 - Do not commit actual `.env`, `.env.local`, or `.env.production` files.
 - Configure secrets directly in the hosting platform, Render dashboard, or GitHub Actions secrets.
 
+## Secret Scanning Policy
+
+SplitNaira enforces secret scanning at multiple layers to prevent credential leakage into source control, CI logs, and deployment artifacts.
+
+### Required Scanning Layers
+
+| Layer | Tool | Scope | Enforcement |
+|---|---|---|---|
+| Pre-commit | gitleaks (local) | Staged files | Recommended for all contributors |
+| CI pipeline | GitHub secret scanning | All pushes and PRs | Enabled via GitHub repository settings |
+| CI pipeline | gitleaks (workflow) | Full git history | Runs on PR and push to `main` |
+| Deployment | Manual review | `.env` files, config vars | Required before production deploys |
+
+### What Gets Scanned
+
+The following patterns are flagged by secret scanning:
+
+- **Private keys**: Stellar secret keys (`S...`), Ed25519 seed bytes, PEM-encoded private keys
+- **Database credentials**: Connection strings with embedded passwords (`postgresql://user:pass@...`)
+- **API keys and tokens**: JWT secrets, webhook URLs with tokens, Sentry DSNs
+- **Environment files**: `.env`, `.env.local`, `.env.production`, `.env.*.local`
+- **High-entropy strings**: Random strings exceeding 30 characters in config contexts
+
+### Pre-commit Hook Setup
+
+Install gitleaks as a pre-commit hook to catch secrets before they reach the repository:
+
+```bash
+# Install gitleaks (one-time)
+# macOS: brew install gitleaks
+# Windows: scoop install gitleaks
+# Linux: see https://github.com/gitleaks/gitleaks#installation
+
+# Run manually against staged files
+gitleaks protect --staged --verbose
+
+# Scan full repository history
+gitleaks detect --source . --verbose
+```
+
+### CI Workflow Integration
+
+Add a `secret-scanning` job to CI workflows:
+
+```yaml
+secret-scanning:
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - name: Run Gitleaks
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+### Response to Detected Secrets
+
+If secret scanning detects a potential secret:
+
+1. **Stop the pipeline** — Do not proceed with deploy or merge
+2. **Verify the finding** — Confirm whether the detected string is a live secret or a false positive (e.g., `.env.example` placeholder)
+3. **If confirmed live secret**:
+   - Rotate the credential immediately (see rotation procedures above)
+   - Remove the secret from git history using `git filter-repo` or BFG Repo-Cleaner
+   - Force-push the cleaned history (coordinate with team)
+   - Re-scan to confirm removal
+4. **If false positive**:
+   - Add a `.gitleaksallow` file with the allowed fingerprint
+   - Document the exception in the PR description
+   - Require reviewer approval for the exception
+
+### `.gitleaksallow` Exceptions
+
+Place a `.gitleaksallow` file at the repository root to document approved false positives:
+
+```
+# .gitleaksallow — approved false positives
+# Format: fingerprint (first 10 chars of SHA256) followed by comment
+# Example: abc123def4  # .env.example placeholder value
+```
+
+### Deployment Gate
+
+No deployment to staging or production proceeds if:
+
+- Secret scanning CI job fails with unacknowledged findings
+- `.env` files are detected in the build context
+- Unrotated secrets from previous findings remain in git history
+
+### Operational Impact
+
+- Secret scanning adds ~10–30 seconds to CI pipeline runtime
+- False positives from test fixtures should be added to `.gitleaksallow`
+- Contributors must install gitleaks locally for pre-commit scanning (recommended but not enforced)
+- GitHub secret scanning alerts appear in the repository Security tab
+
 ## Related Documentation
 
 - `docs/deployment.md`
