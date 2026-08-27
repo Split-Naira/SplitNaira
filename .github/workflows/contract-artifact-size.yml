@@ -1,0 +1,103 @@
+name: Contract Artifact Size
+
+on:
+  pull_request:
+    paths:
+      - "contracts/**"
+      - ".github/workflows/contract-artifact-size.yml"
+      - ".github/contract-artifacts/**"
+
+  push:
+    branches:
+      - main
+    paths:
+      - "contracts/**"
+      - ".github/workflows/contract-artifact-size.yml"
+      - ".github/contract-artifacts/**"
+
+permissions:
+  contents: read
+
+env:
+  MAX_CONTRACT_WASM_BYTES: 1048576
+
+jobs:
+  contract-artifact-size:
+    name: Check contract artifact sizes
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Build contracts
+        run: |
+          cargo build \
+            --workspace \
+            --release \
+            --target wasm32-unknown-unknown
+
+      - name: Check contract artifact sizes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          max_size="${MAX_CONTRACT_WASM_BYTES}"
+
+          echo "Contract artifact size check"
+          echo "Maximum allowed size: ${max_size} bytes"
+          echo
+
+          mapfile -t artifacts < <(
+            find contracts \
+              -type f \
+              -path "*/target/wasm32-unknown-unknown/release/*.wasm" \
+              -print
+          )
+
+          if [ "${#artifacts[@]}" -eq 0 ]; then
+            echo "::error::No contract WASM artifacts were found."
+            exit 1
+          fi
+
+          failed=0
+
+          for artifact in "${artifacts[@]}"; do
+            size="$(stat -c '%s' "$artifact")"
+
+            relative_path="${artifact#./}"
+            size_kib="$(awk "BEGIN { printf \"%.2f\", ${size} / 1024 }")"
+            limit_kib="$(awk "BEGIN { printf \"%.2f\", ${max_size} / 1024 }")"
+
+            echo "${relative_path}"
+            echo "  Size: ${size} bytes (${size_kib} KiB)"
+            echo "  Limit: ${max_size} bytes (${limit_kib} KiB)"
+
+            if [ "$size" -gt "$max_size" ]; then
+              overage=$((size - max_size))
+              overage_kib="$(awk "BEGIN { printf \"%.2f\", ${overage} / 1024 }")"
+
+              echo "  Status: FAIL"
+              echo "  Overage: ${overage} bytes (${overage_kib} KiB)"
+              echo
+
+              echo "::error file=${relative_path}::Contract artifact exceeds the configured size limit by ${overage} bytes."
+              failed=1
+            else
+              echo "  Status: PASS"
+            fi
+
+            echo
+          done
+
+          if [ "$failed" -ne 0 ]; then
+            echo "One or more contract artifacts exceed the configured size limit."
+            exit 1
+          fi
+
+          echo "All contract artifacts are within the configured size limit."
