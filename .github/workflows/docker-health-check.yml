@@ -1,0 +1,43 @@
+name: Docker Compose Health Check
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main, develop ]
+
+jobs:
+  validate-containers:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and start services via Docker Compose
+        run: |
+          docker compose up -d --build
+
+      - name: Wait for service health endpoints
+        run: |
+          echo "Waiting for API and database containers to become healthy..."
+          timeout=60
+          elapsed=0
+          
+          while ! curl -s http://localhost:3000/health | grep -q "ok"; do
+            sleep 5
+            elapsed=$((elapsed + 5))
+            if [ $elapsed -ge $timeout ]; then
+              echo "Error: Health check endpoint did not respond within $timeout seconds."
+              docker compose logs
+              exit 1
+            fi
+          done
+          echo "All services successfully booted and reported healthy status."
+
+      - name: Teardown Docker Compose environments
+        if: always()
+        run: |
+          docker compose down -v
