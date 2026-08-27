@@ -1,0 +1,253 @@
+name: Maintenance Mode
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Maintenance action to perform"
+        required: true
+        type: choice
+        options:
+          - start
+          - end
+          - schedule
+        default: "start"
+      announcement_message:
+        description: "User-facing maintenance announcement message"
+        required: false
+        default: "SplitNaira is currently undergoing scheduled maintenance. Payouts and deposits are temporarily paused. We expect to resume normal operations shortly."
+      estimated_duration:
+        description: "Estimated maintenance duration (e.g., '30 minutes', '2 hours')"
+        required: false
+        default: "30 minutes"
+      schedule_start:
+        description: "Scheduled start time (ISO 8601, used with 'schedule' action)"
+        required: false
+        default: ""
+      notify_slack:
+        description: "Post announcement to Slack #status channel"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: maintenance-mode
+  cancel-in-progress: false
+
+jobs:
+  maintenance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate inputs
+        run: |
+          if [ "${{ inputs.action }}" = "schedule" ] && [ -z "${{ inputs.schedule_start }}" ]; then
+            echo "::error::schedule_start is required when action is 'schedule'"
+            exit 1
+          fi
+
+      - name: Set maintenance status (start)
+        if: inputs.action == 'start' || inputs.action == 'schedule'
+        run: |
+          cat > docs/MAINTENANCE_STATUS.md << 'MEOF'
+          # 🛠️ Maintenance Mode Active
+
+          **Status**: 🟡 MAINTENANCE IN PROGRESS
+          **Started**: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          **Estimated Duration**: ${{ inputs.estimated_duration }}
+          **Message**: ${{ inputs.announcement_message }}
+
+          ---
+
+          ## What's Affected
+
+          - ❌ **Payouts** — All distribution and claim operations are paused
+          - ❌ **Deposits** — New deposit processing is paused
+          - ✅ **Read operations** — Project details, transaction history, and analytics remain available
+          - ✅ **Authentication** — Login and registration remain available
+
+          ## Impact on Users
+
+          - Existing funds remain safe in smart contract balances
+          - No funds will be lost during maintenance
+          - Payouts will be processed once maintenance concludes
+          - Please do not attempt to submit new distribution transactions
+
+          ## Status Updates
+
+          - Status page: [https://status.splitnaira.com](https://status.splitnaira.com)
+          - Twitter/X: [@SplitNaira](https://twitter.com/SplitNaira)
+
+          ---
+
+          *This maintenance window is managed via the `maintenance-mode` GitHub Actions workflow.*
+          *To end maintenance, trigger this workflow with action: `end`.*
+          MEOF
+
+          echo "Maintenance status file created."
+
+      - name: Remove maintenance status (end)
+        if: inputs.action == 'end'
+        run: |
+          if [ -f docs/MAINTENANCE_STATUS.md ]; then
+            cat > docs/MAINTENANCE_STATUS.md << 'MEOF'
+            # ✅ Maintenance Complete
+
+            **Status**: 🟢 OPERATIONAL
+            **Completed**: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+            ---
+
+            SplitNaira has resumed normal operations. All payout and deposit
+            services are fully functional.
+
+            If you experience any issues, please contact support or open
+            a GitHub issue.
+
+            ---
+
+            *Maintenance window concluded. This file will be cleaned up automatically.*
+            MEOF
+            echo "Maintenance status file updated to 'complete'."
+          else
+            echo "No active maintenance status file found. Creating completion record."
+            cat > docs/MAINTENANCE_STATUS.md << 'MEOF'
+            # ✅ Maintenance Complete
+
+            **Status**: 🟢 OPERATIONAL
+            **Completed**: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+            SplitNaira has resumed normal operations.
+            MEOF
+          fi
+
+      - name: Commit maintenance status change
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/MAINTENANCE_STATUS.md
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "ops: maintenance mode ${{ inputs.action }}
+
+          Action: ${{ inputs.action }}
+          Message: ${{ inputs.announcement_message }}
+          Duration: ${{ inputs.estimated_duration }}
+
+          🤖 Generated with maintenance-mode workflow"
+          fi
+
+      - name: Push maintenance status
+        run: |
+          git push origin HEAD
+
+      - name: Notify Slack (start)
+        if: inputs.notify_slack && (inputs.action == 'start' || inputs.action == 'schedule')
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_STATUS_WEBHOOK_URL }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_STATUS_WEBHOOK_URL not configured — skipping Slack notification."
+            exit 0
+          fi
+          PAYLOAD=$(cat <<EOF
+          {
+            "text": "🛠️ *SplitNaira Maintenance Mode — ${{ inputs.action == 'schedule' && 'Scheduled' || 'Started' }}*",
+            "blocks": [
+              {
+                "type": "header",
+                "text": {
+                  "type": "plain_text",
+                  "text": "🛠️ Maintenance Mode ${{ inputs.action == 'schedule' && 'Scheduled' || 'Started' }}"
+                }
+              },
+              {
+                "type": "section",
+                "fields": [
+                  { "type": "mrkdwn", "text": "*Status:* 🟡 MAINTENANCE IN PROGRESS" },
+                  { "type": "mrkdwn", "text": "*Duration:* ${{ inputs.estimated_duration }}" },
+                  { "type": "mrkdwn", "text": "*Message:* ${{ inputs.announcement_message }}" },
+                  { "type": "mrkdwn", "text": "*Triggered by:* ${{ github.actor }}" }
+                ]
+              },
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "Payouts and deposits are temporarily paused. Read operations remain available.\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow run>"
+                }
+              }
+            ]
+          }
+          EOF
+          )
+          curl -sf -X POST -H 'Content-type: application/json' --data "$PAYLOAD" "$SLACK_WEBHOOK_URL"
+
+      - name: Notify Slack (end)
+        if: inputs.notify_slack && inputs.action == 'end'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_STATUS_WEBHOOK_URL }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_STATUS_WEBHOOK_URL not configured — skipping Slack notification."
+            exit 0
+          fi
+          PAYLOAD=$(cat <<EOF
+          {
+            "text": "✅ *SplitNaira Maintenance Complete*",
+            "blocks": [
+              {
+                "type": "header",
+                "text": {
+                  "type": "plain_text",
+                  "text": "✅ Maintenance Complete"
+                }
+              },
+              {
+                "type": "section",
+                "fields": [
+                  { "type": "mrkdwn", "text": "*Status:* 🟢 OPERATIONAL" },
+                  { "type": "mrkdwn", "text": "*Completed:* $(date -u +'%Y-%m-%dT%H:%M:%SZ')" },
+                  { "type": "mrkdwn", "text": "*Triggered by:* ${{ github.actor }}" }
+                ]
+              },
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "All services have resumed normal operations. Payouts and deposits are fully functional.\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow run>"
+                }
+              }
+            ]
+          }
+          EOF
+          )
+          curl -sf -X POST -H 'Content-type: application/json' --data "$PAYLOAD" "$SLACK_WEBHOOK_URL"
+
+      - name: Summary
+        run: |
+          echo "## Maintenance Mode ${{ inputs.action }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Action** | ${{ inputs.action }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Message** | ${{ inputs.announcement_message }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Duration** | ${{ inputs.estimated_duration }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| **Slack Notified** | ${{ inputs.notify_slack }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Next Steps" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ inputs.action }}" = "start" ] || [ "${{ inputs.action }}" = "schedule" ]; then
+            echo "- Set \`PAYMENTS_ADMIN_WRITE_ENABLED=false\` on the backend to freeze payout writes" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Optionally invoke \`pause_distributions\` on the smart contract for on-chain protection" >> "$GITHUB_STEP_SUMMARY"
+            echo "- When maintenance is complete, trigger this workflow with action: \`end\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Restore \`PAYMENTS_ADMIN_WRITE_ENABLED=true\` on the backend" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Optionally invoke \`unpause_distributions\` on the smart contract" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Verify \`GET /health/ready\` returns 200" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Monitor payout metrics for 30 minutes post-maintenance" >> "$GITHUB_STEP_SUMMARY"
+          fi
