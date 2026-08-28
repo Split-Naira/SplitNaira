@@ -3,6 +3,7 @@ import { getSseEventBus, getSseEventName } from "../services/SseEventBus.js";
 import { getEventBus, TRANSACTION_CONFIRMED } from "../services/EventBus.js";
 import { logger } from "../services/logger.js";
 import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
+import { incrementSseConnections, recordSseDisconnect } from "../services/metrics.js";
 
 // Heartbeat cadence for the path-based transaction stream. A comment line every
 // 15s keeps intermediary proxies from closing an otherwise-idle connection.
@@ -126,10 +127,12 @@ async function handleEventStream(req: Request, res: Response) {
   addSubscription(subscription);
   activeSseResponses.add(res);
   eventBus.on(eventName, subscription.listener);
+  incrementSseConnections();
 
   res.on("close", () => {
     subscription.cleanup();
     activeSseResponses.delete(res);
+    recordSseDisconnect();
     logger.info("SSE client disconnected", { txHash, requestId });
   });
 
@@ -192,6 +195,7 @@ function handleTransactionStream(req: Request, res: Response) {
 
   bus.on(TRANSACTION_CONFIRMED, listener);
   activeSseResponses.add(res);
+  incrementSseConnections();
 
   const heartbeat = setInterval(() => {
     res.write(": heartbeat\n\n");
@@ -201,6 +205,7 @@ function handleTransactionStream(req: Request, res: Response) {
     bus.removeListener(TRANSACTION_CONFIRMED, listener);
     clearInterval(heartbeat);
     activeSseResponses.delete(res);
+    recordSseDisconnect();
     logger.info("Transaction SSE client disconnected", { txHash, requestId });
   });
 

@@ -80,7 +80,7 @@ Health endpoint runs `checkSorobanReachability()` and `checkContractHealth()`.
 | Metric | Type | Labels | Owner | Alert Threshold | Status |
 |--------|------|--------|-------|----------------|--------|
 | `splitnaira_rpc_retry_attempts_total` | counter | — | Backend | Sustained > 2x baseline | ✅ Live (Issue #836) |
-| `splitnaira_rpc_retry_max_attempts_reached_total` | counter | — | Backend | Any >0 in 5m | ✅ Live (Issue #836) |
+| `splitnaira_rpc_retry_max_attempts_reached_total` | counter | — | Backend | Any >0 in 5m (warn); repeated (see #1164 below) escalates | ✅ Live (Issue #836) |
 | `splitnaira_rpc_retry_duration_ms_total` | counter | — | Backend | Increase > 60s/15m | ✅ Live (Issue #836) |
 | `splitnaira_rpc_retry_outcomes_total` | counter | `operation`, `outcome`, `endpoint` | Backend | Timeouts / exhausted >0 | ✅ Live (Issue #836) |
 | `rpc_request_duration_seconds` | histogram | `endpoint` | Backend | P99 > 5s | ❌ Missing |
@@ -165,16 +165,28 @@ Source: `routes/events.ts`, `services/EventListenerService.ts`
 | Metric | Type | Labels | Owner | Alert Threshold | Dashboard Panel |
 |--------|------|--------|-------|----------------|-----------------|
 | `sse_connections_active` | gauge | — | Backend | >100 | Active SSE Connections |
+| `sse_disconnects_total` | counter | — | Backend | Sustained rate spike vs. baseline | SSE Disconnects (#1166) |
 | `sse_connections_total` | counter | — | Backend | — | SSE Connection Rate |
 | `sse_errors_total` | counter | — | Backend | Any >0 in 5m | SSE Errors |
 
 ### Existing
-- Active connections tracked in-memory via `metricsService.incrementSseConnections()`.
-- Connection count exposed as `sse_connections_active`.
+- Active connections tracked in-memory and incremented/decremented on every
+  SSE connect/disconnect in `routes/events.ts` (both `GET /events` and
+  `GET /events/transactions/:txHash`), exposed as `sse_connections_active`
+  (#1166 — previously defined but never actually wired to a connection
+  event, so it always read `0`).
+- Cumulative disconnects tracked via `recordSseDisconnect()`, exposed as
+  `sse_disconnects_total` (#1166). Sudden spikes in this counter's rate
+  (`rate(sse_disconnects_total[5m])`) indicate client churn — proxy
+  timeouts, backend restarts, or a frontend reconnect loop — worth a
+  dedicated panel even though `sse_connections_active` alone can't show it
+  (a gauge that returns to the same value after a burst of disconnects and
+  reconnects looks unremarkable on its own).
 
 ### Missing (TODO)
 - Connection duration histogram.
 - Error type breakdown (timeout vs. invalid txHash vs. listener limit).
+- `sse_connections_total` (cumulative opens, distinct from the active gauge).
 
 ---
 

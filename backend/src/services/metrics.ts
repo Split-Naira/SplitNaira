@@ -96,6 +96,7 @@ export function resetRequestMetrics(): void {
   distributionsExecutedTotal = 0;
   depositsReceivedTotal = 0;
   sseConnectionsActive = 0;
+  sseDisconnectsTotal = 0;
   rpcRetryAttemptsByKey.clear();
   rpcRetryAttemptsTotal = 0;
   rpcRetryDurationMsTotal = 0;
@@ -252,6 +253,7 @@ let projectsCreatedTotal = 0;
 let distributionsExecutedTotal = 0;
 let depositsReceivedTotal = 0;
 let sseConnectionsActive = 0;
+let sseDisconnectsTotal = 0;
 
 export function incrementProjectsCreated(): void {
   projectsCreatedTotal += 1;
@@ -269,8 +271,14 @@ export function incrementSseConnections(): void {
   sseConnectionsActive += 1;
 }
 
-export function decrementSseConnections(): void {
+/**
+ * Records an SSE client disconnect (#1166): decrements the active-connection
+ * gauge and increments the cumulative disconnects counter. Kept as one call
+ * so every disconnect site updates both consistently.
+ */
+export function recordSseDisconnect(): void {
   sseConnectionsActive = Math.max(0, sseConnectionsActive - 1);
+  sseDisconnectsTotal += 1;
 }
 
 export function getProjectsCreatedTotal(): number {
@@ -287,4 +295,8 @@ export function getDepositsReceivedTotal(): number {
 
 export function getSseConnectionsActive(): number {
   return sseConnectionsActive;
+}
+
+export function getSseDisconnectsTotal(): number {
+  return sseDisconnectsTotal;
 }

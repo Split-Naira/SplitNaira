@@ -8,6 +8,7 @@ import {
   getDistributionsExecutedTotal,
   getDepositsReceivedTotal,
   getSseConnectionsActive,
+  getSseDisconnectsTotal,
   getRpcRetryAttemptsTotal,
   getRpcRetryDurationMsTotal,
   getRpcRetryMaxAttemptsReachedTotal,
@@ -91,6 +92,10 @@ lines.push(`deposits_received_total ${getDepositsReceivedTotal()}`);
 lines.push("# HELP sse_connections_active Active SSE connections.");
 lines.push("# TYPE sse_connections_active gauge");
 lines.push(`sse_connections_active ${getSseConnectionsActive()}`);
+
+lines.push("# HELP sse_disconnects_total Cumulative SSE client disconnects (#1166).");
+lines.push("# TYPE sse_disconnects_total counter");
+lines.push(`sse_disconnects_total ${getSseDisconnectsTotal()}`);
 
   // Issue #836: RPC retry observability series.
   lines.push("# HELP splitnaira_rpc_retry_attempts_total Total RPC retry attempts, including first try, labelled by operation and endpoint.");
