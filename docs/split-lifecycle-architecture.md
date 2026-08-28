@@ -85,13 +85,13 @@ sequenceDiagram
 
 ## Trust Boundaries and External Services
 
-| Boundary | What crosses it | Who/what is trusted |
-|----------|------------------|----------------------|
-| **User ↔ Wallet extension** | The transaction to be signed (unsigned XDR) | The wallet (Freighter/Albedo) is the only party that ever holds the signing key. The backend never sees or handles private keys — see [wallet-signing-threat-model.md](./wallet-signing-threat-model.md). |
-| **Frontend ↔ Backend** | API requests/metadata only, never a signing key | Frontend is treated as untrusted input by the backend; all state-changing outcomes are ultimately verified on-chain, not taken on the frontend's word. |
-| **Wallet ↔ Stellar/Soroban RPC** | Signed transactions | RPC is an **external service** (not operated by SplitNaira) — the create/fund/distribute paths all depend on its availability. The backend's Observe loop treats RPC failures as a first-class case (error-count backoff, not a crash). |
-| **Backend ↔ RPC (read path)** | Polling for ledger events | Read-only; the backend cannot mutate on-chain state through this path, only observe it. |
-| **Contract-internal** | `create_project`'s duplicate-id guard, `deposit`'s balance accounting, `distribute`/`claim`'s payout math | This is the actual source of truth. The backend's PostgreSQL copy is a read cache for fast queries/history — if it disagrees with the chain, the chain wins. |
+| Boundary                         | What crosses it                                                                                           | Who/what is trusted                                                                                                                                                                                                                     |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **User ↔ Wallet extension**      | The transaction to be signed (unsigned XDR)                                                               | The wallet (Freighter/Albedo) is the only party that ever holds the signing key. The backend never sees or handles private keys — see [wallet-signing-threat-model.md](./wallet-signing-threat-model.md).                               |
+| **Frontend ↔ Backend**           | API requests/metadata only, never a signing key                                                           | Frontend is treated as untrusted input by the backend; all state-changing outcomes are ultimately verified on-chain, not taken on the frontend's word.                                                                                  |
+| **Wallet ↔ Stellar/Soroban RPC** | Signed transactions                                                                                       | RPC is an **external service** (not operated by SplitNaira) — the create/fund/distribute paths all depend on its availability. The backend's Observe loop treats RPC failures as a first-class case (error-count backoff, not a crash). |
+| **Backend ↔ RPC (read path)**    | Polling for ledger events                                                                                 | Read-only; the backend cannot mutate on-chain state through this path, only observe it.                                                                                                                                                 |
+| **Contract-internal**            | `create_project`'s duplicate-id guard, `deposit`'s balance accounting, `distribute`/`claim`'s payout math | This is the actual source of truth. The backend's PostgreSQL copy is a read cache for fast queries/history — if it disagrees with the chain, the chain wins.                                                                            |
 
 ## Notes on Push vs. Pull Distribution
 
