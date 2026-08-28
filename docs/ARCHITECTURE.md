@@ -33,6 +33,10 @@ graph TD
     Stellar -->|Execute Contract Logic| SC
 ```
 
+See [Split Lifecycle Architecture](./split-lifecycle-architecture.md) for how
+a single project actually moves through create, fund, distribute, and
+observe across these components, including trust boundaries.
+
 ## Components
 
 ### Frontend (Next.js)

@@ -17,6 +17,7 @@ Deployment-focused runbooks for the Stellar Wave release program. Each document 
 | [Payout failure severity matrix](../../runbooks/payout-failure-severity-matrix.md) | Operations — payout incident classification | Backlog Wave 6 |
 | [Production readiness scorecard](./production-readiness-scorecard.md) | Release Operations — launch review | #867 |
 | [Audit log retention](../audit-log-retention.md) | Security operations — audit retention | #896 |
+| [Data deletion and account closure](../data-deletion-and-account-closure.md) | Compliance and support — account closure | #907 |
 | [Contract upgrade ADR template](../adr/0001-contract-upgrade-decision-record.md) | Smart contract governance | #848 |
 
 **Related:** [Maintenance mode workflow](../maintenance-mode-announcement.md) · [End-to-end deployment](../deployment.md) · [Contract release & upgrade](../contract-release-and-upgrade-runbook.md) · [Release readiness checklist](../release-readiness-checklist.md) · [Contract upgrade ADR](../adr/0001-contract-upgrade-decision-record.md) · [SECURITY.md](../../SECURITY.md)
