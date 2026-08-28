@@ -531,6 +531,26 @@
               "status"
             ],
             "type": "object"
+          },
+          "idempotency": {
+            "description": "Idempotency conflict and replay counters",
+            "properties": {
+              "conflictsTotal": {
+                "description": "Total idempotency 409 conflicts",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "replaysTotal": {
+                "description": "Total idempotency replays",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "conflictsTotal",
+              "replaysTotal"
+            ],
+            "type": "object"
           }
         },
         "required": [

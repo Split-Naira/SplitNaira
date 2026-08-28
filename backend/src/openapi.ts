@@ -1458,6 +1458,10 @@ const OpsStatusResponseSchema = registry.register(
     database: z.object({
       connected: z.boolean().describe("Whether database data-source is initialized"),
     }),
+    idempotency: z.object({
+      conflictsTotal: z.number().int().nonnegative().describe("Total idempotency 409 conflicts"),
+      replaysTotal: z.number().int().nonnegative().describe("Total idempotency replays"),
+    }).optional().describe("Idempotency conflict and replay counters"),
   })
 );
 

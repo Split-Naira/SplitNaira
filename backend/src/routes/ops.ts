@@ -10,6 +10,7 @@ import {
   OpsBackfillResponseSchema,
   MainnetReadinessResponseSchema,
 } from "../schemas/admin.schemas.js";
+import { getIdempotencyConflictsTotal, getIdempotencyReplaysTotal } from "../services/metrics.js";
 
 const payoutHistory = createPayoutHistoryService();
 
@@ -71,6 +72,10 @@ opsRouter.get(
     res.json({
       eventListener: { ...getServiceHealth(), ledgerLag: getLedgerLag() },
       database: { connected: getDataSource().isInitialized },
+      idempotency: {
+        conflictsTotal: getIdempotencyConflictsTotal(),
+        replaysTotal: getIdempotencyReplaysTotal(),
+      },
     });
   })
 );

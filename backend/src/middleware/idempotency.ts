@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
 import { IdempotencyStore, idempotencyStore as defaultStore } from "../services/idempotency.js";
+import { incrementIdempotencyConflicts, incrementIdempotencyReplays } from "../services/metrics.js";
 
 const IDEMPOTENCY_HEADER = "idempotency-key";
 const MAX_KEY_LENGTH = 255;
@@ -72,6 +73,7 @@ export function idempotencyMiddleware(store: IdempotencyStore = defaultStore): R
 
     if (existing) {
       if (existing.requestHash !== requestHash) {
+        incrementIdempotencyConflicts();
         next(
           conflictError(
             ErrorCode.IDEMPOTENCY_KEY_CONFLICT,
@@ -82,6 +84,7 @@ export function idempotencyMiddleware(store: IdempotencyStore = defaultStore): R
       }
 
       if (existing.status === "in_progress") {
+        incrementIdempotencyConflicts();
         next(
           conflictError(
             ErrorCode.IDEMPOTENCY_KEY_IN_PROGRESS,
@@ -91,6 +94,7 @@ export function idempotencyMiddleware(store: IdempotencyStore = defaultStore): R
         return;
       }
 
+      incrementIdempotencyReplays();
       res.setHeader("Idempotency-Replayed", "true");
       res.status(existing.statusCode ?? 200).json(existing.body);
       return;

@@ -12,6 +12,8 @@ import {
   getRpcRetryDurationMsTotal,
   getRpcRetryMaxAttemptsReachedTotal,
   getRpcRetrySnapshots,
+  getIdempotencyConflictsTotal,
+  getIdempotencyReplaysTotal,
 } from "../services/metrics.js";
 import { getLedgerLag } from "../services/EventListenerService.js";
 
@@ -113,6 +115,15 @@ lines.push(`sse_connections_active ${getSseConnectionsActive()}`);
       `splitnaira_rpc_retry_outcomes_total{operation=${quoteLabelValue(operation)},outcome=${quoteLabelValue(outcome)},endpoint=${quoteLabelValue(endpoint)}} ${count}`,
     );
   }
+
+  // Issue #1165: idempotency conflict/replay counters.
+  lines.push("# HELP splitnaira_idempotency_conflicts_total Total idempotency 409 conflicts (payload mismatch or in-progress).");
+  lines.push("# TYPE splitnaira_idempotency_conflicts_total counter");
+  lines.push(`splitnaira_idempotency_conflicts_total ${getIdempotencyConflictsTotal()}`);
+
+  lines.push("# HELP splitnaira_idempotency_replays_total Total idempotency replays (cached response returned).");
+  lines.push("# TYPE splitnaira_idempotency_replays_total counter");
+  lines.push(`splitnaira_idempotency_replays_total ${getIdempotencyReplaysTotal()}`);
 
   const eventListenerLag = getLedgerLag();
   lines.push(
