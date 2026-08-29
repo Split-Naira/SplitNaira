@@ -10,6 +10,8 @@ Deployment-focused runbooks for the Stellar Wave release program. Each document 
 | [Frontend release operations](./frontend-release-ops.md) | Release Operations — frontend | #439 |
 | [TTL refresh operations](./ttl-refresh-operations.md) | Operations — TTL management | #363 |
 | [Observability](./observability.md) | CI/CD — observability | #407 |
+| [Local Postgres migration dry-run](./local-postgres-migration-dry-run.md) | Backend — migration verification | #1159 |
+| [Windows npm dependency installation](../contributors/windows-setup-guide.md) | Contributor operations — Windows setup | #1158 |
 | [New token onboarding review](./token-onboarding-review.md) | Operations — token allowlist | Backlog Wave 6 |
 | [CI/CD security](./cicd-security.md) | CI/CD — security hardening | #402 |
 | [CI/CD incident management](./incident-management.md) | CI/CD — incident management | #520 |

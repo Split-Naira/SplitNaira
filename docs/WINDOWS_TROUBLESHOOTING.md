@@ -174,6 +174,10 @@ plain Windows setup. Work around it by either:
 
 ## Common Node.js Issues
 
+For a step-by-step `npm ci`/`npm install` recovery flow, including file-lock,
+registry/TLS, and lockfile mismatch triage, see the
+[Windows npm Dependency Installation Runbook](./contributors/windows-setup-guide.md).
+
 - **`node-gyp` / native module build failures.** Some npm dependencies
   compile native addons during `npm install`. On Windows this requires the
   same Visual Studio Build Tools ("Desktop development with C++" workload)

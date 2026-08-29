@@ -28,11 +28,10 @@ jobs:
 
     env:
       NODE_ENV: test
-      DB_HOST: localhost
-      DB_PORT: 5432
-      DB_USERNAME: splitnaira_test
-      DB_PASSWORD: test_password_123
-      DB_NAME: splitnaira_migration_test
+      # The dry-run command only uses these isolated URLs. Never pass a normal
+      # deployment DATABASE_URL to a command that recreates its target DB.
+      MIGRATION_DRY_RUN_DATABASE_URL: postgresql://splitnaira_test:test_password_123@localhost:5432/splitnaira_migration_test
+      MIGRATION_DRY_RUN_ADMIN_DATABASE_URL: postgresql://splitnaira_test:test_password_123@localhost:5432/postgres
 
     steps:
       - name: Checkout Code

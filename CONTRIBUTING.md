@@ -124,6 +124,8 @@ cargo test
 > [`docs/WINDOWS_TROUBLESHOOTING.md`](./docs/WINDOWS_TROUBLESHOOTING.md) for
 > PowerShell-specific install/build/test commands and common Node, Rust,
 > Docker, and path/line-ending issues.
+> For a failed npm dependency installation specifically, use the
+> [Windows npm dependency installation runbook](./docs/contributors/windows-setup-guide.md).
 
 ---
 
