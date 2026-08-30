@@ -90,6 +90,11 @@ export interface UnallocatedBalanceState {
   unallocated: string;
 }
 
+export interface IdempotencyStats {
+  conflictsTotal: number;
+  replaysTotal: number;
+}
+
 /**
  * Simplified frontend-side system status, derived from the backend health
  * endpoint response.
@@ -527,6 +532,18 @@ export class ApiClient {
       `/splits/admin/unallocated?token=${encodeURIComponent(token)}`,
       "Failed to fetch unallocated balance",
     );
+  }
+
+  async getIdempotencyStats(): Promise<IdempotencyStats> {
+    const raw = await this.requestJson<Record<string, unknown>>(
+      "/ops/status",
+      "Failed to fetch idempotency stats",
+    );
+    const idempotency = raw.idempotency as Record<string, unknown> | undefined;
+    return {
+      conflictsTotal: typeof idempotency?.conflictsTotal === "number" ? idempotency.conflictsTotal : 0,
+      replaysTotal: typeof idempotency?.replaysTotal === "number" ? idempotency.replaysTotal : 0,
+    };
   }
 
   /**

@@ -87,6 +87,10 @@ export const OpsStatusResponseSchema = z.object({
   database: z.object({
     connected: z.boolean().describe("Whether TypeORM database data-source is initialized"),
   }),
+  idempotency: z.object({
+    conflictsTotal: z.number().int().nonnegative().describe("Total idempotency 409 conflicts (payload mismatch or in-progress)"),
+    replaysTotal: z.number().int().nonnegative().describe("Total idempotency replays (cached response returned)"),
+  }).optional().describe("Idempotency conflict and replay counters"),
 });
 
 export type OpsStatusResponse = z.infer<typeof OpsStatusResponseSchema>;

@@ -87,6 +87,15 @@ export function getInflightRequestCount(): number {
   return inflightRequests;
 }
 
+// ── Idempotency conflict counters ──────────────────────────────────────────
+//
+// Issue #1165: track the number of 409 conflicts triggered by the
+// idempotency middleware so operators can monitor client retry behaviour
+// and surface the data on the ops dashboard.
+
+let idempotencyConflictsTotal = 0;
+let idempotencyReplaysTotal = 0;
+
 export function resetRequestMetrics(): void {
   requestCounters.clear();
   requestDurations.clear();
@@ -101,6 +110,31 @@ export function resetRequestMetrics(): void {
   rpcRetryAttemptsTotal = 0;
   rpcRetryDurationMsTotal = 0;
   rpcRetryMaxAttemptsReachedTotal = 0;
+
+  idempotencyConflictsTotal = 0;
+  idempotencyReplaysTotal = 0;
+}
+
+/**
+ * Record an idempotency conflict (payload mismatch or in-progress).
+ */
+export function incrementIdempotencyConflicts(): void {
+  idempotencyConflictsTotal += 1;
+}
+
+/**
+ * Record an idempotency replay (same key + same payload, cached response).
+ */
+export function incrementIdempotencyReplays(): void {
+  idempotencyReplaysTotal += 1;
+}
+
+export function getIdempotencyConflictsTotal(): number {
+  return idempotencyConflictsTotal;
+}
+
+export function getIdempotencyReplaysTotal(): number {
+  return idempotencyReplaysTotal;
 }
 
 /**

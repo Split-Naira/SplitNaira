@@ -497,6 +497,21 @@ components:
               description: Whether database data-source is initialized
           required:
             - connected
+        idempotency:
+          type: object
+          properties:
+            conflictsTotal:
+              type: integer
+              minimum: 0
+              description: Total idempotency 409 conflicts
+            replaysTotal:
+              type: integer
+              minimum: 0
+              description: Total idempotency replays
+          required:
+            - conflictsTotal
+            - replaysTotal
+          description: Idempotency conflict and replay counters
       required:
         - eventListener
         - database

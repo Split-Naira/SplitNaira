@@ -8,6 +8,7 @@ export {
   type TokenAllowlistState,
   type AdminStatusState,
   type UnallocatedBalanceState,
+  type IdempotencyStats,
   type WithdrawUnallocatedPayload,
   type WithdrawUnallocatedResponse,
   type ListProjectsParams,
@@ -15,7 +16,7 @@ export {
   type SystemStatusResponse,
 } from "./api-client";
 
-import { ApiClient, type ListProjectsParams, type SystemStatusResponse } from "./api-client";
+import { ApiClient, type IdempotencyStats, type ListProjectsParams, type SystemStatusResponse } from "./api-client";
 import type { SplitProject, Collaborator } from "./stellar";
 
 const client = new ApiClient();
@@ -159,4 +160,8 @@ export async function getUnallocatedBalance(token: string): Promise<{ token: str
 
 export async function getSystemStatus(): Promise<SystemStatusResponse> {
   return client.getSystemStatus();
+}
+
+export async function getIdempotencyStats(): Promise<IdempotencyStats> {
+  return client.getIdempotencyStats();
 }
