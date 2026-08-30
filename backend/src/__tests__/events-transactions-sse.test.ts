@@ -209,3 +209,62 @@ describe("GET /events/transactions/:txHash (SSE)", () => {
     expect(bus.listenerCount(TRANSACTION_CONFIRMED)).toBe(connected - 1);
   });
 });
+
+describe("SSE connection metrics (#1166)", () => {
+  it("increments sse_connections_active on connect and decrements + records a disconnect on close", async () => {
+    const { getSseConnectionsActive, getSseDisconnectsTotal } = await import(
+      "../services/metrics.js"
+    );
+
+    const activeBefore = getSseConnectionsActive();
+    const disconnectsBefore = getSseDisconnectsTotal();
+
+    const { req } = await openStream("/events/transactions/tx-metrics-1");
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(getSseConnectionsActive()).toBe(activeBefore + 1);
+    expect(getSseDisconnectsTotal()).toBe(disconnectsBefore);
+
+    req.destroy();
+    await new Promise((r) => setTimeout(r, 200));
+
+    expect(getSseConnectionsActive()).toBe(activeBefore);
+    expect(getSseDisconnectsTotal()).toBe(disconnectsBefore + 1);
+  });
+
+  it("tracks metrics independently for the query-param /events stream too", async () => {
+    const { getSseConnectionsActive, getSseDisconnectsTotal } = await import(
+      "../services/metrics.js"
+    );
+
+    const activeBefore = getSseConnectionsActive();
+    const disconnectsBefore = getSseDisconnectsTotal();
+
+    const { req } = await openStream("/events?txHash=tx-metrics-2");
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(getSseConnectionsActive()).toBe(activeBefore + 1);
+
+    req.destroy();
+    await new Promise((r) => setTimeout(r, 200));
+
+    expect(getSseConnectionsActive()).toBe(activeBefore);
+    expect(getSseDisconnectsTotal()).toBe(disconnectsBefore + 1);
+  });
+
+  it("exposes both series on GET /metrics in Prometheus format", async () => {
+    const { metricsRouter } = await import("../routes/metrics.js");
+    const express = (await import("express")).default;
+    const request = (await import("supertest")).default;
+
+    const app = express();
+    app.use("/metrics", metricsRouter);
+
+    const res = await request(app).get("/metrics");
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(/# TYPE sse_connections_active gauge/);
+    expect(res.text).toMatch(/sse_connections_active \d+/);
+    expect(res.text).toMatch(/# TYPE sse_disconnects_total counter/);
+    expect(res.text).toMatch(/sse_disconnects_total \d+/);
+  });
+});

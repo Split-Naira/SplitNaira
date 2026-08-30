@@ -18,6 +18,8 @@ Deployment-focused runbooks for the Stellar Wave release program. Each document 
 | [Production readiness scorecard](./production-readiness-scorecard.md) | Release Operations — launch review | #867 |
 | [Audit log retention](../audit-log-retention.md) | Security operations — audit retention | #896 |
 | [Data deletion and account closure](../data-deletion-and-account-closure.md) | Compliance and support — account closure | #907 |
+| [Deployment rollback drill checklist](../../runbooks/deployment-rollback-drill-checklist.md) | Operations — rollback drill | #1167 |
+| [Support escalation guide: failed wallet submissions](./support-escalation-wallet-submissions.md) | Docs — support triage | #1162 |
 | [Contract upgrade ADR template](../adr/0001-contract-upgrade-decision-record.md) | Smart contract governance | #848 |
 
 **Related:** [Maintenance mode workflow](../maintenance-mode-announcement.md) · [End-to-end deployment](../deployment.md) · [Contract release & upgrade](../contract-release-and-upgrade-runbook.md) · [Release readiness checklist](../release-readiness-checklist.md) · [Contract upgrade ADR](../adr/0001-contract-upgrade-decision-record.md) · [SECURITY.md](../../SECURITY.md)

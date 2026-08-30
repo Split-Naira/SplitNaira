@@ -85,7 +85,8 @@ Exposed series:
 - `projects_created_total` — total projects created
 - `distributions_executed_total` — total distributions executed
 - `deposits_received_total` — total deposits received
-- `sse_connections_active` — active SSE connections
+- `sse_connections_active` — active SSE connections (#1166 — now actually wired to connect/disconnect events; previously defined but never incremented)
+- `sse_disconnects_total` — cumulative SSE client disconnects (#1166); a rate spike indicates client churn even when the active gauge looks flat
 - `splitnaira_rpc_retry_attempts_total` — total RPC retry attempts (Issue #836)
 - `splitnaira_rpc_retry_max_attempts_reached_total` — times the retry budget was fully consumed without success (Issue #836)
 - `splitnaira_rpc_retry_duration_ms_total` — cumulative sleeper delay between RPC retry attempts in milliseconds (Issue #836)
@@ -210,9 +211,30 @@ Recommended Prometheus alerts:
 | Signal | Expression | Rationale |
 |--------|-----------|-----------|
 | Retry budget exhausted for any operation | `rate(splitnaira_rpc_retry_max_attempts_reached_total[5m]) > 0` | Burning the full budget means callers will start seeing 502/504 responses |
+| **Repeated exhaustion for the same operation (#1164)** | `sum by (operation) (increase(splitnaira_rpc_retry_outcomes_total{outcome="exhausted"}[15m])) >= 3` | A single exhaustion can be a transient blip; **3 or more within 15 minutes for the same operation** means the RPC endpoint is sustained-degraded for that call path, not just having a bad moment. This is the signal that should page, not just log — treat it as distinct from (and higher severity than) the "any >0" rule above, which is informational. |
 | Sustained `simulateTransaction` timeouts | `sum by (endpoint) (rate(splitnaira_rpc_retry_outcomes_total{outcome="timeout"}[5m])) > 0.1` | Simulation latency past `timeoutMs` means RPC is degraded for write paths |
 | Cumulative retry sleep growing without success | `increase(splitnaira_rpc_retry_duration_ms_total[15m]) > 60000` | Backoffs are stacking, suggesting the RPC is flapping |
 | Validation rejections from RPC | `sum by (operation) (rate(splitnaira_rpc_retry_outcomes_total{outcome="validation_error"}[5m])) > 0` | Indicates a client is sending payloads the RPC refuses — usually a contract arg drift |
+
+### Why "repeated" needs its own threshold (#1164)
+
+The existing `rate(splitnaira_rpc_retry_max_attempts_reached_total[5m]) > 0`
+rule fires the same way whether the RPC endpoint had a single fluky failure
+or has been failing every call for the last hour — it can't tell the
+difference, because it only asks "did this happen at all". That's fine as a
+low-severity signal to watch, but it's not enough to page on, and pages
+based on it either get ignored (too noisy) or over-escalate a genuine
+one-off blip.
+
+The fix isn't a new metric — `splitnaira_rpc_retry_outcomes_total{operation,
+outcome, endpoint}` already carries everything needed, since every
+`exhausted` outcome is recorded per-operation. `sum by (operation)
+(increase(...[15m])) >= 3` asks "how many times has *this specific
+operation* exhausted its retry budget in the last 15 minutes", which is a
+materially different and stronger signal: 3+ within 15 minutes for one
+operation means that call path is currently, persistently broken, not just
+unlucky once. This is the threshold that should page on-call; the plain
+"any >0" rule stays as a lower-priority warning.
 
 ### Secret-hygiene guarantees
 
