@@ -82,6 +82,7 @@ Use npm scripts from the root to run commands across all projects:
 | `npm run test:contracts` | Run contract tests |
 | `npm run lint` | Lint all projects |
 | `npm run clean` | Clean build artifacts |
+| `npm run migration:dry-run` | Recreate a dedicated local database and verify all backend migrations |
 
 ### Docker Compose
 
@@ -142,6 +143,44 @@ docker compose --env-file .env.local up
 For production wallet and payment operations, configure `PAYMENTS_ADMIN_API_KEY` on the backend before exposing `/splits/admin/*`. If payout-impacting admin actions need to be frozen during an incident or rollback, set `PAYMENTS_ADMIN_WRITE_ENABLED=false` and redeploy or restart the backend with the updated environment.
 
 ### Individual Project Commands
+
+### Workspace-specific command reference
+
+Run these commands from the repository root. npm workspace commands use the
+workspace path (`-w frontend` or `-w backend`) so that they work without
+changing directories.
+
+| Workspace | Command | Purpose |
+|-----------|---------|---------|
+| Frontend | `npm run dev -w frontend` | Start the Next.js development server. |
+| Frontend | `npm run build -w frontend` | Create the production frontend build. |
+| Frontend | `npm run start -w frontend` | Serve the built frontend. |
+| Frontend | `npm run lint -w frontend` | Lint frontend source with zero warnings allowed. |
+| Frontend | `npm run test -w frontend` | Run frontend Vitest tests. |
+| Frontend | `npm run check:i18n -w frontend` | Verify every locale has the same message keys as English. |
+| Backend | `npm run dev -w backend` | Start the API in watch mode. |
+| Backend | `npm run build -w backend` | Type-check and build the API. |
+| Backend | `npm run start -w backend` | Start the built API. |
+| Backend | `npm run lint -w backend` | Lint backend source. |
+| Backend | `npm run format:check -w backend` | Check backend TypeScript formatting without writing files. |
+| Backend | `npm run test -w backend` | Run the backend Vitest suite. |
+| Backend | `npm run test:compat -w backend` | Run split-route compatibility tests only. |
+| Backend | `npm run test:integration -w backend` | Run the testnet integration suite. |
+| Backend | `npm run test:shutdown -w backend` | Run graceful-shutdown integration tests. |
+| Backend | `npm run deps:check -w backend` | Validate the backend dependency tree without optional packages. |
+| Backend | `npm run generate:openapi -w backend` | Regenerate the backend OpenAPI output. |
+| Backend | `npm run validate:deploy-config -w backend` | Validate backend deployment configuration. |
+| Backend | `npm run migration:run -w backend` | Apply pending migrations to the configured `DATABASE_URL`. |
+| Backend | `npm run migration:revert -w backend` | Revert the most recently applied migration on the configured `DATABASE_URL`. |
+| Backend | `npm run migration:dry-run -w backend` | Recreate and migrate a dedicated dry-run database; see the [migration runbook](./docs/runbooks/local-postgres-migration-dry-run.md). |
+| Contracts | `npm run generate:contract-interface` | Generate the contract interface JSON. |
+| Contracts | `npm run generate:contract-types` | Generate the contract interface and backend TypeScript types. |
+| Contracts | `cd contracts && cargo build` | Build the Soroban contract. |
+| Contracts | `cd contracts && cargo test` | Run contract tests. |
+
+`migration:run` and `migration:revert` act on the database configured in
+`backend/.env`; use them only with the intended environment. The dry-run
+command has a separate, destructive-but-isolated database target.
 
 #### Frontend
 
@@ -257,6 +296,8 @@ npm run analyze
 - [Split Lifecycle Architecture](./docs/split-lifecycle-architecture.md)
 - [Deployment Runbook](./docs/deployment.md)
 - [Operational Runbooks](./docs/runbooks/README.md) (contracts, CI/CD, ops, frontend)
+- [Local Postgres Migration Dry-Run](./docs/runbooks/local-postgres-migration-dry-run.md)
+- [Windows npm Dependency Installation](./docs/contributors/windows-setup-guide.md)
 - [Contributing Guide](./CONTRIBUTING.md)
 - [Contract Setup](./docs/SOROBAN_SETUP.md)
 - [Contract Release & Upgrade](./docs/contract-release-and-upgrade-runbook.md)
@@ -283,13 +324,8 @@ SplitNaira uses `v0.x.y` git tags for release traceability. A tag identifies the
 
 ## Local Migration Dry-Run
 
-To verify backend migrations from a clean database:
-
-```bash
-npm run migration:dry-run
-```
-
-This delegates to `backend/scripts/run-migration-dry-run.mjs`, which resets the target database and runs TypeORM migrations against a fresh schema.
+Use the [local Postgres migration dry-run runbook](./docs/runbooks/local-postgres-migration-dry-run.md)
+to configure an isolated database safely before running `npm run migration:dry-run`.
 
 ## Grant Readiness
 

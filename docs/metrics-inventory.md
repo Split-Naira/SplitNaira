@@ -17,7 +17,7 @@ Source: `backend/src/routes/metrics.ts`, `backend/src/services/metrics.ts`, `bac
 | `splitnaira_http_request_duration_seconds_sum` | gauge | `method`, `route` | Backend | Route P99 > 5s | Request Latency by Route |
 | `splitnaira_http_request_duration_seconds_count` | gauge | `method`, `route` | Backend | — | Request Latency (companion) |
 | `splitnaira_http_requests_inflight` | gauge | — | Backend | Sustained >50 | In-Flight Requests |
-| `splitnaira_validation_failures_total` | counter | — | Backend | Any >0 in 1h | Response Validation Failures |
+| `splitnaira_validation_failures_total` | counter | — | Backend | Warning: >=1% of requests and >=5 failures in 5m, sustained 5m. Critical: >=5% and >=10 failures in 5m, sustained 5m. | Response Validation Failures |
 | `splitnaira_info` | gauge | `version` | Platform | — | Service Version |
 
 ### Notes

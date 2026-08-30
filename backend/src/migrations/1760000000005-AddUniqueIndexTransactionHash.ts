@@ -4,7 +4,7 @@ export class AddUniqueIndexTransactionHash1760000000005 implements MigrationInte
   name = "AddUniqueIndexTransactionHash1760000000005";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`CREATE UNIQUE INDEX "IDX_transactions_tx_hash" ON "transactions" ("txHash")`);
+    await queryRunner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "IDX_transactions_tx_hash" ON "transactions" ("txHash")`);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

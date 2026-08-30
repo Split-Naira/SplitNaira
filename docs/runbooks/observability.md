@@ -122,6 +122,63 @@ Contract-level telemetry is also available through on-chain event topics emitted
 
 Scrape from internal network only; do not expose publicly without auth.
 
+### Response validation failure-rate alert (Issue #1163)
+
+**Owner:** Backend Engineering owns the response-validation middleware and
+triage. Platform Engineering owns the Prometheus scrape, alert rule, and
+notification route.
+
+`splitnaira_validation_failures_total` counts response schema mismatches from
+`withResponseValidation`, not client 4xx request-validation rejections. In
+strict mode, these mismatches become 500 responses; in non-strict mode they
+are logged and the original response is sent. A rise usually indicates API
+schema drift or a faulty handler deployment.
+
+Configure the following alerts against the backend's internal `/metrics`
+scrape. The minimum count prevents a tiny amount of low-volume traffic from
+creating a misleading percentage alert.
+
+```yaml
+groups:
+  - name: splitnaira-response-validation
+    rules:
+      - alert: SplitNairaElevatedResponseValidationFailureRate
+        expr: |
+          (
+            sum(increase(splitnaira_validation_failures_total[5m]))
+            /
+            clamp_min(sum(increase(splitnaira_http_requests_total[5m])), 1)
+          ) >= 0.01
+          and sum(increase(splitnaira_validation_failures_total[5m])) >= 5
+        for: 5m
+        labels:
+          severity: warning
+          owner: backend
+        annotations:
+          summary: Response validation failures exceed 1% of requests.
+      - alert: SplitNairaCriticalResponseValidationFailureRate
+        expr: |
+          (
+            sum(increase(splitnaira_validation_failures_total[5m]))
+            /
+            clamp_min(sum(increase(splitnaira_http_requests_total[5m])), 1)
+          ) >= 0.05
+          and sum(increase(splitnaira_validation_failures_total[5m])) >= 10
+        for: 5m
+        labels:
+          severity: critical
+          owner: backend
+        annotations:
+          summary: Response validation failures exceed 5% of requests.
+```
+
+For a warning, inspect the deployment diff, structured logs (using the
+request ID), and the affected route before rolling back. For a critical alert,
+page Backend on-call, consider pausing the rollout, and roll back the backend
+if the mismatch was introduced by the current deployment. Platform should
+confirm that the `/metrics` scrape itself remains healthy before treating an
+absence of this signal as recovery.
+
 ## Correlation IDs
 
 Every request receives `x-request-id` and `x-correlation-id` (same value). Clients may send either header; the value is echoed in responses and included in error payloads as `requestId`.
