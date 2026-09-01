@@ -22,7 +22,7 @@ jobs:
         run: docker build -t splitnaira-backend:scan ./backend
 
       - name: Scan backend image
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: splitnaira-backend:scan
           severity: HIGH,CRITICAL
@@ -32,7 +32,7 @@ jobs:
         run: docker build -t splitnaira-frontend:scan ./frontend
 
       - name: Scan frontend image
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: splitnaira-frontend:scan
           severity: HIGH,CRITICAL
