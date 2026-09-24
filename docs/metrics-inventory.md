@@ -17,6 +17,8 @@ Source: `backend/src/routes/metrics.ts`, `backend/src/services/metrics.ts`, `bac
 | `splitnaira_http_request_duration_seconds_sum` | gauge | `method`, `route` | Backend | Route P99 > 5s | Request Latency by Route |
 | `splitnaira_http_request_duration_seconds_count` | gauge | `method`, `route` | Backend | — | Request Latency (companion) |
 | `splitnaira_http_requests_inflight` | gauge | — | Backend | Sustained >50 | In-Flight Requests |
+| `splitnaira_http_request_payload_bytes` | histogram | `route_group`, `le` | Backend | P95 per group doubles week-over-week | Request Payload Size by Route Group |
+| `splitnaira_http_request_payload_rejected_total` | counter | `route_group` | Backend | >10 in 15m for one group | Oversized Payload Rejections (413) |
 | `splitnaira_validation_failures_total` | counter | — | Backend | Warning: >=1% of requests and >=5 failures in 5m, sustained 5m. Critical: >=5% and >=10 failures in 5m, sustained 5m. | Response Validation Failures |
 | `splitnaira_info` | gauge | `version` | Platform | — | Service Version |
 
@@ -24,6 +26,7 @@ Source: `backend/src/routes/metrics.ts`, `backend/src/services/metrics.ts`, `bac
 - Latency metrics use `process.hrtime.bigint()` via the `metricsMiddleware` in `index.ts`.
 - Validation failures are tracked in `middleware/validateResponse.ts`.
 - Inflight tracking increments on request entry and decrements on response finish or close.
+- Payload size telemetry (Issue #1090) comes from `payloadSizeMetricsMiddleware`, mounted before `express.json` so 413 rejections are counted. It records declared `Content-Length` only, and `route_group` is a fixed set (`other` for unmatched paths). See the [observability runbook](./runbooks/observability.md#request-payload-size-telemetry-issue-1090).
 
 ### Missing (TODO)
 - Per-status breakdown alert (5xx spike auto-alert).

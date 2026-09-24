@@ -79,6 +79,8 @@ Exposed series:
 - `splitnaira_http_request_duration_seconds_sum{method,route}` — cumulative request latency in seconds
 - `splitnaira_http_request_duration_seconds_count{method,route}` — number of latency samples per route
 - `splitnaira_http_requests_inflight` — current in-flight HTTP requests
+- `splitnaira_http_request_payload_bytes{route_group}` — histogram (`_bucket`/`_sum`/`_count`) of declared request body sizes by route group (Issue #1090); see [Request payload size telemetry](#request-payload-size-telemetry-issue-1090)
+- `splitnaira_http_request_payload_rejected_total{route_group}` — requests rejected with 413 because the body exceeded the 1 MB limit (Issue #1090)
 - `splitnaira_process_uptime_seconds`
 - `splitnaira_process_heap_bytes`
 - `splitnaira_info{version="..."}`
@@ -94,6 +96,41 @@ Exposed series:
 - `splitnaira_event_listener_ledger_lag` — ledgers between the newest ledger observed by the event listener and its last processed ledger
 - `splitnaira_event_listener_last_processed_ledger` — last ledger the listener processed
 - `splitnaira_event_listener_latest_observed_ledger` — latest ledger reported by the listener's Soroban RPC poll
+
+### Request payload size telemetry (Issue #1090)
+
+**Owner:** Backend on-call.
+
+`payloadSizeMetricsMiddleware` (`backend/src/middleware/metrics.ts`) records
+the `Content-Length` of every request that declares one, labelled by
+`route_group`. It is mounted **before** `express.json({ limit: "1mb" })`,
+because the body parser rejects oversized bodies with an error that skips
+later middleware. Mounted after it, the 413s would never be counted.
+
+Route groups: `splits`, `splits_admin`, `users`, `auth`, `transactions`,
+`events`, `ledger`, `docs`, `ops`, `health`, `metrics`, `root`, and `other`
+for anything unmatched, so random scanner paths can't inflate label
+cardinality. Buckets (bytes, cumulative `le`): 256, 1 KiB, 4 KiB, 16 KiB,
+64 KiB, 256 KiB, 1 MiB, `+Inf`.
+
+Not recorded: requests without `Content-Length` (bodiless GETs, chunked
+uploads). `express.json` still enforces the 1 MB limit on those.
+
+Useful queries:
+
+```promql
+# P95 declared body size per route group
+histogram_quantile(0.95, sum by (route_group, le) (rate(splitnaira_http_request_payload_bytes_bucket[15m])))
+
+# Share of payloads above 256 KiB (approaching the 1 MB limit)
+1 - sum by (route_group) (rate(splitnaira_http_request_payload_bytes_bucket{le="262144"}[15m]))
+  / sum by (route_group) (rate(splitnaira_http_request_payload_bytes_count[15m]))
+```
+
+| Signal | Suggested rule | Action |
+|---|---|---|
+| Oversized-body rejections | `sum by (route_group) (increase(splitnaira_http_request_payload_rejected_total[15m])) > 10` | For `splits`/`users`, check for a frontend regression sending bloated bodies; for `other`, treat it as probing traffic and review rate-limit and WAF logs. |
+| Payload size drift | P95 for a group doubles week-over-week | Correlate with recent deploys; large collaborator lists or metadata changes are the usual cause. |
 
 ### Background listener ledger lag
 

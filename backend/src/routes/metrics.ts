@@ -15,6 +15,9 @@ import {
   getRpcRetrySnapshots,
   getIdempotencyConflictsTotal,
   getIdempotencyReplaysTotal,
+  getRequestPayloadRejectedSnapshots,
+  getRequestPayloadSizeSnapshots,
+  PAYLOAD_SIZE_BUCKETS_BYTES,
 } from "../services/metrics.js";
 import { getLedgerLag } from "../services/EventListenerService.js";
 
@@ -74,6 +77,25 @@ function formatPrometheusMetrics(): string {
     lines.push(
       `splitnaira_http_request_duration_seconds_count{method=${quoteLabelValue(method)},route=${quoteLabelValue(route)}} ${count}`,
     );
+  }
+
+  // Issue #1090: request payload size telemetry by route group.
+  lines.push("# HELP splitnaira_http_request_payload_bytes Declared request body size (Content-Length) in bytes, by route group.");
+  lines.push("# TYPE splitnaira_http_request_payload_bytes histogram");
+  for (const { routeGroup, buckets, sumBytes, count } of getRequestPayloadSizeSnapshots()) {
+    const group = quoteLabelValue(routeGroup);
+    PAYLOAD_SIZE_BUCKETS_BYTES.forEach((upperBound, index) => {
+      lines.push(`splitnaira_http_request_payload_bytes_bucket{route_group=${group},le="${upperBound}"} ${buckets[index]}`);
+    });
+    lines.push(`splitnaira_http_request_payload_bytes_bucket{route_group=${group},le="+Inf"} ${count}`);
+    lines.push(`splitnaira_http_request_payload_bytes_sum{route_group=${group}} ${sumBytes}`);
+    lines.push(`splitnaira_http_request_payload_bytes_count{route_group=${group}} ${count}`);
+  }
+
+  lines.push("# HELP splitnaira_http_request_payload_rejected_total Requests rejected with 413 because the body exceeded the size limit, by route group.");
+  lines.push("# TYPE splitnaira_http_request_payload_rejected_total counter");
+  for (const { routeGroup, count } of getRequestPayloadRejectedSnapshots()) {
+    lines.push(`splitnaira_http_request_payload_rejected_total{route_group=${quoteLabelValue(routeGroup)}} ${count}`);
   }
 
   lines.push("# HELP splitnaira_http_requests_inflight Number of in-flight HTTP requests.");

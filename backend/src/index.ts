@@ -17,7 +17,7 @@ import { eventsRouter, closeAllSseConnections } from "./routes/events.js";
 import { ledgerRouter } from "./routes/ledger.js";
 import { errorHandler, notFoundHandler } from "./middleware/error.js";
 import { requestIdMiddleware } from "./middleware/request-id.js";
-import { metricsMiddleware } from "./middleware/metrics.js";
+import { metricsMiddleware, payloadSizeMetricsMiddleware } from "./middleware/metrics.js";
 import { requestTimeout } from "./middleware/timeout.js";
 import {
   globalLimiter,
@@ -74,6 +74,8 @@ app.use(
 // Authorization header (see middleware/auth-jwt.ts), never cookies, so the
 // browser never needs to send credentials cross-origin.
 app.use(cors({ origin: corsOrigin, credentials: false }));
+// Before express.json() so 413 rejections are still counted (Issue #1090).
+app.use(payloadSizeMetricsMiddleware);
 app.use(express.json({ limit: "1mb" }));
 app.use(requestIdMiddleware);
 app.use(metricsMiddleware);
