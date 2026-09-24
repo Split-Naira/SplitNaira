@@ -48,6 +48,7 @@ import {
 } from "../schemas/splits.js";
 
 import {
+  AdminAllowlistResponseSchema,
   AdminStatusResponseSchema,
   AdminIsTokenAllowedResponseSchema,
   AdminTokenCountResponseSchema,
@@ -107,6 +108,7 @@ export {
 } from "../schemas/splits.js";
 
 export {
+  AdminAllowlistResponseSchema,
   AdminStatusResponseSchema,
   AdminIsTokenAllowedResponseSchema,
   AdminTokenCountResponseSchema,
@@ -315,43 +317,46 @@ splitsRouter.post("/:projectId/lock", async (req: Request, res: Response, next: 
   }
 });
 
-splitsRouter.get("/admin/allowlist", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const requestId = res.locals.requestId;
-    const parsed = allowlistQuerySchema.safeParse(req.query);
-    if (!parsed.success) {
-      return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
-    }
-
-    const { start, limit } = parsed.data;
-
+splitsRouter.get(
+  "/admin/allowlist",
+  withResponseValidation(AdminAllowlistResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const [adminRetval, countRetval, tokensRetval] = await Promise.all([
-        simulateReadOnlyContractCall("get_admin"),
-        simulateReadOnlyContractCall("get_allowed_token_count"),
-        simulateReadOnlyContractCall("get_allowed_tokens", [
-          xdr.ScVal.scvU32(start),
-          xdr.ScVal.scvU32(limit)
-        ])
-      ]);
-
-      const adminValue = adminRetval ? scValToNative(adminRetval) : null;
-      const countValue = countRetval ? scValToNative(countRetval) : 0;
-      const tokensValue = tokensRetval ? scValToNative(tokensRetval) : [];
-
-      return res.status(200).json(
-        serializeBigInts({ admin: adminValue, count: countValue, tokens: tokensValue })
-      );
-    } catch (error) {
-      if (error instanceof RequestValidationError) {
-        return sendValidationError(res, requestId, error.message);
+      const requestId = res.locals.requestId;
+      const parsed = allowlistQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
       }
-      throw error;
+
+      const { start, limit } = parsed.data;
+
+      try {
+        const [adminRetval, countRetval, tokensRetval] = await Promise.all([
+          simulateReadOnlyContractCall("get_admin"),
+          simulateReadOnlyContractCall("get_allowed_token_count"),
+          simulateReadOnlyContractCall("get_allowed_tokens", [
+            xdr.ScVal.scvU32(start),
+            xdr.ScVal.scvU32(limit)
+          ])
+        ]);
+
+        const adminValue = adminRetval ? scValToNative(adminRetval) : null;
+        const countValue = countRetval ? scValToNative(countRetval) : 0;
+        const tokensValue = tokensRetval ? scValToNative(tokensRetval) : [];
+
+        return res.status(200).json(
+          serializeBigInts({ admin: adminValue, count: countValue, tokens: tokensValue })
+        );
+      } catch (error) {
+        if (error instanceof RequestValidationError) {
+          return sendValidationError(res, requestId, error.message);
+        }
+        throw error;
+      }
+    } catch (error) {
+      return next(error);
     }
-  } catch (error) {
-    return next(error);
-  }
-});
+  })
+);
 
 splitsRouter.post("/:projectId/deposit", async (req, res, next) => {
   try {

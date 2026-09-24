@@ -22,6 +22,7 @@ The following privileged routes are wrapped with strict response validation:
 
 | Route | HTTP Method | Response Schema | Purpose |
 |---|---|---|---|
+| `/splits/admin/allowlist` | `GET` | `AdminAllowlistResponseSchema` | Returns the contract admin, allowlisted token count, and a page of allowlisted tokens (validated since #1088). |
 | `/splits/admin/status` | `GET` | `AdminStatusResponseSchema` | Returns current contract admin address and global pause state. |
 | `/splits/admin/is-token-allowed` | `GET` | `AdminIsTokenAllowedResponseSchema` | Verifies whether a token address is allowed. |
 | `/splits/admin/token-count` | `GET` | `AdminTokenCountResponseSchema` | Returns total number of allowlisted tokens. |
@@ -108,6 +109,36 @@ cd backend && npm test
 # Run specific admin response validation suite
 cd backend && npx vitest run src/__tests__/admin-response-validation.test.ts
 
+# Run the admin read endpoint response-contract suite (Issue #1088)
+cd backend && npx vitest run src/__tests__/admin-read-contract.test.ts
+
 # Check for OpenAPI drift
 npm run drift:openapi
 ```
+
+### Admin read response contracts (Issue #1088)
+
+`backend/src/__tests__/admin-read-contract.test.ts` pins the response
+contract of every `GET /splits/admin/*` route (`allowlist`, `status`,
+`is-token-allowed`, `token-count`, `unallocated`, `cache-stats`). The routes
+are listed in a single `ADMIN_READ_CONTRACTS` table. For each route the suite
+checks:
+
+| Check | Fails when |
+|---|---|
+| Exact body shape | A 200 body has a field the Zod schema doesn't declare (`schema.strict()`), or is missing a required one |
+| OpenAPI parity | The OpenAPI 200 schema from `generateOpenApi()` differs from the runtime Zod schema in field names or required fields |
+| Strict drift → 500 | In strict mode, a contract value that breaks the schema doesn't return `500 internal_error` and doesn't increment `splitnaira_validation_failures_total` (drift cases for `allowlist` and `token-count`) |
+| Lenient drift | In lenient mode, the drifted body isn't forwarded or isn't counted |
+| Error envelope | RPC failures and missing query params don't return `{ error, message, requestId }`, or are counted as schema violations |
+
+Contract simulations are mocked **by contract method name**, not call order,
+so the suite doesn't depend on the order of `Promise.all` calls.
+
+When you add an admin read route, wrap it in `withResponseValidation`, add
+its schema to `admin.schemas.ts`, document it in `openapi.ts`, and add a row
+to `ADMIN_READ_CONTRACTS`. The parity check fails until all three agree.
+
+`withResponseValidation` now accepts handlers that `return res.json(...)`
+(`ValidatedRouteHandler`). Before, every wrapped admin route failed
+`tsc -p tsconfig.build.json` with TS2345.
