@@ -27,7 +27,13 @@ This fix addresses GitHub Issue #292 (Security: Cross-Site Scripting (XSS) in Sp
 - Frontend security tests (`frontend/src/lib/security.test.ts`) for escaping validation
 - Security documentation (`docs/SECURITY_XSS_FIXES.md`) with implementation details and best practices
 
+### Fixed
+- Backend: SSE routes return `503 shutting_down` for new streams once shutdown starts, so late subscribers can no longer hold the process open until the force-exit timer (#1094).
+- Backend: `withTransaction()` always releases its connection (even when `startTransaction()` fails), keeps the caller's error when rollback fails, and no longer throws on release failure after a commit (#1091).
+- Docs: the idempotency retry guide now shows the actual `200` responses and the `IDEMPOTENCY_KEY_CONFLICT` 409 envelope (#1093).
+
 ### Changed
+- Backend: added test coverage for SSE shutdown draining (#1094), idempotency 409 payload mismatches (#1093), token allowlist read-cache behavior across allow/disallow mutations (#1095), and nested `withTransaction()` failures (#1091).
 - Documentation now references secret management and release tagging.
 - Backend input validation enhanced with character whitelist restrictions
 - All components updated to use `sanitizeText()` for user-provided content rendering

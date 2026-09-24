@@ -315,6 +315,14 @@ splitsRouter.post("/:projectId/lock", async (req: Request, res: Response, next: 
   }
 });
 
+/**
+ * Allowlist caching contract (Issue #1095): the allowlist reads
+ * (`/admin/allowlist`, `/admin/is-token-allowed`, `/admin/token-count`)
+ * intentionally bypass the read cache. `allow-token`/`disallow-token` only
+ * build unsigned XDR, and the admin wallet submits it, so the backend can't
+ * tell when the allowlist changes. If these reads are ever cached, add
+ * invalidation too; `allowlist-cache-invalidation.test.ts` checks this.
+ */
 splitsRouter.get("/admin/allowlist", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const requestId = res.locals.requestId;
