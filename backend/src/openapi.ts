@@ -117,6 +117,7 @@ function standardErrorResponses(options: {
   badRequest?: boolean;
   badRequestExample?: Record<string, unknown>;
   unauthorized?: boolean;
+  unauthorizedExample?: Record<string, unknown>;
   forbidden?: boolean;
   notFound?: boolean;
   conflict?: boolean;
@@ -133,7 +134,7 @@ function standardErrorResponses(options: {
     responses[400] = apiErrorResponse("Validation error", options.badRequestExample);
   }
   if (options.unauthorized) {
-    responses[401] = apiErrorResponse("Authentication required", {
+    responses[401] = apiErrorResponse("Authentication required", options.unauthorizedExample ?? {
       error: "UNAUTHORIZED",
       message: "Missing or invalid bearer token / admin API key.",
       requestId: EXAMPLE_REQUEST_ID,
@@ -360,11 +361,20 @@ registry.registerPath({
   },
 });
 
+// Issue #1092: owner-gated mutations reject callers that are not the on-chain owner.
+const NOT_PROJECT_OWNER_EXAMPLE = {
+  error: "unauthorized",
+  code: "UNAUTHORIZED",
+  message: "Caller is not the project owner",
+  requestId: EXAMPLE_REQUEST_ID,
+  details: { remediation: { message: "Only the project owner can perform this action.", action: "Switch Wallet" } },
+};
+
 registry.registerPath({
   method: "post",
   path: "/splits/{projectId}/lock",
   summary: "Lock a project permanently",
-  description: "Builds an unsigned XDR to permanently lock a project, preventing further metadata or collaborator changes.",
+  description: "Builds an unsigned XDR to permanently lock a project, preventing further metadata or collaborator changes. Rejected with 401 UNAUTHORIZED when `owner` is not the on-chain project owner.",
   tags: ["Splits"],
   request: {
     params: z.object({ projectId: projectIdParamSchema }),
@@ -385,7 +395,7 @@ registry.registerPath({
         },
       },
     },
-    ...standardErrorResponses({ badRequest: true, notFound: true, badGateway: true, serverError: true }),
+    ...standardErrorResponses({ badRequest: true, unauthorized: true, unauthorizedExample: NOT_PROJECT_OWNER_EXAMPLE, notFound: true, badGateway: true, serverError: true }),
   },
 });
 
@@ -438,7 +448,7 @@ registry.registerPath({
   method: "patch",
   path: "/splits/{projectId}/metadata",
   summary: "Update project metadata (title/category)",
-  description: "Builds an unsigned XDR to update a project's title and project type. Text fields are server-side sanitized.",
+  description: "Builds an unsigned XDR to update a project's title and project type. Text fields are server-side sanitized. Rejected with 401 UNAUTHORIZED when `owner` is not the on-chain project owner.",
   tags: ["Splits"],
   request: {
     params: z.object({ projectId: projectIdParamSchema }),
@@ -459,7 +469,7 @@ registry.registerPath({
         },
       },
     },
-    ...standardErrorResponses({ badRequest: true, notFound: true, badGateway: true, serverError: true }),
+    ...standardErrorResponses({ badRequest: true, unauthorized: true, unauthorizedExample: NOT_PROJECT_OWNER_EXAMPLE, notFound: true, badGateway: true, serverError: true }),
   },
 });
 
@@ -471,7 +481,7 @@ registry.registerPath({
     "Builds an unsigned XDR to replace the collaborator list and revenue share allocations. " +
     "Fails validation if any address repeats or shares don't sum to 10,000 basis points; " +
     "the frontend CreateSplitWizard performs the same duplicate/casing checks client-side, " +
-    "but this endpoint is the source of truth.",
+    "but this endpoint is the source of truth. Rejected with 401 UNAUTHORIZED when `owner` is not the on-chain project owner.",
   tags: ["Splits"],
   request: {
     params: z.object({ projectId: exampleProjectIdParam }),
@@ -502,6 +512,8 @@ registry.registerPath({
     },
     ...standardErrorResponses({
       badRequest: true,
+      unauthorized: true,
+      unauthorizedExample: NOT_PROJECT_OWNER_EXAMPLE,
       notFound: true,
       badGateway: true,
       serverError: true,

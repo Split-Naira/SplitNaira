@@ -16,8 +16,11 @@ import {
   RequestValidationError,
   executeWithRetry,
   getCachedOrFetch,
+  invalidateCache,
   type UnsignedTxResponse
 } from "./stellar.js";
+
+import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
 
 import {
   createSplitSchema
@@ -287,7 +290,55 @@ export async function fetchProjectById(projectId: string) {
   });
 }
 
+/**
+ * Issue #1092: ownership validation before every owner-gated split mutation.
+ *
+ * `lock_project`, `update_collaborators`, and `update_metadata` all require
+ * the on-chain project owner's signature, and the contract rejects anyone
+ * else with `SplitError::Unauthorized` (#3). Without this check the API
+ * happily built an unsigned XDR for any `owner` in the request body, so a
+ * wrong wallet only found out after signing and submitting. We now compare
+ * the claimed owner against on-chain state before building the transaction.
+ *
+ * The contract remains the source of truth; this is a fail-fast guard.
+ * Ownership can be transferred on-chain, so a mismatch against the read
+ * cache is re-checked against a fresh read before we reject.
+ *
+ * @throws AppError NOT_FOUND (404) when the project does not exist.
+ * @throws AppError AUTH/UNAUTHORIZED (401) when `owner` is not the project owner.
+ */
+export async function assertProjectOwner(projectId: string, owner: string): Promise<void> {
+  const readOwner = async () => {
+    const project = await fetchProjectById(projectId);
+    if (!project) {
+      throw new AppError(
+        ErrorType.CONTRACT,
+        ErrorCode.NOT_FOUND,
+        `Split project ${projectId} not found.`,
+        { message: "The requested project does not exist on the network.", action: "Verify ID" }
+      );
+    }
+    const onChainOwner = (project as Record<string, unknown>).owner;
+    return typeof onChainOwner === "string" ? onChainOwner : String(onChainOwner ?? "");
+  };
+
+  if ((await readOwner()) === owner) return;
+
+  // Cached state may predate an ownership transfer — re-read once.
+  invalidateCache(`project:${projectId}`);
+  if ((await readOwner()) === owner) return;
+
+  throw new AppError(
+    ErrorType.AUTH,
+    ErrorCode.UNAUTHORIZED,
+    "Caller is not the project owner",
+    { message: "Only the project owner can perform this action.", action: "Switch Wallet" }
+  );
+}
+
 export async function buildLockProjectUnsignedXdr(input: LockProjectRequest) {
+  await assertProjectOwner(input.projectId, input.owner);
+
   const config = loadStellarConfig();
   const server = getStellarRpcServer();
 
@@ -385,6 +436,8 @@ export async function buildDepositUnsignedXdr(input: DepositRequest) {
 export async function buildUpdateCollaboratorsUnsignedXdr(
   input: UpdateCollaboratorsRequest
 ) {
+  await assertProjectOwner(input.projectId, input.owner);
+
   const config = loadStellarConfig();
   const server = getStellarRpcServer();
 
@@ -433,6 +486,8 @@ export async function buildUpdateMetadataUnsignedXdr(input: {
   title: string;
   projectType: string;
 }) {
+  await assertProjectOwner(input.projectId, input.owner);
+
   const config = loadStellarConfig();
   const server = new rpc.Server(config.sorobanRpcUrl, { allowHttp: true });
 

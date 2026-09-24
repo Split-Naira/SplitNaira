@@ -833,7 +833,8 @@ paths:
     post:
       summary: Lock a project permanently
       description: Builds an unsigned XDR to permanently lock a project, preventing
-        further metadata or collaborator changes.
+        further metadata or collaborator changes. Rejected with 401 UNAUTHORIZED
+        when `owner` is not the on-chain project owner.
       tags:
         - Splits
       parameters:
@@ -870,6 +871,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example: &a1
+                error: unauthorized
+                code: UNAUTHORIZED
+                message: Caller is not the project owner
+                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
+                details:
+                  remediation:
+                    message: Only the project owner can perform this action.
+                    action: Switch Wallet
         "404":
           description: Resource not found
           content:
@@ -1006,7 +1022,8 @@ paths:
     patch:
       summary: Update project metadata (title/category)
       description: Builds an unsigned XDR to update a project's title and project
-        type. Text fields are server-side sanitized.
+        type. Text fields are server-side sanitized. Rejected with 401
+        UNAUTHORIZED when `owner` is not the on-chain project owner.
       tags:
         - Splits
       parameters:
@@ -1049,6 +1066,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example: *a1
         "404":
           description: Resource not found
           content:
@@ -1086,7 +1110,8 @@ paths:
         share allocations. Fails validation if any address repeats or shares
         don't sum to 10,000 basis points; the frontend CreateSplitWizard
         performs the same duplicate/casing checks client-side, but this endpoint
-        is the source of truth.
+        is the source of truth. Rejected with 401 UNAUTHORIZED when `owner` is
+        not the on-chain project owner.
       tags:
         - Splits
       parameters:
@@ -1172,6 +1197,13 @@ paths:
                 details:
                   path:
                     - collaborators
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example: *a1
         "404":
           description: Resource not found
           content:
