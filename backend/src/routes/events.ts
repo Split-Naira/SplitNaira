@@ -4,6 +4,7 @@ import { getEventBus, TRANSACTION_CONFIRMED } from "../services/EventBus.js";
 import { logger } from "../services/logger.js";
 import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
 import { incrementSseConnections, recordSseDisconnect } from "../services/metrics.js";
+import { isShuttingDown } from "./health.js";
 
 // Heartbeat cadence for the path-based transaction stream. A comment line every
 // 15s keeps intermediary proxies from closing an otherwise-idle connection.
@@ -50,8 +51,14 @@ const activeSubscriptions = new Map<string, Set<EventSubscription>>();
 // server.close() to hang until each client disconnects on its own.
 const activeSseResponses = new Set<Response>();
 
-/** Ends every open SSE connection. Called from the SIGTERM/SIGINT handler. */
-export function closeAllSseConnections(): void {
+/**
+ * Ends every open SSE connection. Called from the SIGTERM/SIGINT handler.
+ * Returns the number of connections it attempted to end. Each response's
+ * own close handler removes its bus listener, clears its heartbeat, and
+ * records the disconnect metric.
+ */
+export function closeAllSseConnections(): number {
+  const count = activeSseResponses.size;
   for (const res of activeSseResponses) {
     try {
       res.end();
@@ -59,6 +66,32 @@ export function closeAllSseConnections(): void {
       logger.warn("Failed to close SSE connection during shutdown", { error });
     }
   }
+  if (count > 0) {
+    logger.info("Closed SSE connections for shutdown", { count });
+  }
+  return count;
+}
+
+/** Number of SSE responses currently held open (both stream routes). */
+export function getActiveSseConnectionCount(): number {
+  return activeSseResponses.size;
+}
+
+/**
+ * Issue #1094: once shutdown has started, refuse new streams. Shutdown ends
+ * existing streams before awaiting DB close and server.close(), so a stream
+ * opened in that window would otherwise stay open until the force-exit timer
+ * fires and the process exits non-zero.
+ */
+function rejectIfShuttingDown(res: Response): boolean {
+  if (!isShuttingDown()) return false;
+  res.status(503).json({
+    error: "shutting_down",
+    message: "Service is shutting down and is not accepting new event streams.",
+    requestId: res.locals.requestId,
+    details: {},
+  });
+  return true;
 }
 
 function getSubscriptionCount(txHash: string) {
@@ -81,6 +114,8 @@ function removeSubscription(subscription: EventSubscription) {
 }
 
 async function handleEventStream(req: Request, res: Response) {
+  if (rejectIfShuttingDown(res)) return;
+
   const txHash = String(req.query.txHash ?? "").trim();
   const requestId = res.locals.requestId as string | undefined;
 
@@ -161,6 +196,8 @@ async function handleEventStream(req: Request, res: Response) {
  *  - clients should reconnect and continue polling status until terminal state.
  */
 function handleTransactionStream(req: Request, res: Response) {
+  if (rejectIfShuttingDown(res)) return;
+
   const txHash = String(req.params.txHash ?? "").trim();
   const requestId = res.locals.requestId as string | undefined;
 

@@ -101,13 +101,45 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function rollbackPreservingError(queryRunner: QueryRunner, originalError: unknown): Promise<void> {
+  try {
+    await queryRunner.rollbackTransaction();
+  } catch (rollbackError) {
+    // Surface the caller's error, not the rollback failure; Postgres aborts
+    // the transaction on its own once the connection is released or dropped.
+    logger.error("Transaction rollback failed", { rollbackError, originalError });
+  }
+}
+
+async function releaseSafely(queryRunner: QueryRunner): Promise<void> {
+  try {
+    await queryRunner.release();
+  } catch (releaseError) {
+    // Never let a release failure replace a committed result or the
+    // callback's error: callers would otherwise retry a write that landed.
+    logger.error("Failed to release query runner", { error: releaseError });
+  }
+}
+
 /**
  * Execute a callback within a database transaction.
  * Automatically rolls back on error and retries up to 3 times on PostgreSQL
  * deadlock errors (error code 40P01).
+ *
+ * Failure handling (Issue #1091):
+ *  - The query runner is always released, including when `connect()` or
+ *    `startTransaction()` fails.
+ *  - If rollback itself fails, the callback's original error is still the
+ *    one that is thrown (the rollback failure is logged).
+ *  - A release failure is logged, never thrown.
+ *
+ * Nesting: calling `withTransaction` inside another `withTransaction`
+ * callback does NOT create a savepoint. The inner call checks out its own
+ * pooled connection and commits or rolls back independently, so an inner
+ * commit survives a later outer rollback, and each nesting level holds one
+ * extra connection. To make nested work atomic, pass the outer `queryRunner`
+ * down instead of opening a new transaction.
  */
-
-
 export async function withTransaction<T>(
   callback: (queryRunner: QueryRunner) => Promise<T>
 ): Promise<T> {
@@ -116,15 +148,20 @@ export async function withTransaction<T>(
 
   while (true) {
     const queryRunner = dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+    } catch (error) {
+      await releaseSafely(queryRunner);
+      throw error;
+    }
 
     try {
       const result = await callback(queryRunner);
       await queryRunner.commitTransaction();
       return result;
     } catch (error) {
-      await queryRunner.rollbackTransaction();
+      await rollbackPreservingError(queryRunner, error);
 
       if (isDeadlockError(error) && attempt < DEADLOCK_MAX_RETRIES - 1) {
         attempt++;
@@ -134,7 +171,7 @@ export async function withTransaction<T>(
         throw error;
       }
     } finally {
-      await queryRunner.release();
+      await releaseSafely(queryRunner);
     }
   }
 }
