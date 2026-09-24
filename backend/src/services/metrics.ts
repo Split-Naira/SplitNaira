@@ -168,6 +168,7 @@ export function resetRequestMetrics(): void {
   rpcRetryAttemptsTotal = 0;
   rpcRetryDurationMsTotal = 0;
   rpcRetryMaxAttemptsReachedTotal = 0;
+  rpcRetryBudgetByKey.clear();
 
   idempotencyConflictsTotal = 0;
   idempotencyReplaysTotal = 0;
@@ -339,6 +340,58 @@ export function getRpcRetryMaxAttemptsReachedTotal(): number {
 
 export function getRpcRetryDurationMsTotal(): number {
   return rpcRetryDurationMsTotal;
+}
+
+/**
+ * Issue #1089: bounded retry budget accounting per `(operation, endpoint)`.
+ *
+ * Every `executeWithRetry` sequence has a retry budget (`maxRetries`, clamped
+ * to `RPC_RETRY_BUDGET_MAX_RETRIES`). For each finished sequence we record:
+ *   - `sequences`       : number of retry sequences (calls to executeWithRetry)
+ *   - `retriesAllowed`  : sum of the budgets those sequences were given
+ *   - `retriesUsed`     : sum of retries actually consumed (attempts - 1)
+ *   - `exhausted`       : sequences that spent the whole budget without
+ *                         success, whether the last attempt errored or timed out
+ *
+ * `retriesUsed / retriesAllowed` is the budget burn ratio: near 0 is healthy,
+ * a rising ratio means the RPC endpoint is degrading before calls start failing.
+ */
+interface RpcRetryBudgetMetrics {
+  sequences: number;
+  retriesAllowed: number;
+  retriesUsed: number;
+  exhausted: number;
+}
+
+const rpcRetryBudgetByKey = new Map<string, RpcRetryBudgetMetrics>();
+
+export function recordRpcRetryBudget(
+  operation: string,
+  endpoint: string,
+  retriesAllowed: number,
+  retriesUsed: number,
+  exhausted: boolean,
+): void {
+  const key = `${operation}||${endpoint || "rpc"}`;
+  const current = rpcRetryBudgetByKey.get(key) ?? {
+    sequences: 0,
+    retriesAllowed: 0,
+    retriesUsed: 0,
+    exhausted: 0,
+  };
+  rpcRetryBudgetByKey.set(key, {
+    sequences: current.sequences + 1,
+    retriesAllowed: current.retriesAllowed + retriesAllowed,
+    retriesUsed: current.retriesUsed + retriesUsed,
+    exhausted: current.exhausted + (exhausted ? 1 : 0),
+  });
+}
+
+export function getRpcRetryBudgetSnapshots(): Array<{ operation: string; endpoint: string } & RpcRetryBudgetMetrics> {
+  return Array.from(rpcRetryBudgetByKey.entries()).map(([key, metrics]) => {
+    const [operation, endpoint] = key.split("||");
+    return { operation, endpoint, ...metrics };
+  });
 }
 
 let projectsCreatedTotal = 0;

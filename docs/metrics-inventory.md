@@ -86,6 +86,11 @@ Health endpoint runs `checkSorobanReachability()` and `checkContractHealth()`.
 | `splitnaira_rpc_retry_max_attempts_reached_total` | counter | — | Backend | Any >0 in 5m (warn); repeated (see #1164 below) escalates | ✅ Live (Issue #836) |
 | `splitnaira_rpc_retry_duration_ms_total` | counter | — | Backend | Increase > 60s/15m | ✅ Live (Issue #836) |
 | `splitnaira_rpc_retry_outcomes_total` | counter | `operation`, `outcome`, `endpoint` | Backend | Timeouts / exhausted >0 | ✅ Live (Issue #836) |
+| `splitnaira_rpc_retry_budget_max_retries` | gauge | — | Backend | — (config, currently 5) | ✅ Live (Issue #1089) |
+| `splitnaira_rpc_retry_budget_sequences_total` | counter | `operation`, `endpoint` | Backend | — | ✅ Live (Issue #1089) |
+| `splitnaira_rpc_retry_budget_allowed_total` | counter | `operation`, `endpoint` | Backend | — (burn ratio denominator) | ✅ Live (Issue #1089) |
+| `splitnaira_rpc_retry_budget_used_total` | counter | `operation`, `endpoint` | Backend | used/allowed > 0.25 for 15m | ✅ Live (Issue #1089) |
+| `splitnaira_rpc_retry_budget_exhausted_total` | counter | `operation`, `endpoint` | Backend | >=3 per operation in 15m (page) | ✅ Live (Issue #1089) |
 | `rpc_request_duration_seconds` | histogram | `endpoint` | Backend | P99 > 5s | ❌ Missing |
 | `rpc_request_errors_total` | counter | `endpoint`, `code` | Backend | Any >0 | ✅ Partial (Issue #836 covers retry outcomes) |
 | `rpc_simulation_latency_seconds` | histogram | — | Backend | P99 > 3s | ❌ Missing |
@@ -105,6 +110,14 @@ Health endpoint runs `checkSorobanReachability()` and `checkContractHealth()`.
   `exhausted`.
 - Outcomes: `success`, `validation_error`, `timeout`, `exhausted`,
   `transient_failure` (reserved for future behaviour changes).
+
+### Issue #1089: Bounded retry budget
+- `maxRetries` is clamped to `RPC_RETRY_BUDGET_MAX_RETRIES` (5) in
+  `services/rpc-retry-budget.ts`; clamping logs `RPC retry budget clamped`.
+- Each finished sequence records its granted budget, the retries it used, and
+  whether it exhausted the budget (error *or* timeout on the last attempt).
+- All split route/service call sites now pass an `operation` label, so these
+  series (and the #836 ones) no longer collapse into `operation="unknown"`.
 
 ### TODO (follow-up)
 - Export RPC call timings from `lib/soroban-transaction.ts` and `services/contract.ts`.

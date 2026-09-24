@@ -1,8 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { executeWithRetry, RpcTimeoutError, RpcError, RequestValidationError } from "../services/stellar.js";
+import {
+  executeWithRetry,
+  boundRetryBudget,
+  RPC_RETRY_BUDGET_MAX_RETRIES,
+  RpcTimeoutError,
+  RpcError,
+  RequestValidationError,
+} from "../services/stellar.js";
 import { logger } from "../services/logger.js";
 import {
   getRpcRetryAttemptsTotal,
+  getRpcRetryBudgetSnapshots,
   getRpcRetryMaxAttemptsReachedTotal,
   getRpcRetrySnapshots,
   resetRequestMetrics,
@@ -280,5 +288,105 @@ describe("RPC Retry and Timeout Policy", () => {
         expect(serialized).not.toContain(hexBlob);
       }
     });
+  });
+});
+
+describe("Issue #1089: bounded retry budget", () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    resetRequestMetrics();
+    warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => logger);
+    errorSpy = vi.spyOn(logger, "error").mockImplementation(() => logger);
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  function budgetFor(operation: string) {
+    return getRpcRetryBudgetSnapshots().find((s) => s.operation === operation && s.endpoint === "rpc");
+  }
+
+  it("clamps requested budgets into [0, RPC_RETRY_BUDGET_MAX_RETRIES]", () => {
+    expect(boundRetryBudget(2)).toBe(2);
+    expect(boundRetryBudget(RPC_RETRY_BUDGET_MAX_RETRIES)).toBe(RPC_RETRY_BUDGET_MAX_RETRIES);
+    expect(boundRetryBudget(50)).toBe(RPC_RETRY_BUDGET_MAX_RETRIES);
+    expect(boundRetryBudget(-1)).toBe(0);
+    expect(boundRetryBudget(2.9)).toBe(2);
+    expect(boundRetryBudget(undefined)).toBe(3);
+    expect(boundRetryBudget(Number.NaN)).toBe(3);
+    expect(boundRetryBudget(Number.POSITIVE_INFINITY)).toBe(3);
+  });
+
+  it("never attempts more than the ceiling even when a caller asks for more", async () => {
+    const operation = vi.fn().mockRejectedValue(new Error("down"));
+
+    await expect(
+      executeWithRetry(operation, { maxRetries: 100, initialDelayMs: 1, operation: "getAccount" }),
+    ).rejects.toThrow("down");
+
+    expect(operation).toHaveBeenCalledTimes(RPC_RETRY_BUDGET_MAX_RETRIES + 1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      "RPC retry budget clamped",
+      expect.objectContaining({ operation: "getAccount", requestedMaxRetries: 100, appliedMaxRetries: RPC_RETRY_BUDGET_MAX_RETRIES }),
+    );
+    expect(budgetFor("getAccount")).toMatchObject({
+      sequences: 1,
+      retriesAllowed: RPC_RETRY_BUDGET_MAX_RETRIES,
+      retriesUsed: RPC_RETRY_BUDGET_MAX_RETRIES,
+      exhausted: 1,
+    });
+  });
+
+  it("falls back to the default budget when maxRetries is explicitly undefined", async () => {
+    const operation = vi.fn().mockResolvedValue("ok");
+
+    await executeWithRetry(operation, { maxRetries: undefined, operation: "getLatestLedger" });
+
+    // Previously `{ ...defaults, maxRetries: undefined }` skipped the loop
+    // entirely and threw without ever calling the operation.
+    expect(operation).toHaveBeenCalledTimes(1);
+    expect(budgetFor("getLatestLedger")).toMatchObject({ sequences: 1, retriesAllowed: 3, retriesUsed: 0, exhausted: 0 });
+  });
+
+  it("records budget used on success without marking it exhausted", async () => {
+    const operation = vi.fn()
+      .mockRejectedValueOnce(new Error("transient"))
+      .mockResolvedValue("ok");
+
+    await executeWithRetry(operation, { maxRetries: 3, initialDelayMs: 1, operation: "simulateTransaction" });
+    await executeWithRetry(vi.fn().mockResolvedValue("ok"), { maxRetries: 3, operation: "simulateTransaction" });
+
+    expect(budgetFor("simulateTransaction")).toEqual({
+      operation: "simulateTransaction",
+      endpoint: "rpc",
+      sequences: 2,
+      retriesAllowed: 6,
+      retriesUsed: 1,
+      exhausted: 0,
+    });
+  });
+
+  it("counts a validation error as a finished sequence that used no retries", async () => {
+    const operation = vi.fn().mockRejectedValue(new RequestValidationError("bad"));
+
+    await expect(
+      executeWithRetry(operation, { maxRetries: 2, initialDelayMs: 1, operation: "prepareTransaction" }),
+    ).rejects.toThrow(RequestValidationError);
+
+    expect(budgetFor("prepareTransaction")).toMatchObject({ sequences: 1, retriesAllowed: 2, retriesUsed: 0, exhausted: 0 });
+  });
+
+  it("marks the budget exhausted when the final attempt times out", async () => {
+    const operation = vi.fn(() => new Promise((resolve) => setTimeout(() => resolve("late"), 200)));
+
+    await expect(
+      executeWithRetry(operation, { maxRetries: 1, initialDelayMs: 1, timeoutMs: 20, operation: "getEvents" }),
+    ).rejects.toBeInstanceOf(RpcTimeoutError);
+
+    expect(budgetFor("getEvents")).toMatchObject({ sequences: 1, retriesAllowed: 1, retriesUsed: 1, exhausted: 1 });
   });
 });

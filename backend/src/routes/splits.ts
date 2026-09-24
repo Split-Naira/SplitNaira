@@ -569,7 +569,7 @@ splitsRouter.get("/:projectId/claimable/:address", async (req: Request, res: Res
 
     let sourceAccount;
     try {
-      sourceAccount = await executeWithRetry(() => server.getAccount(config.simulatorAccount));
+      sourceAccount = await executeWithRetry(() => server.getAccount(config.simulatorAccount), { operation: "getAccount" });
     } catch {
       return sendRpcError(res, requestId, "RPC operation failed.");
     }
@@ -591,7 +591,7 @@ splitsRouter.get("/:projectId/claimable/:address", async (req: Request, res: Res
         .setTimeout(300)
         .build();
 
-      simulated = await executeWithRetry(() => server.simulateTransaction(tx));
+      simulated = await executeWithRetry(() => server.simulateTransaction(tx), { operation: "simulateTransaction" });
     } catch (error) {
       throw translateSorobanError(error);
     }
@@ -772,7 +772,7 @@ splitsRouter.get("/:projectId/history", async (req: Request, res: Response, next
         }
       ],
       limit
-    }));
+    }), { operation: "getEvents" });
 
     const paymentEventResponse = await executeWithRetry(() => server.getEvents({
       cursor,
@@ -784,7 +784,7 @@ splitsRouter.get("/:projectId/history", async (req: Request, res: Response, next
         }
       ],
       limit
-    }));
+    }), { operation: "getEvents" });
 
     const events = [
       ...roundEventResponse.events.map((e) => {

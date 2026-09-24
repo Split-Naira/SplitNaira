@@ -13,6 +13,7 @@ import {
   getRpcRetryDurationMsTotal,
   getRpcRetryMaxAttemptsReachedTotal,
   getRpcRetrySnapshots,
+  getRpcRetryBudgetSnapshots,
   getIdempotencyConflictsTotal,
   getIdempotencyReplaysTotal,
   getRequestPayloadRejectedSnapshots,
@@ -20,6 +21,7 @@ import {
   PAYLOAD_SIZE_BUCKETS_BYTES,
 } from "../services/metrics.js";
 import { getLedgerLag } from "../services/EventListenerService.js";
+import { RPC_RETRY_BUDGET_MAX_RETRIES } from "../services/rpc-retry-budget.js";
 
 /**
  * Streaming / Raw Output Routes Note (Issue #524/Admin API response validation):
@@ -141,6 +143,28 @@ lines.push(`sse_disconnects_total ${getSseDisconnectsTotal()}`);
     lines.push(
       `splitnaira_rpc_retry_outcomes_total{operation=${quoteLabelValue(operation)},outcome=${quoteLabelValue(outcome)},endpoint=${quoteLabelValue(endpoint)}} ${count}`,
     );
+  }
+
+  // Issue #1089: bounded retry budget series.
+  lines.push("# HELP splitnaira_rpc_retry_budget_max_retries Hard ceiling on retries per RPC call; larger caller requests are clamped to this.");
+  lines.push("# TYPE splitnaira_rpc_retry_budget_max_retries gauge");
+  lines.push(`splitnaira_rpc_retry_budget_max_retries ${RPC_RETRY_BUDGET_MAX_RETRIES}`);
+
+  const budgetSnapshots = getRpcRetryBudgetSnapshots();
+  const budgetSeries: Array<[name: string, help: string, pick: (s: (typeof budgetSnapshots)[number]) => number]> = [
+    ["splitnaira_rpc_retry_budget_sequences_total", "RPC retry sequences (executeWithRetry calls) completed, by operation and endpoint.", (s) => s.sequences],
+    ["splitnaira_rpc_retry_budget_allowed_total", "Sum of retry budgets granted to completed RPC retry sequences.", (s) => s.retriesAllowed],
+    ["splitnaira_rpc_retry_budget_used_total", "Sum of retries actually consumed by completed RPC retry sequences.", (s) => s.retriesUsed],
+    ["splitnaira_rpc_retry_budget_exhausted_total", "RPC retry sequences that spent their whole budget without success (error or timeout).", (s) => s.exhausted],
+  ];
+  for (const [name, help, pick] of budgetSeries) {
+    lines.push(`# HELP ${name} ${help}`);
+    lines.push(`# TYPE ${name} counter`);
+    for (const snapshot of budgetSnapshots) {
+      lines.push(
+        `${name}{operation=${quoteLabelValue(snapshot.operation)},endpoint=${quoteLabelValue(snapshot.endpoint)}} ${pick(snapshot)}`,
+      );
+    }
   }
 
   // Issue #1165: idempotency conflict/replay counters.

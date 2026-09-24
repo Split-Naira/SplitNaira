@@ -6,7 +6,7 @@ import { metricsMiddleware, payloadSizeMetricsMiddleware, resolveRouteGroup } fr
 import { requestIdMiddleware } from "../middleware/request-id.js";
 import { errorHandler } from "../middleware/error.js";
 import { resetValidationFailureCount } from "../middleware/validateResponse.js";
-import { resetRequestMetrics } from "../services/metrics.js";
+import { recordRpcRetryBudget, resetRequestMetrics } from "../services/metrics.js";
 
 describe("GET /metrics", () => {
   const app = express();
@@ -39,6 +39,20 @@ describe("GET /metrics", () => {
     // Issue #1165: idempotency conflict/replay counters
     expect(res.text).toContain("splitnaira_idempotency_conflicts_total 0");
     expect(res.text).toContain("splitnaira_idempotency_replays_total 0");
+  });
+
+  it("exposes bounded RPC retry budget series (Issue #1089)", async () => {
+    recordRpcRetryBudget("getAccount", "rpc", 3, 1, false);
+    recordRpcRetryBudget("getAccount", "rpc", 3, 3, true);
+
+    const res = await request(app).get("/metrics");
+
+    expect(res.text).toContain("# TYPE splitnaira_rpc_retry_budget_max_retries gauge");
+    expect(res.text).toContain("splitnaira_rpc_retry_budget_max_retries 5");
+    expect(res.text).toContain('splitnaira_rpc_retry_budget_sequences_total{operation="getAccount",endpoint="rpc"} 2');
+    expect(res.text).toContain('splitnaira_rpc_retry_budget_allowed_total{operation="getAccount",endpoint="rpc"} 6');
+    expect(res.text).toContain('splitnaira_rpc_retry_budget_used_total{operation="getAccount",endpoint="rpc"} 4');
+    expect(res.text).toContain('splitnaira_rpc_retry_budget_exhausted_total{operation="getAccount",endpoint="rpc"} 1');
   });
 });
 

@@ -75,7 +75,7 @@ export async function buildUnsignedContractCall(input: {
 
   let sourceAccount;
   try {
-    sourceAccount = await executeWithRetry(() => server.getAccount(input.sourceAddress));
+    sourceAccount = await executeWithRetry(() => server.getAccount(input.sourceAddress), { operation: "getAccount" });
   } catch {
     throw new RequestValidationError(`${input.sourceRoleLabel} account not found on selected network`);
   }
@@ -89,7 +89,7 @@ export async function buildUnsignedContractCall(input: {
     .setTimeout(300)
     .build();
 
-  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx));
+  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx), { operation: "prepareTransaction" });
 
   return {
     xdr: preparedTx.toXDR(),
@@ -112,7 +112,7 @@ export async function buildCreateProjectUnsignedXdr(
 
   let sourceAccount;
   try {
-    sourceAccount = await executeWithRetry(() => server.getAccount(input.owner));
+    sourceAccount = await executeWithRetry(() => server.getAccount(input.owner), { operation: "getAccount" });
   } catch {
     throw new RequestValidationError("owner account not found on selected network");
   }
@@ -136,7 +136,7 @@ export async function buildCreateProjectUnsignedXdr(
     .setTimeout(300)
     .build();
 
-  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx));
+  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx), { operation: "prepareTransaction" });
 
   return {
     xdr: preparedTx.toXDR(),
@@ -186,7 +186,7 @@ export async function fetchProjectsFromContract(start: number, limit: number) {
 
     let sourceAccount;
     try {
-      sourceAccount = await executeWithRetry(() => server.getAccount(config.simulatorAccount));
+      sourceAccount = await executeWithRetry(() => server.getAccount(config.simulatorAccount), { operation: "getAccount" });
     } catch {
       throw new RequestValidationError("simulator account not found on selected network");
     }
@@ -202,7 +202,7 @@ export async function fetchProjectsFromContract(start: number, limit: number) {
       .setTimeout(300)
       .build();
 
-    const simulated = await executeWithRetry(() => server.simulateTransaction(tx));
+    const simulated = await executeWithRetry(() => server.simulateTransaction(tx), { operation: "simulateTransaction" });
     const retval = "result" in simulated ? simulated.result?.retval : undefined;
     if (!retval) {
       return [];
@@ -255,7 +255,7 @@ export async function fetchProjectById(projectId: string) {
 
     let sourceAccount;
     try {
-      sourceAccount = await executeWithRetry(() => server.getAccount(config.simulatorAccount));
+      sourceAccount = await executeWithRetry(() => server.getAccount(config.simulatorAccount), { operation: "getAccount" });
     } catch {
       throw new RequestValidationError("simulator account not found on selected network");
     }
@@ -269,7 +269,7 @@ export async function fetchProjectById(projectId: string) {
       .setTimeout(300)
       .build();
 
-    const simulated = await executeWithRetry(() => server.simulateTransaction(tx));
+    const simulated = await executeWithRetry(() => server.simulateTransaction(tx), { operation: "simulateTransaction" });
     const retval = "result" in simulated ? simulated.result?.retval : undefined;
     if (!retval) {
       return null;
@@ -344,7 +344,7 @@ export async function buildLockProjectUnsignedXdr(input: LockProjectRequest) {
 
   let sourceAccount;
   try {
-    sourceAccount = await executeWithRetry(() => server.getAccount(input.owner));
+    sourceAccount = await executeWithRetry(() => server.getAccount(input.owner), { operation: "getAccount" });
   } catch {
     throw new RequestValidationError("owner account not found on selected network");
   }
@@ -367,7 +367,7 @@ export async function buildLockProjectUnsignedXdr(input: LockProjectRequest) {
     .setTimeout(300)
     .build();
 
-  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx));
+  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx), { operation: "prepareTransaction" });
   return {
     xdr: preparedTx.toXDR(),
     metadata: {
@@ -396,7 +396,7 @@ export async function buildDepositUnsignedXdr(input: DepositRequest) {
 
   let sourceAccount;
   try {
-    sourceAccount = await executeWithRetry(() => server.getAccount(input.from));
+    sourceAccount = await executeWithRetry(() => server.getAccount(input.from), { operation: "getAccount" });
   } catch {
     throw new RequestValidationError("from account not found on selected network");
   }
@@ -419,7 +419,7 @@ export async function buildDepositUnsignedXdr(input: DepositRequest) {
     .setTimeout(300)
     .build();
 
-  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx));
+  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx), { operation: "prepareTransaction" });
   return {
     xdr: preparedTx.toXDR(),
     metadata: {
@@ -443,7 +443,7 @@ export async function buildUpdateCollaboratorsUnsignedXdr(
 
   let sourceAccount;
   try {
-    sourceAccount = await executeWithRetry(() => server.getAccount(input.owner));
+    sourceAccount = await executeWithRetry(() => server.getAccount(input.owner), { operation: "getAccount" });
   } catch {
     throw new RequestValidationError("owner account not found on selected network");
   }
@@ -466,7 +466,7 @@ export async function buildUpdateCollaboratorsUnsignedXdr(
     .setTimeout(300)
     .build();
 
-  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx));
+  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx), { operation: "prepareTransaction" });
   return {
     xdr: preparedTx.toXDR(),
     metadata: {
@@ -493,7 +493,7 @@ export async function buildUpdateMetadataUnsignedXdr(input: {
 
   let sourceAccount;
   try {
-    sourceAccount = await executeWithRetry(() => server.getAccount(input.owner));
+    sourceAccount = await executeWithRetry(() => server.getAccount(input.owner), { operation: "getAccount" });
   } catch {
     throw new RequestValidationError("owner account not found on selected network");
   }
@@ -522,7 +522,7 @@ export async function buildUpdateMetadataUnsignedXdr(input: {
     .setTimeout(300)
     .build();
 
-  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx));
+  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx), { operation: "prepareTransaction" });
   return {
     xdr: preparedTx.toXDR(),
     metadata: {
@@ -546,7 +546,7 @@ export async function buildPauseDistributionsUnsignedXdr(input: PauseDistributio
 
   let sourceAccount;
   try {
-    sourceAccount = await executeWithRetry(() => server.getAccount(input.admin));
+    sourceAccount = await executeWithRetry(() => server.getAccount(input.admin), { operation: "getAccount" });
   } catch {
     throw new RequestValidationError("admin account not found on selected network");
   }
@@ -561,7 +561,7 @@ export async function buildPauseDistributionsUnsignedXdr(input: PauseDistributio
     .setTimeout(300)
     .build();
 
-  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx));
+  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx), { operation: "prepareTransaction" });
   return {
     xdr: preparedTx.toXDR(),
     metadata: {
@@ -581,7 +581,7 @@ export async function buildUnpauseDistributionsUnsignedXdr(input: PauseDistribut
 
   let sourceAccount;
   try {
-    sourceAccount = await executeWithRetry(() => server.getAccount(input.admin));
+    sourceAccount = await executeWithRetry(() => server.getAccount(input.admin), { operation: "getAccount" });
   } catch {
     throw new RequestValidationError("admin account not found on selected network");
   }
@@ -596,7 +596,7 @@ export async function buildUnpauseDistributionsUnsignedXdr(input: PauseDistribut
     .setTimeout(300)
     .build();
 
-  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx));
+  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx), { operation: "prepareTransaction" });
   return {
     xdr: preparedTx.toXDR(),
     metadata: {
@@ -653,7 +653,7 @@ export async function buildWithdrawUnallocatedUnsignedXdr(input: WithdrawUnalloc
 
   let sourceAccount;
   try {
-    sourceAccount = await executeWithRetry(() => server.getAccount(input.admin));
+    sourceAccount = await executeWithRetry(() => server.getAccount(input.admin), { operation: "getAccount" });
   } catch {
     throw new RequestValidationError("admin account not found on selected network");
   }
@@ -679,7 +679,7 @@ export async function buildWithdrawUnallocatedUnsignedXdr(input: WithdrawUnalloc
     .setTimeout(300)
     .build();
 
-  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx));
+  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx), { operation: "prepareTransaction" });
   return {
     xdr: preparedTx.toXDR(),
     metadata: {
