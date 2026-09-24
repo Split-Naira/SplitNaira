@@ -48,6 +48,7 @@ import {
 } from "../schemas/splits.js";
 
 import {
+  AdminAllowlistResponseSchema,
   AdminStatusResponseSchema,
   AdminIsTokenAllowedResponseSchema,
   AdminTokenCountResponseSchema,
@@ -107,6 +108,7 @@ export {
 } from "../schemas/splits.js";
 
 export {
+  AdminAllowlistResponseSchema,
   AdminStatusResponseSchema,
   AdminIsTokenAllowedResponseSchema,
   AdminTokenCountResponseSchema,
@@ -323,43 +325,46 @@ splitsRouter.post("/:projectId/lock", async (req: Request, res: Response, next: 
  * tell when the allowlist changes. If these reads are ever cached, add
  * invalidation too; `allowlist-cache-invalidation.test.ts` checks this.
  */
-splitsRouter.get("/admin/allowlist", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const requestId = res.locals.requestId;
-    const parsed = allowlistQuerySchema.safeParse(req.query);
-    if (!parsed.success) {
-      return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
-    }
-
-    const { start, limit } = parsed.data;
-
+splitsRouter.get(
+  "/admin/allowlist",
+  withResponseValidation(AdminAllowlistResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const [adminRetval, countRetval, tokensRetval] = await Promise.all([
-        simulateReadOnlyContractCall("get_admin"),
-        simulateReadOnlyContractCall("get_allowed_token_count"),
-        simulateReadOnlyContractCall("get_allowed_tokens", [
-          xdr.ScVal.scvU32(start),
-          xdr.ScVal.scvU32(limit)
-        ])
-      ]);
-
-      const adminValue = adminRetval ? scValToNative(adminRetval) : null;
-      const countValue = countRetval ? scValToNative(countRetval) : 0;
-      const tokensValue = tokensRetval ? scValToNative(tokensRetval) : [];
-
-      return res.status(200).json(
-        serializeBigInts({ admin: adminValue, count: countValue, tokens: tokensValue })
-      );
-    } catch (error) {
-      if (error instanceof RequestValidationError) {
-        return sendValidationError(res, requestId, error.message);
+      const requestId = res.locals.requestId;
+      const parsed = allowlistQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
       }
-      throw error;
+
+      const { start, limit } = parsed.data;
+
+      try {
+        const [adminRetval, countRetval, tokensRetval] = await Promise.all([
+          simulateReadOnlyContractCall("get_admin"),
+          simulateReadOnlyContractCall("get_allowed_token_count"),
+          simulateReadOnlyContractCall("get_allowed_tokens", [
+            xdr.ScVal.scvU32(start),
+            xdr.ScVal.scvU32(limit)
+          ])
+        ]);
+
+        const adminValue = adminRetval ? scValToNative(adminRetval) : null;
+        const countValue = countRetval ? scValToNative(countRetval) : 0;
+        const tokensValue = tokensRetval ? scValToNative(tokensRetval) : [];
+
+        return res.status(200).json(
+          serializeBigInts({ admin: adminValue, count: countValue, tokens: tokensValue })
+        );
+      } catch (error) {
+        if (error instanceof RequestValidationError) {
+          return sendValidationError(res, requestId, error.message);
+        }
+        throw error;
+      }
+    } catch (error) {
+      return next(error);
     }
-  } catch (error) {
-    return next(error);
-  }
-});
+  })
+);
 
 splitsRouter.post("/:projectId/deposit", async (req, res, next) => {
   try {
@@ -577,7 +582,7 @@ splitsRouter.get("/:projectId/claimable/:address", async (req: Request, res: Res
 
     let sourceAccount;
     try {
-      sourceAccount = await executeWithRetry(() => server.getAccount(config.simulatorAccount));
+      sourceAccount = await executeWithRetry(() => server.getAccount(config.simulatorAccount), { operation: "getAccount" });
     } catch {
       return sendRpcError(res, requestId, "RPC operation failed.");
     }
@@ -599,7 +604,7 @@ splitsRouter.get("/:projectId/claimable/:address", async (req: Request, res: Res
         .setTimeout(300)
         .build();
 
-      simulated = await executeWithRetry(() => server.simulateTransaction(tx));
+      simulated = await executeWithRetry(() => server.simulateTransaction(tx), { operation: "simulateTransaction" });
     } catch (error) {
       throw translateSorobanError(error);
     }
@@ -780,7 +785,7 @@ splitsRouter.get("/:projectId/history", async (req: Request, res: Response, next
         }
       ],
       limit
-    }));
+    }), { operation: "getEvents" });
 
     const paymentEventResponse = await executeWithRetry(() => server.getEvents({
       cursor,
@@ -792,7 +797,7 @@ splitsRouter.get("/:projectId/history", async (req: Request, res: Response, next
         }
       ],
       limit
-    }));
+    }), { operation: "getEvents" });
 
     const events = [
       ...roundEventResponse.events.map((e) => {

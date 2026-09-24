@@ -10,6 +10,14 @@ import { z } from "zod";
 
 // ── Admin Read Routes ─────────────────────────────────────────────────────────
 
+export const AdminAllowlistResponseSchema = z.object({
+  admin: z.string().nullable().describe("Current contract admin Stellar address or null"),
+  count: z.number().int().nonnegative().describe("Total number of allowlisted tokens"),
+  tokens: z.array(z.string()).describe("Page of allowlisted token contract addresses"),
+});
+
+export type AdminAllowlistResponse = z.infer<typeof AdminAllowlistResponseSchema>;
+
 export const AdminStatusResponseSchema = z.object({
   admin: z.string().nullable().describe("Current contract admin Stellar address or null"),
   isPaused: z.boolean().describe("Whether contract distributions are globally paused"),

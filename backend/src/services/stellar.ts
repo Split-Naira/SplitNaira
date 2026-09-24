@@ -13,8 +13,12 @@ import { configureReadCache, getReadCache } from "./read-cache.js";
 import {
   recordRpcRetryAttempt,
   recordRpcRetryBackoff,
+  recordRpcRetryBudget,
   recordRpcRetryOutcome
 } from "./metrics.js";
+import { DEFAULT_RPC_MAX_RETRIES, boundRetryBudget } from "./rpc-retry-budget.js";
+
+export { RPC_RETRY_BUDGET_MAX_RETRIES, boundRetryBudget } from "./rpc-retry-budget.js";
 
 /**
  * Issue #836: normalise an RPC error message for log output.
@@ -110,7 +114,7 @@ export interface RetryOptions {
 }
 
 const DEFAULT_RETRY_OPTIONS: Required<RetryOptions> = {
-  maxRetries: 3,
+  maxRetries: DEFAULT_RPC_MAX_RETRIES,
   initialDelayMs: 1000,
   timeoutMs: 10000,
   operation: "unknown",
@@ -135,13 +139,25 @@ const DEFAULT_RETRY_OPTIONS: Required<RetryOptions> = {
  *     backoff in `..._retry_duration_ms_total`.
  *   - The **final outcome** of the sequence is recorded exactly once with
  *     one of: `success`, `validation_error`, `timeout`, `exhausted`.
+ *   - Issue #1089: `maxRetries` is clamped to `RPC_RETRY_BUDGET_MAX_RETRIES`,
+ *     and each sequence records its budget (retries allowed), the retries it
+ *     actually used, and whether it exhausted the budget.
  */
 export async function executeWithRetry<T>(
   operation: () => Promise<T>,
   options: RetryOptions = {}
 ): Promise<T> {
   const opts = { ...DEFAULT_RETRY_OPTIONS, ...options };
-  const { maxRetries, initialDelayMs, timeoutMs, operation: operationLabel, endpoint } = opts;
+  const { initialDelayMs, timeoutMs, operation: operationLabel, endpoint } = opts;
+  const maxRetries = boundRetryBudget(opts.maxRetries);
+  if (maxRetries !== opts.maxRetries) {
+    logger.warn("RPC retry budget clamped", {
+      operation: operationLabel,
+      endpoint,
+      requestedMaxRetries: opts.maxRetries,
+      appliedMaxRetries: maxRetries,
+    });
+  }
 
   let lastError: Error | null = null;
 
@@ -163,6 +179,7 @@ export async function executeWithRetry<T>(
         // Successful attempt \u2014 record the final outcome and return.
         // Without this, success-rate per operation cannot be computed.
         recordRpcRetryOutcome(operationLabel, "success", endpoint);
+        recordRpcRetryBudget(operationLabel, endpoint, maxRetries, attempt, false);
         return result;
       } finally {
         if (timeoutHandle) clearTimeout(timeoutHandle);
@@ -185,6 +202,7 @@ export async function executeWithRetry<T>(
           errorMessage: safeMessage,
         });
         recordRpcRetryOutcome(operationLabel, "validation_error", endpoint);
+        recordRpcRetryBudget(operationLabel, endpoint, maxRetries, attempt, false);
         throw error;
       }
 
@@ -234,6 +252,8 @@ export async function executeWithRetry<T>(
     errorMessage: safeMessage,
   });
   recordRpcRetryOutcome(operationLabel, finalOutcome, endpoint);
+  // Every retry was spent whether the last attempt errored or timed out.
+  recordRpcRetryBudget(operationLabel, endpoint, maxRetries, maxRetries, true);
   throw lastError || new RpcError("RPC operation failed after retries");
 }
 

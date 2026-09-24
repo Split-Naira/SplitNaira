@@ -79,6 +79,8 @@ Exposed series:
 - `splitnaira_http_request_duration_seconds_sum{method,route}` — cumulative request latency in seconds
 - `splitnaira_http_request_duration_seconds_count{method,route}` — number of latency samples per route
 - `splitnaira_http_requests_inflight` — current in-flight HTTP requests
+- `splitnaira_http_request_payload_bytes{route_group}` — histogram (`_bucket`/`_sum`/`_count`) of declared request body sizes by route group (Issue #1090); see [Request payload size telemetry](#request-payload-size-telemetry-issue-1090)
+- `splitnaira_http_request_payload_rejected_total{route_group}` — requests rejected with 413 because the body exceeded the 1 MB limit (Issue #1090)
 - `splitnaira_process_uptime_seconds`
 - `splitnaira_process_heap_bytes`
 - `splitnaira_info{version="..."}`
@@ -91,9 +93,46 @@ Exposed series:
 - `splitnaira_rpc_retry_max_attempts_reached_total` — times the retry budget was fully consumed without success (Issue #836)
 - `splitnaira_rpc_retry_duration_ms_total` — cumulative sleeper delay between RPC retry attempts in milliseconds (Issue #836)
 - `splitnaira_rpc_retry_outcomes_total{operation,outcome,endpoint}` — final outcome of RPC retry sequences labelled by operation and endpoint (Issue #836)
+- `splitnaira_rpc_retry_budget_max_retries` — hard ceiling on retries per RPC call (Issue #1089)
+- `splitnaira_rpc_retry_budget_{sequences,allowed,used,exhausted}_total{operation,endpoint}` — per-operation retry budget accounting (Issue #1089); see [Bounded retry budget](#bounded-retry-budget-issue-1089)
 - `splitnaira_event_listener_ledger_lag` — ledgers between the newest ledger observed by the event listener and its last processed ledger
 - `splitnaira_event_listener_last_processed_ledger` — last ledger the listener processed
 - `splitnaira_event_listener_latest_observed_ledger` — latest ledger reported by the listener's Soroban RPC poll
+
+### Request payload size telemetry (Issue #1090)
+
+**Owner:** Backend on-call.
+
+`payloadSizeMetricsMiddleware` (`backend/src/middleware/metrics.ts`) records
+the `Content-Length` of every request that declares one, labelled by
+`route_group`. It is mounted **before** `express.json({ limit: "1mb" })`,
+because the body parser rejects oversized bodies with an error that skips
+later middleware. Mounted after it, the 413s would never be counted.
+
+Route groups: `splits`, `splits_admin`, `users`, `auth`, `transactions`,
+`events`, `ledger`, `docs`, `ops`, `health`, `metrics`, `root`, and `other`
+for anything unmatched, so random scanner paths can't inflate label
+cardinality. Buckets (bytes, cumulative `le`): 256, 1 KiB, 4 KiB, 16 KiB,
+64 KiB, 256 KiB, 1 MiB, `+Inf`.
+
+Not recorded: requests without `Content-Length` (bodiless GETs, chunked
+uploads). `express.json` still enforces the 1 MB limit on those.
+
+Useful queries:
+
+```promql
+# P95 declared body size per route group
+histogram_quantile(0.95, sum by (route_group, le) (rate(splitnaira_http_request_payload_bytes_bucket[15m])))
+
+# Share of payloads above 256 KiB (approaching the 1 MB limit)
+1 - sum by (route_group) (rate(splitnaira_http_request_payload_bytes_bucket{le="262144"}[15m]))
+  / sum by (route_group) (rate(splitnaira_http_request_payload_bytes_count[15m]))
+```
+
+| Signal | Suggested rule | Action |
+|---|---|---|
+| Oversized-body rejections | `sum by (route_group) (increase(splitnaira_http_request_payload_rejected_total[15m])) > 10` | For `splits`/`users`, check for a frontend regression sending bloated bodies; for `other`, treat it as probing traffic and review rate-limit and WAF logs. |
+| Payload size drift | P95 for a group doubles week-over-week | Correlate with recent deploys; large collaborator lists or metadata changes are the usual cause. |
 
 ### Background listener ledger lag
 
@@ -247,6 +286,7 @@ ingestion):
 | `RPC retry scheduled` | warn | Each retryable failure before the next attempt |
 | `RPC operation rejected before retrying` | warn | `RequestValidationError` short-circuits the helper |
 | `RPC retries exhausted` | error | Final attempt failed after the full retry budget |
+| `RPC retry budget clamped` | warn | A caller asked for more retries than `RPC_RETRY_BUDGET_MAX_RETRIES` (or passed a non-finite value); fields `requestedMaxRetries` / `appliedMaxRetries` |
 
 Log fields (stable schema):
 
@@ -292,6 +332,44 @@ materially different and stronger signal: 3+ within 15 minutes for one
 operation means that call path is currently, persistently broken, not just
 unlucky once. This is the threshold that should page on-call; the plain
 "any >0" rule stays as a lower-priority warning.
+
+### Bounded retry budget (Issue #1089)
+
+Each `executeWithRetry` call gets a retry budget (`maxRetries`, default 3).
+The budget is clamped to `RPC_RETRY_BUDGET_MAX_RETRIES = 5`
+(`backend/src/services/rpc-retry-budget.ts`), so no call site can make more
+than 6 attempts against the RPC endpoint. With the 30s backoff cap, that
+bounds how long one call can spend retrying. Non-finite values fall back to
+the default. This also fixes a latent bug: an explicit `maxRetries:
+undefined` used to skip every attempt.
+
+Every call site now passes an `operation` label (the RPC method:
+`getAccount`, `prepareTransaction`, `simulateTransaction`, `getEvents`, ...).
+Before this change, most split routes reported `operation="unknown"`.
+
+Series, all labelled `{operation, endpoint}`:
+
+| Metric | Meaning |
+|---|---|
+| `splitnaira_rpc_retry_budget_sequences_total` | Finished `executeWithRetry` calls |
+| `splitnaira_rpc_retry_budget_allowed_total` | Sum of retry budgets those calls were granted |
+| `splitnaira_rpc_retry_budget_used_total` | Sum of retries actually consumed (attempts − 1) |
+| `splitnaira_rpc_retry_budget_exhausted_total` | Calls that spent the whole budget without success, **including** calls whose last attempt timed out (`splitnaira_rpc_retry_max_attempts_reached_total` counts only the `exhausted` outcome) |
+
+Plus the gauge `splitnaira_rpc_retry_budget_max_retries` (the ceiling).
+
+Budget burn ratio is an early-warning signal: retries climb before calls start failing.
+
+```promql
+sum by (operation) (rate(splitnaira_rpc_retry_budget_used_total[15m]))
+  / clamp_min(sum by (operation) (rate(splitnaira_rpc_retry_budget_allowed_total[15m])), 1e-9)
+```
+
+| Signal | Suggested rule | Action |
+|---|---|---|
+| Budget burn rising | burn ratio > 0.25 for 15m on any operation | RPC is degrading; check provider status and `/health/ready` before it becomes 502/504s |
+| Budget exhausted (incl. timeouts) | `sum by (operation) (increase(splitnaira_rpc_retry_budget_exhausted_total[15m])) >= 3` | Same paging threshold as #1164, but also covers timeout exhaustion |
+| Clamp warnings in logs | any `RPC retry budget clamped` | A code change asked for an oversized budget; fix the call site |
 
 ### Secret-hygiene guarantees
 

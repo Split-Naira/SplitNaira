@@ -16,8 +16,11 @@ import {
   RequestValidationError,
   executeWithRetry,
   getCachedOrFetch,
+  invalidateCache,
   type UnsignedTxResponse
 } from "./stellar.js";
+
+import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
 
 import {
   createSplitSchema
@@ -72,7 +75,7 @@ export async function buildUnsignedContractCall(input: {
 
   let sourceAccount;
   try {
-    sourceAccount = await executeWithRetry(() => server.getAccount(input.sourceAddress));
+    sourceAccount = await executeWithRetry(() => server.getAccount(input.sourceAddress), { operation: "getAccount" });
   } catch {
     throw new RequestValidationError(`${input.sourceRoleLabel} account not found on selected network`);
   }
@@ -86,7 +89,7 @@ export async function buildUnsignedContractCall(input: {
     .setTimeout(300)
     .build();
 
-  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx));
+  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx), { operation: "prepareTransaction" });
 
   return {
     xdr: preparedTx.toXDR(),
@@ -109,7 +112,7 @@ export async function buildCreateProjectUnsignedXdr(
 
   let sourceAccount;
   try {
-    sourceAccount = await executeWithRetry(() => server.getAccount(input.owner));
+    sourceAccount = await executeWithRetry(() => server.getAccount(input.owner), { operation: "getAccount" });
   } catch {
     throw new RequestValidationError("owner account not found on selected network");
   }
@@ -133,7 +136,7 @@ export async function buildCreateProjectUnsignedXdr(
     .setTimeout(300)
     .build();
 
-  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx));
+  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx), { operation: "prepareTransaction" });
 
   return {
     xdr: preparedTx.toXDR(),
@@ -183,7 +186,7 @@ export async function fetchProjectsFromContract(start: number, limit: number) {
 
     let sourceAccount;
     try {
-      sourceAccount = await executeWithRetry(() => server.getAccount(config.simulatorAccount));
+      sourceAccount = await executeWithRetry(() => server.getAccount(config.simulatorAccount), { operation: "getAccount" });
     } catch {
       throw new RequestValidationError("simulator account not found on selected network");
     }
@@ -199,7 +202,7 @@ export async function fetchProjectsFromContract(start: number, limit: number) {
       .setTimeout(300)
       .build();
 
-    const simulated = await executeWithRetry(() => server.simulateTransaction(tx));
+    const simulated = await executeWithRetry(() => server.simulateTransaction(tx), { operation: "simulateTransaction" });
     const retval = "result" in simulated ? simulated.result?.retval : undefined;
     if (!retval) {
       return [];
@@ -252,7 +255,7 @@ export async function fetchProjectById(projectId: string) {
 
     let sourceAccount;
     try {
-      sourceAccount = await executeWithRetry(() => server.getAccount(config.simulatorAccount));
+      sourceAccount = await executeWithRetry(() => server.getAccount(config.simulatorAccount), { operation: "getAccount" });
     } catch {
       throw new RequestValidationError("simulator account not found on selected network");
     }
@@ -266,7 +269,7 @@ export async function fetchProjectById(projectId: string) {
       .setTimeout(300)
       .build();
 
-    const simulated = await executeWithRetry(() => server.simulateTransaction(tx));
+    const simulated = await executeWithRetry(() => server.simulateTransaction(tx), { operation: "simulateTransaction" });
     const retval = "result" in simulated ? simulated.result?.retval : undefined;
     if (!retval) {
       return null;
@@ -287,13 +290,61 @@ export async function fetchProjectById(projectId: string) {
   });
 }
 
+/**
+ * Issue #1092: ownership validation before every owner-gated split mutation.
+ *
+ * `lock_project`, `update_collaborators`, and `update_metadata` all require
+ * the on-chain project owner's signature, and the contract rejects anyone
+ * else with `SplitError::Unauthorized` (#3). Without this check the API
+ * happily built an unsigned XDR for any `owner` in the request body, so a
+ * wrong wallet only found out after signing and submitting. We now compare
+ * the claimed owner against on-chain state before building the transaction.
+ *
+ * The contract remains the source of truth; this is a fail-fast guard.
+ * Ownership can be transferred on-chain, so a mismatch against the read
+ * cache is re-checked against a fresh read before we reject.
+ *
+ * @throws AppError NOT_FOUND (404) when the project does not exist.
+ * @throws AppError AUTH/UNAUTHORIZED (401) when `owner` is not the project owner.
+ */
+export async function assertProjectOwner(projectId: string, owner: string): Promise<void> {
+  const readOwner = async () => {
+    const project = await fetchProjectById(projectId);
+    if (!project) {
+      throw new AppError(
+        ErrorType.CONTRACT,
+        ErrorCode.NOT_FOUND,
+        `Split project ${projectId} not found.`,
+        { message: "The requested project does not exist on the network.", action: "Verify ID" }
+      );
+    }
+    const onChainOwner = (project as Record<string, unknown>).owner;
+    return typeof onChainOwner === "string" ? onChainOwner : String(onChainOwner ?? "");
+  };
+
+  if ((await readOwner()) === owner) return;
+
+  // Cached state may predate an ownership transfer — re-read once.
+  invalidateCache(`project:${projectId}`);
+  if ((await readOwner()) === owner) return;
+
+  throw new AppError(
+    ErrorType.AUTH,
+    ErrorCode.UNAUTHORIZED,
+    "Caller is not the project owner",
+    { message: "Only the project owner can perform this action.", action: "Switch Wallet" }
+  );
+}
+
 export async function buildLockProjectUnsignedXdr(input: LockProjectRequest) {
+  await assertProjectOwner(input.projectId, input.owner);
+
   const config = loadStellarConfig();
   const server = getStellarRpcServer();
 
   let sourceAccount;
   try {
-    sourceAccount = await executeWithRetry(() => server.getAccount(input.owner));
+    sourceAccount = await executeWithRetry(() => server.getAccount(input.owner), { operation: "getAccount" });
   } catch {
     throw new RequestValidationError("owner account not found on selected network");
   }
@@ -316,7 +367,7 @@ export async function buildLockProjectUnsignedXdr(input: LockProjectRequest) {
     .setTimeout(300)
     .build();
 
-  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx));
+  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx), { operation: "prepareTransaction" });
   return {
     xdr: preparedTx.toXDR(),
     metadata: {
@@ -345,7 +396,7 @@ export async function buildDepositUnsignedXdr(input: DepositRequest) {
 
   let sourceAccount;
   try {
-    sourceAccount = await executeWithRetry(() => server.getAccount(input.from));
+    sourceAccount = await executeWithRetry(() => server.getAccount(input.from), { operation: "getAccount" });
   } catch {
     throw new RequestValidationError("from account not found on selected network");
   }
@@ -368,7 +419,7 @@ export async function buildDepositUnsignedXdr(input: DepositRequest) {
     .setTimeout(300)
     .build();
 
-  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx));
+  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx), { operation: "prepareTransaction" });
   return {
     xdr: preparedTx.toXDR(),
     metadata: {
@@ -385,12 +436,14 @@ export async function buildDepositUnsignedXdr(input: DepositRequest) {
 export async function buildUpdateCollaboratorsUnsignedXdr(
   input: UpdateCollaboratorsRequest
 ) {
+  await assertProjectOwner(input.projectId, input.owner);
+
   const config = loadStellarConfig();
   const server = getStellarRpcServer();
 
   let sourceAccount;
   try {
-    sourceAccount = await executeWithRetry(() => server.getAccount(input.owner));
+    sourceAccount = await executeWithRetry(() => server.getAccount(input.owner), { operation: "getAccount" });
   } catch {
     throw new RequestValidationError("owner account not found on selected network");
   }
@@ -413,7 +466,7 @@ export async function buildUpdateCollaboratorsUnsignedXdr(
     .setTimeout(300)
     .build();
 
-  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx));
+  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx), { operation: "prepareTransaction" });
   return {
     xdr: preparedTx.toXDR(),
     metadata: {
@@ -433,12 +486,14 @@ export async function buildUpdateMetadataUnsignedXdr(input: {
   title: string;
   projectType: string;
 }) {
+  await assertProjectOwner(input.projectId, input.owner);
+
   const config = loadStellarConfig();
   const server = new rpc.Server(config.sorobanRpcUrl, { allowHttp: true });
 
   let sourceAccount;
   try {
-    sourceAccount = await executeWithRetry(() => server.getAccount(input.owner));
+    sourceAccount = await executeWithRetry(() => server.getAccount(input.owner), { operation: "getAccount" });
   } catch {
     throw new RequestValidationError("owner account not found on selected network");
   }
@@ -467,7 +522,7 @@ export async function buildUpdateMetadataUnsignedXdr(input: {
     .setTimeout(300)
     .build();
 
-  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx));
+  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx), { operation: "prepareTransaction" });
   return {
     xdr: preparedTx.toXDR(),
     metadata: {
@@ -491,7 +546,7 @@ export async function buildPauseDistributionsUnsignedXdr(input: PauseDistributio
 
   let sourceAccount;
   try {
-    sourceAccount = await executeWithRetry(() => server.getAccount(input.admin));
+    sourceAccount = await executeWithRetry(() => server.getAccount(input.admin), { operation: "getAccount" });
   } catch {
     throw new RequestValidationError("admin account not found on selected network");
   }
@@ -506,7 +561,7 @@ export async function buildPauseDistributionsUnsignedXdr(input: PauseDistributio
     .setTimeout(300)
     .build();
 
-  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx));
+  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx), { operation: "prepareTransaction" });
   return {
     xdr: preparedTx.toXDR(),
     metadata: {
@@ -526,7 +581,7 @@ export async function buildUnpauseDistributionsUnsignedXdr(input: PauseDistribut
 
   let sourceAccount;
   try {
-    sourceAccount = await executeWithRetry(() => server.getAccount(input.admin));
+    sourceAccount = await executeWithRetry(() => server.getAccount(input.admin), { operation: "getAccount" });
   } catch {
     throw new RequestValidationError("admin account not found on selected network");
   }
@@ -541,7 +596,7 @@ export async function buildUnpauseDistributionsUnsignedXdr(input: PauseDistribut
     .setTimeout(300)
     .build();
 
-  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx));
+  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx), { operation: "prepareTransaction" });
   return {
     xdr: preparedTx.toXDR(),
     metadata: {
@@ -598,7 +653,7 @@ export async function buildWithdrawUnallocatedUnsignedXdr(input: WithdrawUnalloc
 
   let sourceAccount;
   try {
-    sourceAccount = await executeWithRetry(() => server.getAccount(input.admin));
+    sourceAccount = await executeWithRetry(() => server.getAccount(input.admin), { operation: "getAccount" });
   } catch {
     throw new RequestValidationError("admin account not found on selected network");
   }
@@ -624,7 +679,7 @@ export async function buildWithdrawUnallocatedUnsignedXdr(input: WithdrawUnalloc
     .setTimeout(300)
     .build();
 
-  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx));
+  const preparedTx = await executeWithRetry(() => server.prepareTransaction(tx), { operation: "prepareTransaction" });
   return {
     xdr: preparedTx.toXDR(),
     metadata: {

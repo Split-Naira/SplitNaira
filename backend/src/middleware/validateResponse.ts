@@ -8,6 +8,18 @@ export type RouteHandler = (
   next: NextFunction,
 ) => Promise<void> | void;
 
+/**
+ * Handler accepted by {@link withResponseValidation}. Route handlers commonly
+ * `return res.status(...).json(...)`; Express ignores that value, so any
+ * return type is accepted here (Issue #1088 — previously every wrapped admin
+ * route failed `tsc` because it returned a `Response`, not `void`).
+ */
+export type ValidatedRouteHandler = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => unknown;
+
 // In-process counter — exposed for tests and metrics endpoints.
 let _validationFailureCount = 0;
 
@@ -42,7 +54,7 @@ export function resetValidationFailureCount(): void {
  */
 export function withResponseValidation<T>(
   schema: z.ZodType<T>,
-  handler: RouteHandler,
+  handler: ValidatedRouteHandler,
 ): RouteHandler {
   return async (req, res, next) => {
     const originalJson = res.json.bind(res);
@@ -85,7 +97,7 @@ export function withResponseValidation<T>(
       return originalJson(body);
     };
 
-    return handler(req, res, next);
+    await handler(req, res, next);
   };
 }
 

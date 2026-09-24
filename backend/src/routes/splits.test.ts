@@ -5,6 +5,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { splitsRouter } from "./splits.js";
 import { requestIdMiddleware } from "../middleware/request-id.js";
 import { errorHandler, notFoundHandler } from "../middleware/error.js";
+import { invalidateCacheByPrefix } from "../services/stellar.js";
 
 const getAccountMock = vi.fn();
 const prepareTransactionMock = vi.fn();
@@ -136,6 +137,7 @@ describe("splits routes integration", () => {
   });
 
   it("locks a split project", async () => {
+    mockOnChainProjectOwner("GOWNER");
     getAccountMock.mockResolvedValue({ accountId: "GOWNER" });
     prepareTransactionMock.mockResolvedValue({
       toXDR: () => "XDR_LOCK",
@@ -546,12 +548,28 @@ describe("splits routes integration", () => {
 //  ISSUE #174 — Lock & Update Owner-Gating Integration Tests
 // ============================================================
 
+/**
+ * Owner-gated routes read the project from chain before building XDR
+ * (Issue #1092). Every simulateTransaction call returns a project owned by
+ * `owner`; the read cache is cleared so each test sees its own on-chain state.
+ */
+function mockOnChainProjectOwner(owner: string) {
+  invalidateCacheByPrefix("project:");
+  simulateTransactionMock.mockResolvedValue({
+    result: { retval: { owner, locked: false, collaborators: [] } },
+  });
+}
+
 describe("Issue #174: lock & update permissions and owner gating", () => {
   const VALID_OWNER = "GOWNER";
   const VALID_TOKEN = "GTOKEN";
   const VALID_COLLAB_A = "GCOLLABA";
   const VALID_COLLAB_B = "GCOLLABB";
   const VALID_COLLAB_C = "GCOLLABC";
+
+  beforeEach(() => {
+    mockOnChainProjectOwner(VALID_OWNER);
+  });
 
   it("lock route passes owner through as sourceAccount in built XDR", async () => {
     getAccountMock.mockResolvedValue({ accountId: VALID_OWNER });
@@ -595,7 +613,12 @@ describe("Issue #174: lock & update permissions and owner gating", () => {
   });
 
   it("lock route surfaces 'owner account not found' as 400 when RPC lookup fails", async () => {
-    getAccountMock.mockRejectedValue(new Error("not_found"));
+    // Only the owner lookup fails; the simulator account used for the
+    // ownership read (Issue #1092) still resolves.
+    getAccountMock.mockImplementation(async (address: string) => {
+      if (address === VALID_OWNER) throw new Error("not_found");
+      return { accountId: address };
+    });
 
     const app = createApp();
     const response = await request(app)
@@ -765,6 +788,107 @@ describe("Issue #174: lock & update permissions and owner gating", () => {
       (call) => call[0] === VALID_OWNER,
     );
     expect(ownerCalls.length).toBe(3);
+  });
+});
+
+// ============================================================
+// Issue #1092: ownership validation before mutable split actions
+// ============================================================
+
+describe("Issue #1092: project ownership validation on owner-gated mutations", () => {
+  const OWNER = "GOWNER";
+  const INTRUDER = "GINTRUDER";
+  const COLLABORATORS = [
+    { address: "GCOLLABA", alias: "A", basisPoints: 5000 },
+    { address: "GCOLLABB", alias: "B", basisPoints: 5000 },
+  ];
+
+  const mutations = [
+    {
+      name: "POST /:projectId/lock",
+      send: (app: express.Express, owner: string) =>
+        request(app).post("/splits/proj_own/lock").send({ owner }),
+    },
+    {
+      name: "PUT /:projectId/collaborators",
+      send: (app: express.Express, owner: string) =>
+        request(app).put("/splits/proj_own/collaborators").send({ owner, collaborators: COLLABORATORS }),
+    },
+    {
+      name: "PATCH /:projectId/metadata",
+      send: (app: express.Express, owner: string) =>
+        request(app).patch("/splits/proj_own/metadata").send({ owner, title: "Renamed", projectType: "music" }),
+    },
+  ];
+
+  beforeEach(() => {
+    getAccountMock.mockImplementation(async (address: string) => ({ accountId: address }));
+    prepareTransactionMock.mockResolvedValue({ toXDR: () => "XDR_OWNER_OK", sequence: "1", fee: "100" });
+    mockOnChainProjectOwner(OWNER);
+  });
+
+  for (const mutation of mutations) {
+    it(`${mutation.name} builds XDR when the caller is the on-chain owner`, async () => {
+      const response = await mutation.send(createApp(), OWNER).expect(200);
+
+      expect(response.body.xdr).toBe("XDR_OWNER_OK");
+      expect(response.body.metadata.sourceAccount).toBe(OWNER);
+    });
+
+    it(`${mutation.name} rejects a non-owner with 401 before building XDR`, async () => {
+      const response = await mutation.send(createApp(), INTRUDER).expect(401);
+
+      expect(response.body).toMatchObject({
+        error: "unauthorized",
+        code: "UNAUTHORIZED",
+        message: "Caller is not the project owner",
+      });
+      expect(response.body.details.remediation.action).toBe("Switch Wallet");
+      // Never touches the claimed owner's account or prepares a transaction.
+      expect(getAccountMock).not.toHaveBeenCalledWith(INTRUDER);
+      expect(prepareTransactionMock).not.toHaveBeenCalled();
+    });
+
+    it(`${mutation.name} returns 404 when the project does not exist`, async () => {
+      invalidateCacheByPrefix("project:");
+      simulateTransactionMock.mockResolvedValue({ result: undefined });
+
+      const response = await mutation.send(createApp(), OWNER).expect(404);
+
+      expect(response.body.code).toBe("NOT_FOUND");
+      expect(prepareTransactionMock).not.toHaveBeenCalled();
+    });
+  }
+
+  it("re-reads on-chain state when the cached owner is stale after an ownership transfer", async () => {
+    const app = createApp();
+
+    // Prime the read cache with the original owner.
+    await request(app).get("/splits/proj_own").expect(200);
+
+    // Ownership transferred on-chain; the cache still says OWNER.
+    simulateTransactionMock.mockResolvedValue({
+      result: { retval: { owner: INTRUDER, locked: false, collaborators: [] } },
+    });
+
+    const response = await request(app)
+      .post("/splits/proj_own/lock")
+      .send({ owner: INTRUDER })
+      .expect(200);
+
+    expect(response.body.metadata.sourceAccount).toBe(INTRUDER);
+  });
+
+  it("does not gate permissionless actions (deposit sender is not required to be the owner)", async () => {
+    invalidateCacheByPrefix("project:");
+    simulateTransactionMock.mockResolvedValue({
+      result: { retval: { owner: OWNER, token: "GTOKEN", locked: false, collaborators: [] } },
+    });
+
+    await request(createApp())
+      .post("/splits/proj_own/deposit")
+      .send({ from: INTRUDER, amount: 100, token: "GTOKEN" })
+      .expect(200);
   });
 });
 

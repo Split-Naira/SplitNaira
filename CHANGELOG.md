@@ -17,6 +17,7 @@ This fix addresses GitHub Issue #292 (Security: Cross-Site Scripting (XSS) in Sp
   - Added comprehensive security test suite with 50+ XSS payload tests
   - Verified zero usage of `dangerouslySetInnerHTML` in codebase
   - Full documentation in `docs/SECURITY_XSS_FIXES.md`
+- Owner-gated split mutations (`lock`, `collaborators`, `metadata`) now verify the requested `owner` against on-chain project state before building unsigned XDR; non-owners get `401 UNAUTHORIZED` instead of a transaction the contract would reject after signing (closes #1092). See `docs/wallet-signing-threat-model.md`.
 
 ### Added
 - Release automation workflow for draft GitHub Releases on `v0.x.y` tag pushes.

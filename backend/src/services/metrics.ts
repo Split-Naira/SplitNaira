@@ -87,6 +87,62 @@ export function getInflightRequestCount(): number {
   return inflightRequests;
 }
 
+// ── Request payload size telemetry ─────────────────────────────────────────
+//
+// Issue #1090: record declared request body sizes (Content-Length) per
+// route group so operators can see which API surfaces send large payloads
+// and how close traffic runs to the 1 MB `express.json` limit. Labels are
+// route *groups* (see `resolveRouteGroup` in middleware/metrics.ts), not raw
+// paths, so cardinality stays bounded no matter what clients send.
+
+/** Upper bounds (bytes, inclusive) of the payload size histogram buckets. */
+export const PAYLOAD_SIZE_BUCKETS_BYTES = [256, 1024, 4096, 16384, 65536, 262144, 1048576] as const;
+
+interface PayloadSizeMetrics {
+  /** Cumulative counts: `buckets[i]` = requests with size <= PAYLOAD_SIZE_BUCKETS_BYTES[i]. */
+  buckets: number[];
+  sumBytes: number;
+  count: number;
+}
+
+const payloadSizesByGroup = new Map<string, PayloadSizeMetrics>();
+const payloadRejectionsByGroup = new Map<string, number>();
+
+export function recordRequestPayloadSize(routeGroup: string, bytes: number): void {
+  const current = payloadSizesByGroup.get(routeGroup) ?? {
+    buckets: PAYLOAD_SIZE_BUCKETS_BYTES.map(() => 0),
+    sumBytes: 0,
+    count: 0,
+  };
+  PAYLOAD_SIZE_BUCKETS_BYTES.forEach((upperBound, index) => {
+    if (bytes <= upperBound) current.buckets[index] += 1;
+  });
+  current.sumBytes += bytes;
+  current.count += 1;
+  payloadSizesByGroup.set(routeGroup, current);
+}
+
+/** Record a request rejected with 413 because its body exceeded the size limit. */
+export function recordRequestPayloadRejected(routeGroup: string): void {
+  payloadRejectionsByGroup.set(routeGroup, (payloadRejectionsByGroup.get(routeGroup) ?? 0) + 1);
+}
+
+export function getRequestPayloadSizeSnapshots(): Array<{ routeGroup: string } & PayloadSizeMetrics> {
+  return Array.from(payloadSizesByGroup.entries()).map(([routeGroup, metrics]) => ({
+    routeGroup,
+    buckets: [...metrics.buckets],
+    sumBytes: metrics.sumBytes,
+    count: metrics.count,
+  }));
+}
+
+export function getRequestPayloadRejectedSnapshots(): Array<{ routeGroup: string; count: number }> {
+  return Array.from(payloadRejectionsByGroup.entries()).map(([routeGroup, count]) => ({
+    routeGroup,
+    count,
+  }));
+}
+
 // ── Idempotency conflict counters ──────────────────────────────────────────
 //
 // Issue #1165: track the number of 409 conflicts triggered by the
@@ -100,6 +156,8 @@ export function resetRequestMetrics(): void {
   requestCounters.clear();
   requestDurations.clear();
   inflightRequests = 0;
+  payloadSizesByGroup.clear();
+  payloadRejectionsByGroup.clear();
 
   projectsCreatedTotal = 0;
   distributionsExecutedTotal = 0;
@@ -110,6 +168,7 @@ export function resetRequestMetrics(): void {
   rpcRetryAttemptsTotal = 0;
   rpcRetryDurationMsTotal = 0;
   rpcRetryMaxAttemptsReachedTotal = 0;
+  rpcRetryBudgetByKey.clear();
 
   idempotencyConflictsTotal = 0;
   idempotencyReplaysTotal = 0;
@@ -281,6 +340,58 @@ export function getRpcRetryMaxAttemptsReachedTotal(): number {
 
 export function getRpcRetryDurationMsTotal(): number {
   return rpcRetryDurationMsTotal;
+}
+
+/**
+ * Issue #1089: bounded retry budget accounting per `(operation, endpoint)`.
+ *
+ * Every `executeWithRetry` sequence has a retry budget (`maxRetries`, clamped
+ * to `RPC_RETRY_BUDGET_MAX_RETRIES`). For each finished sequence we record:
+ *   - `sequences`       : number of retry sequences (calls to executeWithRetry)
+ *   - `retriesAllowed`  : sum of the budgets those sequences were given
+ *   - `retriesUsed`     : sum of retries actually consumed (attempts - 1)
+ *   - `exhausted`       : sequences that spent the whole budget without
+ *                         success, whether the last attempt errored or timed out
+ *
+ * `retriesUsed / retriesAllowed` is the budget burn ratio: near 0 is healthy,
+ * a rising ratio means the RPC endpoint is degrading before calls start failing.
+ */
+interface RpcRetryBudgetMetrics {
+  sequences: number;
+  retriesAllowed: number;
+  retriesUsed: number;
+  exhausted: number;
+}
+
+const rpcRetryBudgetByKey = new Map<string, RpcRetryBudgetMetrics>();
+
+export function recordRpcRetryBudget(
+  operation: string,
+  endpoint: string,
+  retriesAllowed: number,
+  retriesUsed: number,
+  exhausted: boolean,
+): void {
+  const key = `${operation}||${endpoint || "rpc"}`;
+  const current = rpcRetryBudgetByKey.get(key) ?? {
+    sequences: 0,
+    retriesAllowed: 0,
+    retriesUsed: 0,
+    exhausted: 0,
+  };
+  rpcRetryBudgetByKey.set(key, {
+    sequences: current.sequences + 1,
+    retriesAllowed: current.retriesAllowed + retriesAllowed,
+    retriesUsed: current.retriesUsed + retriesUsed,
+    exhausted: current.exhausted + (exhausted ? 1 : 0),
+  });
+}
+
+export function getRpcRetryBudgetSnapshots(): Array<{ operation: string; endpoint: string } & RpcRetryBudgetMetrics> {
+  return Array.from(rpcRetryBudgetByKey.entries()).map(([key, metrics]) => {
+    const [operation, endpoint] = key.split("||");
+    return { operation, endpoint, ...metrics };
+  });
 }
 
 let projectsCreatedTotal = 0;

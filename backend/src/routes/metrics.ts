@@ -13,10 +13,15 @@ import {
   getRpcRetryDurationMsTotal,
   getRpcRetryMaxAttemptsReachedTotal,
   getRpcRetrySnapshots,
+  getRpcRetryBudgetSnapshots,
   getIdempotencyConflictsTotal,
   getIdempotencyReplaysTotal,
+  getRequestPayloadRejectedSnapshots,
+  getRequestPayloadSizeSnapshots,
+  PAYLOAD_SIZE_BUCKETS_BYTES,
 } from "../services/metrics.js";
 import { getLedgerLag } from "../services/EventListenerService.js";
+import { RPC_RETRY_BUDGET_MAX_RETRIES } from "../services/rpc-retry-budget.js";
 
 /**
  * Streaming / Raw Output Routes Note (Issue #524/Admin API response validation):
@@ -76,6 +81,25 @@ function formatPrometheusMetrics(): string {
     );
   }
 
+  // Issue #1090: request payload size telemetry by route group.
+  lines.push("# HELP splitnaira_http_request_payload_bytes Declared request body size (Content-Length) in bytes, by route group.");
+  lines.push("# TYPE splitnaira_http_request_payload_bytes histogram");
+  for (const { routeGroup, buckets, sumBytes, count } of getRequestPayloadSizeSnapshots()) {
+    const group = quoteLabelValue(routeGroup);
+    PAYLOAD_SIZE_BUCKETS_BYTES.forEach((upperBound, index) => {
+      lines.push(`splitnaira_http_request_payload_bytes_bucket{route_group=${group},le="${upperBound}"} ${buckets[index]}`);
+    });
+    lines.push(`splitnaira_http_request_payload_bytes_bucket{route_group=${group},le="+Inf"} ${count}`);
+    lines.push(`splitnaira_http_request_payload_bytes_sum{route_group=${group}} ${sumBytes}`);
+    lines.push(`splitnaira_http_request_payload_bytes_count{route_group=${group}} ${count}`);
+  }
+
+  lines.push("# HELP splitnaira_http_request_payload_rejected_total Requests rejected with 413 because the body exceeded the size limit, by route group.");
+  lines.push("# TYPE splitnaira_http_request_payload_rejected_total counter");
+  for (const { routeGroup, count } of getRequestPayloadRejectedSnapshots()) {
+    lines.push(`splitnaira_http_request_payload_rejected_total{route_group=${quoteLabelValue(routeGroup)}} ${count}`);
+  }
+
   lines.push("# HELP splitnaira_http_requests_inflight Number of in-flight HTTP requests.");
   lines.push("# TYPE splitnaira_http_requests_inflight gauge");
   lines.push(`splitnaira_http_requests_inflight ${getInflightRequestCount()}`);
@@ -119,6 +143,28 @@ lines.push(`sse_disconnects_total ${getSseDisconnectsTotal()}`);
     lines.push(
       `splitnaira_rpc_retry_outcomes_total{operation=${quoteLabelValue(operation)},outcome=${quoteLabelValue(outcome)},endpoint=${quoteLabelValue(endpoint)}} ${count}`,
     );
+  }
+
+  // Issue #1089: bounded retry budget series.
+  lines.push("# HELP splitnaira_rpc_retry_budget_max_retries Hard ceiling on retries per RPC call; larger caller requests are clamped to this.");
+  lines.push("# TYPE splitnaira_rpc_retry_budget_max_retries gauge");
+  lines.push(`splitnaira_rpc_retry_budget_max_retries ${RPC_RETRY_BUDGET_MAX_RETRIES}`);
+
+  const budgetSnapshots = getRpcRetryBudgetSnapshots();
+  const budgetSeries: Array<[name: string, help: string, pick: (s: (typeof budgetSnapshots)[number]) => number]> = [
+    ["splitnaira_rpc_retry_budget_sequences_total", "RPC retry sequences (executeWithRetry calls) completed, by operation and endpoint.", (s) => s.sequences],
+    ["splitnaira_rpc_retry_budget_allowed_total", "Sum of retry budgets granted to completed RPC retry sequences.", (s) => s.retriesAllowed],
+    ["splitnaira_rpc_retry_budget_used_total", "Sum of retries actually consumed by completed RPC retry sequences.", (s) => s.retriesUsed],
+    ["splitnaira_rpc_retry_budget_exhausted_total", "RPC retry sequences that spent their whole budget without success (error or timeout).", (s) => s.exhausted],
+  ];
+  for (const [name, help, pick] of budgetSeries) {
+    lines.push(`# HELP ${name} ${help}`);
+    lines.push(`# TYPE ${name} counter`);
+    for (const snapshot of budgetSnapshots) {
+      lines.push(
+        `${name}{operation=${quoteLabelValue(snapshot.operation)},endpoint=${quoteLabelValue(snapshot.endpoint)}} ${pick(snapshot)}`,
+      );
+    }
   }
 
   // Issue #1165: idempotency conflict/replay counters.
