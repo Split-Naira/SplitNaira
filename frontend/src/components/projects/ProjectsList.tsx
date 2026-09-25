@@ -341,10 +341,13 @@ export function ProjectsList({
 
                   {historyError && (
                     <div className="pl-10">
+                      <p className="text-[10px] uppercase tracking-widest text-amber-300">
+                        Some payout history is temporarily incomplete while the index catches up.
+                      </p>
                       <button
                         onClick={() => fetchedProject && fetchHistory(fetchedProject.projectId)}
                         disabled={isLoadingHistory}
-                        className="text-[10px] font-bold uppercase tracking-widest text-red-300 hover:text-red-200 disabled:opacity-50"
+                        className="mt-2 text-[10px] font-bold uppercase tracking-widest text-red-300 hover:text-red-200 disabled:opacity-50"
                       >
                         Retry History
                       </button>

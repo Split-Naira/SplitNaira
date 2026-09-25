@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { WalletContext, useWalletState } from "../hooks/useWallet";
 import { useNetworkGuard } from "../hooks/useNetworkGuard";
 import { useToast } from "./toast-provider";
@@ -20,6 +20,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const walletState = useWalletState();
   const guard = useNetworkGuard(walletState.wallet);
   const { toast } = useToast();
+  const wasConnectedRef = useRef(false);
 
   // Fire a sticky toast once when a mismatch is first detected
   useEffect(() => {
@@ -27,6 +28,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       toast(guard.message, "error", 0 /* sticky — user must dismiss */);
     }
   }, [guard.message, guard.mismatch, toast]);
+
+  useEffect(() => {
+    const disconnected = wasConnectedRef.current && !walletState.wallet.connected;
+    if (disconnected) {
+      toast("Wallet disconnected. Please reconnect to continue.", "warning", 0);
+    }
+    wasConnectedRef.current = walletState.wallet.connected;
+  }, [toast, walletState.wallet.connected]);
 
   return (
     <WalletContext.Provider
