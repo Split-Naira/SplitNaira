@@ -109,6 +109,7 @@ Distributes project balance to collaborators by basis points.
   - `distribution_round` increases once per successful distribution and never on failure.
   - `total_distributed` increases by the exact amount paid out.
   - Any rounding remainder is assigned to the final collaborator so the full project balance is consumed.
+  - The remainder is at most `n−1` stroops and goes to the last collaborator in *stored order*. Individual shares can round down to `0`. `claim` assigns no remainder and pays out from the current pooled balance. For the full rules, worked examples and off-chain guidance, see [docs/contract-distribution-remainder-accounting.md](../docs/contract-distribution-remainder-accounting.md).
 
 ### `withdraw_unallocated(admin, token, to, amount) -> Result<(), SplitError>`
 Admin-only recovery of tokens held by contract but not tracked in any project ledger.

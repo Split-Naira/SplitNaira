@@ -669,8 +669,10 @@ impl SplitNairaContract {
 /// - the final collaborator receives any integer-division remainder so
 ///   the full project balance is accounted for every round
 /// - Distribution is rejected if the project balance is smaller than the
-///   number of collaborators, ensuring each collaborator can receive at
-///   least one stroop.
+///   number of collaborators. This is a minimum balance only: a low-bps
+///   share can still round down to zero, in which case no transfer or
+///   `payment_sent` event is emitted for that collaborator. See
+///   docs/contract-distribution-remainder-accounting.md.
     ///
     /// Anyone can call distribute Ã¢â‚¬â€ the math is trustless.
     ///
