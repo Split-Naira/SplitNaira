@@ -64,6 +64,7 @@ Use this checklist for any change that can affect the contract interface artifac
 - [ ] If testnet deploy is part of release: run smoke flow (`scripts/smoke-testnet.mjs`) and capture evidence.
 
 ## 9) PR review checklist
+- [ ] Reviewer compared the interface JSON diff against the worked examples in [Contract Interface Diff Examples](./contract-interface-diff-examples.md).
 - [ ] PR description states whether the change is breaking or non-breaking.
 - [ ] PR description includes generated file diffs and why they changed.
 - [ ] PR description includes commands used for validation.

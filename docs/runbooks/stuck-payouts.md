@@ -172,7 +172,9 @@ soroban contract invoke \
   pause_distributions \
   --admin <ADMIN_ADDRESS>
 ```
-Once paused, all `distribute` calls will revert on-chain with `SplitError::DistributionsPaused` (code 16). Deposits and read queries remain active.
+Once paused, all `distribute`, `batch_distribute`, and `claim` calls will revert on-chain with `SplitError::DistributionsPaused` (code 16). Deposits and read queries remain active.
+
+> **Fully distributed projects:** `claim` returns `DistributionsPaused` during a pause even when the project balance is already 0 and even for non-collaborators. The pause check runs before the balance and membership checks. After unpause, the same call returns `0` and moves no funds. Deposits made during the pause become claimable only after unpause. Payout history (`get_claimed`, `get_claimable`, `get_balance`) stays readable throughout. Tests covering this behavior are in `contracts/pause_claim_tests.rs`.
 
 ### Safe Re-Activation Protocol
 

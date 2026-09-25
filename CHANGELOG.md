@@ -7,6 +7,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 This fix addreesses GitHub Issue #292 (Security: Cross-Site Scripting (XSS) in Split Description Field) by implementing comprehensive XSS prevention across the entire application using a 3-layer defense strategy. -->
 
 ## [Unreleased]
+### Documentation
+- Added `docs/contract-interface-diff-examples.md`, which gives reviewers worked breaking/non-breaking examples for `splitnaira.contract-interface.json` diffs. It is linked from the interface release checklist.
+- `docs/runbooks/stuck-payouts.md` now documents that `claim` is blocked by `pause_distributions`, including for fully distributed projects.
+
+### Tests
+- Added `contracts/pause_claim_tests.rs`: claim-path coverage for fully distributed projects after an admin pause, before and after unpause, with deposits made during the pause, and with a re-pause after a partial claim.
+
 <!-- 
 This fix addresses GitHub Issue #292 (Security: Cross-Site Scripting (XSS) in Split Description Field) by implementing comprehensive XSS prevention across the entire application using a 3-layer defense strategy. -->
 ### Security
