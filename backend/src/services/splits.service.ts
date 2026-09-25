@@ -648,6 +648,11 @@ export interface WithdrawUnallocatedRequest {
 }
 
 export async function buildWithdrawUnallocatedUnsignedXdr(input: WithdrawUnallocatedRequest) {
+  // Parse before any RPC call so malformed addresses fail fast as 400s.
+  const adminAddress = parseStellarAddress(input.admin, "admin address");
+  const tokenAddress = parseStellarAddress(input.token, "token address");
+  const toAddress = parseStellarAddress(input.to, "destination address");
+
   const config = loadStellarConfig();
   const server = getStellarRpcServer();
 
@@ -657,10 +662,6 @@ export async function buildWithdrawUnallocatedUnsignedXdr(input: WithdrawUnalloc
   } catch {
     throw new RequestValidationError("admin account not found on selected network");
   }
-
-  const adminAddress = Address.fromString(input.admin);
-  const tokenAddress = Address.fromString(input.token);
-  const toAddress = Address.fromString(input.to);
 
   const contract = new Contract(config.contractId);
   const tx = new TransactionBuilder(sourceAccount, {

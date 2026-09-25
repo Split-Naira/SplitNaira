@@ -34,8 +34,11 @@ This fix addresses GitHub Issue #292 (Security: Cross-Site Scripting (XSS) in Sp
 - Security test suite (`backend/src/__tests__/security-xss.test.ts`) with comprehensive XSS vector testing
 - Frontend security tests (`frontend/src/lib/security.test.ts`) for escaping validation
 - Security documentation (`docs/SECURITY_XSS_FIXES.md`) with implementation details and best practices
+- Test coverage for failed token address parsing across all admin token routes and service builders (`backend/src/__tests__/admin-token-parsing.test.ts`).
+- Distribution remainder accounting documentation (`docs/contract-distribution-remainder-accounting.md`): remainder rule, invariants, zero-share and `claim` edge cases, off-chain preview guidance.
 
 ### Fixed
+- `buildWithdrawUnallocatedUnsignedXdr` now validates `admin`/`token`/`to` addresses before any RPC call and raises `RequestValidationError` instead of a generic error.
 - Backend: SSE routes return `503 shutting_down` for new streams once shutdown starts, so late subscribers can no longer hold the process open until the force-exit timer (#1094).
 - Backend: `withTransaction()` always releases its connection (even when `startTransaction()` fails), keeps the caller's error when rollback fails, and no longer throws on release failure after a commit (#1091).
 - Docs: the idempotency retry guide now shows the actual `200` responses and the `IDEMPOTENCY_KEY_CONFLICT` 409 envelope (#1093).
