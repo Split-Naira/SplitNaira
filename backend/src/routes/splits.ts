@@ -532,6 +532,15 @@ splitsRouter.post("/:projectId/distribute", async (req: Request, res: Response, 
     const sourceAddress = parsedBody.data.sourceAddress || config.simulatorAccount;
 
     try {
+      const pausedRetval = await simulateReadOnlyContractCall("is_distributions_paused");
+      const isPaused = pausedRetval ? Boolean(scValToNative(pausedRetval)) : false;
+      if (isPaused) {
+        return res.status(409).json({
+          error: "distributions_paused",
+          message: "Distributions are paused by the contract admin. Please try again after unpause."
+        });
+      }
+
       const result = await buildUnsignedContractCall({
         sourceAddress,
         sourceRoleLabel: "source",
