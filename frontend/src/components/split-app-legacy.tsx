@@ -45,6 +45,7 @@ import {
 } from "@/lib/stellar";
 import { useWallet } from "@/hooks/useWallet";
 import { notify } from "@/lib/notification";
+import { trackSplitLifecycle } from "@/lib/telemetry";
 import { SummaryCardSkeleton } from "./Skeleton";
 import { TokenSelector } from "./TypeSelector";
 import {
@@ -446,6 +447,7 @@ export function SplitApp({
       projectType: nextProjectType,
     });
     setIsEditingMetadata(false);
+    const telemetry = trackSplitLifecycle("update_metadata", { projectId });
     try {
       const buildResponse = await buildUpdateMetadataXdr(
         projectId,
@@ -462,8 +464,11 @@ export function SplitApp({
       const submitResponse = await server.sendTransaction(transaction);
       if (submitResponse.status === "ERROR")
         throw new Error(submitResponse.errorResult?.toString() ?? "Transaction failed.");
+      telemetry.submitted(submitResponse.hash);
+      telemetry.succeeded();
       notify.success("Project metadata updated successfully.");
     } catch (error) {
+      telemetry.failed(error);
       patchProjectInAllViews(projectId, previousSnapshot);
       setIsEditingMetadata(true);
       notify.error(error instanceof Error ? error.message : "Failed to update metadata.");
@@ -480,6 +485,10 @@ export function SplitApp({
       return;
     }
     setIsUpdatingCollaborators(true);
+    const telemetry = trackSplitLifecycle("update_collaborators", {
+      projectId: fetchedProject.projectId,
+      props: { collaboratorCount: editCollaborators.length },
+    });
     try {
       const buildResponse = await buildUpdateCollaboratorsXdr(
         fetchedProject.projectId,
@@ -499,10 +508,13 @@ export function SplitApp({
       const submitResponse = await server.sendTransaction(transaction);
       if (submitResponse.status === "ERROR")
         throw new Error(submitResponse.errorResult?.toString() ?? "Transaction failed.");
+      telemetry.submitted(submitResponse.hash);
+      telemetry.succeeded();
       notify.success("Collaborators updated successfully.");
       setIsEditingCollaborators(false);
       await onFetchProject();
     } catch (error) {
+      telemetry.failed(error);
       notify.error(
         error instanceof Error ? error.message : "Failed to update collaborators.",
       );
@@ -568,6 +580,10 @@ export function SplitApp({
     });
     setTxHash(null);
     setReceipt(null);
+    const telemetry = trackSplitLifecycle("create", {
+      projectId: data.projectId.trim(),
+      props: { collaboratorCount: collaboratorPayload.length },
+    });
     try {
       const buildResponse = await buildCreateSplitXdr({
         owner: wallet.address,
@@ -586,6 +602,7 @@ export function SplitApp({
 
       await submitSorobanTransactionAndPoll(server, transaction, {
         afterSubmitted: (hash) => {
+          telemetry.submitted(hash);
           setTxHash(hash);
           setReceipt({
             hash,
@@ -597,6 +614,7 @@ export function SplitApp({
         },
       });
 
+      telemetry.succeeded();
       setReceipt((prev) =>
         prev?.action === "create" && prev.hash ? { ...prev, lifecycle: "success" } : prev,
       );
@@ -612,6 +630,7 @@ export function SplitApp({
         setCreateStep(4);
       }
     } catch (error) {
+      telemetry.failed(error);
       const message =
         error instanceof Error ? error.message : "Failed to create split project.";
       const isRetryable = /offline|network|fetch|timeout|temporar/i.test(message);
@@ -668,6 +687,10 @@ export function SplitApp({
     if (!fetchedProject || !wallet.address) return;
     setIsSubmitting(true);
     setShowDistributeModal(false);
+    const telemetry = trackSplitLifecycle("distribute", {
+      projectId: fetchedProject.projectId,
+      props: { round: fetchedProject.distributionRound + 1 },
+    });
     try {
       const { xdr, metadata } = await buildDistributeXdr(fetchedProject.projectId, wallet.address);
       const signedTxXdr = await signWithWallet(xdr, metadata.networkPassphrase);
@@ -676,6 +699,7 @@ export function SplitApp({
 
       await submitSorobanTransactionAndPoll(server, transaction, {
         afterSubmitted: (hash) => {
+          telemetry.submitted(hash);
           setTxHash(hash);
           setReceipt({
             hash,
@@ -687,12 +711,14 @@ export function SplitApp({
         },
       });
 
+      telemetry.succeeded();
       setReceipt((prev) =>
         prev?.action === "distribute" && prev.hash ? { ...prev, lifecycle: "success" } : prev,
       );
       notify.success("Distribution completed successfully.");
       await onFetchProject();
     } catch (error) {
+      telemetry.failed(error);
       const message = error instanceof Error ? error.message : "Distribution failed.";
       setReceipt((prev) =>
         prev?.lifecycle === "confirming" && prev.action === "distribute"
@@ -717,6 +743,7 @@ export function SplitApp({
   const onLockProject = async () => {
     if (!fetchedProject || !wallet.address) return;
     setIsLocking(true);
+    const telemetry = trackSplitLifecycle("lock", { projectId: fetchedProject.projectId });
     try {
       const { xdr, metadata } = await buildLockProjectXdr(fetchedProject.projectId, wallet.address);
       const signedTxXdr = await signWithWallet(xdr, metadata.networkPassphrase);
@@ -725,6 +752,7 @@ export function SplitApp({
 
       await submitSorobanTransactionAndPoll(server, transaction, {
         afterSubmitted: (hash) => {
+          telemetry.submitted(hash);
           setTxHash(hash);
           setReceipt({
             hash,
@@ -735,6 +763,7 @@ export function SplitApp({
         },
       });
 
+      telemetry.succeeded();
       setReceipt((prev) =>
         prev?.action === "lock" && prev.hash ? { ...prev, lifecycle: "success" } : prev,
       );
@@ -742,6 +771,7 @@ export function SplitApp({
       setShowLockModal(false);
       notify.success("Project locked permanently.");
     } catch (error) {
+      telemetry.failed(error);
       const message = error instanceof Error ? error.message : "Failed to lock project.";
       setReceipt((prev) =>
         prev?.lifecycle === "confirming" && prev.action === "lock"
@@ -757,6 +787,7 @@ export function SplitApp({
   const onDeposit = async () => {
     if (!fetchedProject || !wallet.address || !depositAmount) return;
     setIsDepositing(true);
+    const telemetry = trackSplitLifecycle("deposit", { projectId: fetchedProject.projectId });
     try {
       const amountInStroops = Math.floor(Number.parseFloat(depositAmount) * 10_000_000);
       const { xdr, metadata } = await buildDepositXdr(
@@ -770,6 +801,7 @@ export function SplitApp({
 
       await submitSorobanTransactionAndPoll(server, transaction, {
         afterSubmitted: (hash) => {
+          telemetry.submitted(hash);
           setTxHash(hash);
           setReceipt({
             hash,
@@ -781,6 +813,7 @@ export function SplitApp({
         },
       });
 
+      telemetry.succeeded();
       setReceipt((prev) =>
         prev?.action === "deposit" && prev.hash ? { ...prev, lifecycle: "success" } : prev,
       );
@@ -789,6 +822,7 @@ export function SplitApp({
       notify.success("Deposit successful!");
       await onFetchProject();
     } catch (error) {
+      telemetry.failed(error);
       const message = error instanceof Error ? error.message : "Deposit failed.";
       setReceipt((prev) =>
         prev?.lifecycle === "confirming" && prev.action === "deposit"

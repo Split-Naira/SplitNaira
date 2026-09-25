@@ -47,6 +47,7 @@ mod ttl_renewal_tests;
 #[cfg(test)]
 mod cost_benchmark_tests;
 #[cfg(test)]
+mod deposit_property_tests;
 mod pause_claim_tests;
 
 use errors::SplitError;

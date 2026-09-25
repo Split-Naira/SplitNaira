@@ -34,6 +34,8 @@ This fix addresses GitHub Issue #292 (Security: Cross-Site Scripting (XSS) in Sp
 - Security test suite (`backend/src/__tests__/security-xss.test.ts`) with comprehensive XSS vector testing
 - Frontend security tests (`frontend/src/lib/security.test.ts`) for escaping validation
 - Security documentation (`docs/SECURITY_XSS_FIXES.md`) with implementation details and best practices
+- Frontend telemetry events (`split.<action>.<stage>`) for create, deposit, distribute, lock, update_metadata and update_collaborators, recorded as Sentry breadcrumbs with a pluggable sink API (`frontend/src/lib/telemetry.ts`). See `frontend/RELIABILITY.md` §4a.
+- Seeded property tests for repeated deposits before distribution (`contracts/deposit_property_tests.rs`). See `contracts/RELIABILITY.md`.
 - Test coverage for failed token address parsing across all admin token routes and service builders (`backend/src/__tests__/admin-token-parsing.test.ts`).
 - Distribution remainder accounting documentation (`docs/contract-distribution-remainder-accounting.md`): remainder rule, invariants, zero-share and `claim` edge cases, off-chain preview guidance.
 
