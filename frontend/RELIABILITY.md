@@ -68,6 +68,25 @@ User actions in `useWallet` hook (`connect` / `refresh` methods) log failed init
 
 ---
 
+## 4a. Split Lifecycle Telemetry
+
+The primary split actions emit structured lifecycle events through `frontend/src/lib/telemetry.ts`. The instrumented actions are `create`, `deposit`, `distribute`, `lock`, `update_metadata` and `update_collaborators`.
+
+| Stage | When |
+| --- | --- |
+| `started` | The user starts the action (before the XDR is built) |
+| `submitted` | The RPC accepts the signed transaction and returns its hash |
+| `succeeded` | The ledger confirms the transaction (terminal) |
+| `failed` | Any step throws (terminal) and includes `errorKind`: `user_rejected`, `timeout`, `network`, `contract` or `unknown` |
+
+*   **Event names** follow `split.<action>.<stage>`, for example `split.deposit.failed`. Each event includes `projectId`, `durationMs` (time since `started`), `txHash` once one is known, and a few non-PII props such as `collaboratorCount` and `round`.
+*   **Transport:** every event is recorded as a Sentry breadcrumb (category `split.lifecycle`). This means any error report shows the lifecycle steps that led to it. Other analytics tools can subscribe with `registerTelemetrySink(fn)`.
+*   **Privacy:** events never include wallet addresses. Failure messages pass through the same `[GC][A-Z2-7]{55}` redaction and are cut to 300 characters.
+*   **Safety:** a failure in Sentry or in a sink is caught and ignored, so telemetry never interrupts a user action. Each tracker sends at most one terminal event.
+*   **Tests:** `frontend/src/__tests__/telemetry.test.ts`.
+
+---
+
 ## 5. Deployment-Safe & Rollback Guidelines
 
 ### Pre-Deployment Verification Checklist

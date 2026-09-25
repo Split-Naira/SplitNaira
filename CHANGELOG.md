@@ -27,6 +27,8 @@ This fix addresses GitHub Issue #292 (Security: Cross-Site Scripting (XSS) in Sp
 - Security test suite (`backend/src/__tests__/security-xss.test.ts`) with comprehensive XSS vector testing
 - Frontend security tests (`frontend/src/lib/security.test.ts`) for escaping validation
 - Security documentation (`docs/SECURITY_XSS_FIXES.md`) with implementation details and best practices
+- Frontend telemetry events (`split.<action>.<stage>`) for create, deposit, distribute, lock, update_metadata and update_collaborators, recorded as Sentry breadcrumbs with a pluggable sink API (`frontend/src/lib/telemetry.ts`). See `frontend/RELIABILITY.md` §4a.
+- Seeded property tests for repeated deposits before distribution (`contracts/deposit_property_tests.rs`). See `contracts/RELIABILITY.md`.
 
 ### Fixed
 - Backend: SSE routes return `503 shutting_down` for new streams once shutdown starts, so late subscribers can no longer hold the process open until the force-exit timer (#1094).

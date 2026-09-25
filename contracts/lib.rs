@@ -46,6 +46,8 @@ mod address_validation_tests;
 mod ttl_renewal_tests;
 #[cfg(test)]
 mod cost_benchmark_tests;
+#[cfg(test)]
+mod deposit_property_tests;
 
 use errors::SplitError;
 
