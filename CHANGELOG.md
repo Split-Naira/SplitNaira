@@ -36,8 +36,11 @@ This fix addresses GitHub Issue #292 (Security: Cross-Site Scripting (XSS) in Sp
 - Security documentation (`docs/SECURITY_XSS_FIXES.md`) with implementation details and best practices
 - Frontend telemetry events (`split.<action>.<stage>`) for create, deposit, distribute, lock, update_metadata and update_collaborators, recorded as Sentry breadcrumbs with a pluggable sink API (`frontend/src/lib/telemetry.ts`). See `frontend/RELIABILITY.md` §4a.
 - Seeded property tests for repeated deposits before distribution (`contracts/deposit_property_tests.rs`). See `contracts/RELIABILITY.md`.
+- Test coverage for failed token address parsing across all admin token routes and service builders (`backend/src/__tests__/admin-token-parsing.test.ts`).
+- Distribution remainder accounting documentation (`docs/contract-distribution-remainder-accounting.md`): remainder rule, invariants, zero-share and `claim` edge cases, off-chain preview guidance.
 
 ### Fixed
+- `buildWithdrawUnallocatedUnsignedXdr` now validates `admin`/`token`/`to` addresses before any RPC call and raises `RequestValidationError` instead of a generic error.
 - Backend: SSE routes return `503 shutting_down` for new streams once shutdown starts, so late subscribers can no longer hold the process open until the force-exit timer (#1094).
 - Backend: `withTransaction()` always releases its connection (even when `startTransaction()` fails), keeps the caller's error when rollback fails, and no longer throws on release failure after a commit (#1091).
 - Docs: the idempotency retry guide now shows the actual `200` responses and the `IDEMPOTENCY_KEY_CONFLICT` 409 envelope (#1093).
