@@ -38,6 +38,7 @@ import {
 import {
   transactionHistoryQuerySchema,
   transactionRecordSchema,
+  transactionReceiptSchema,
   transactionHistoryResponseSchema,
 } from "./schemas/transactions.schemas.js";
 
@@ -1150,6 +1151,22 @@ registry.registerPath({
     200: {
       description: "Transaction record",
       content: { "application/json": { schema: transactionRecordSchema } },
+    },
+    ...standardErrorResponses({ badRequest: true, notFound: true, serverError: true }),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/transactions/receipt/{txHash}",
+  summary: "Generate a transaction receipt",
+  description: "Returns receipt fields from the indexed payout and configured Stellar network.",
+  tags: ["Transactions"],
+  request: { params: z.object({ txHash: z.string().regex(/^[a-fA-F0-9]{64}$/) }) },
+  responses: {
+    200: {
+      description: "Transaction receipt",
+      content: { "application/json": { schema: transactionReceiptSchema } },
     },
     ...standardErrorResponses({ badRequest: true, notFound: true, serverError: true }),
   },

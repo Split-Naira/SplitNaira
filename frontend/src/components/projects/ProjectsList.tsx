@@ -330,6 +330,14 @@ export function ProjectsList({
                           >
                             Verify on {getExplorerLabel(wallet.network)} →
                           </a>
+                          {item.type === "payment" && /^[a-fA-F0-9]{64}$/.test(item.txHash) && (
+                            <a
+                              href={`/receipts/${item.txHash}`}
+                              className="ml-3 text-[9px] font-bold text-greenBright underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-greenBright"
+                            >
+                              View receipt
+                            </a>
+                          )}
                         </div>
                       </div>
                     ))
