@@ -1,0 +1,27 @@
+{
+  "bundles": [
+    {
+      "name": "main",
+      "maxSizeKB": 350,
+      "description": "Main app bundle (largest page component set)"
+    },
+    {
+      "name": "vendor",
+      "maxSizeKB": 500,
+      "description": "Third-party library chunks"
+    },
+    {
+      "name": "page-split",
+      "maxSizeKB": 150,
+      "description": "Split management page and components"
+    },
+    {
+      "name": "page-dashboard",
+      "maxSizeKB": 120,
+      "description": "Dashboard view and dependencies"
+    }
+  ],
+  "reportFormat": "github",
+  "failOnWarning": false,
+  "checkInteractiveOptimization": true
+}
