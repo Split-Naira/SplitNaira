@@ -24,6 +24,17 @@ export const transactionRecordSchema = z.object({
   status: z.enum(["pending", "completed", "failed"]),
 });
 
+export const transactionReceiptSchema = z.object({
+  reference: z.string(),
+  amount: z.string(),
+  token: z.string(),
+  date: z.iso.datetime(),
+  network: z.string(),
+  status: z.enum(["pending", "completed", "failed"]),
+  recipient: z.string(),
+  projectId: z.string(),
+});
+
 // Transaction history response schema
 export const transactionHistoryResponseSchema = z.object({
   transactions: z.array(transactionRecordSchema),

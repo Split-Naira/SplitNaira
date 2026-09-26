@@ -3,6 +3,7 @@ import { transactionHistoryQuerySchema } from "../schemas/transactions.schemas.j
 import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
 import { createPayoutHistoryService } from "../services/PayoutHistoryService.js";
 import { logger } from "../services/logger.js";
+import { getEnv } from "../config/env.js";
 
 export const transactionsRouter = Router();
 
@@ -54,6 +55,35 @@ transactionsRouter.get("/history", async (req: Request, res: Response, next: Nex
       total,
       limit,
       offset
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/** A receipt is generated on demand from the indexed transaction, never from request-supplied fields. */
+transactionsRouter.get("/receipt/:txHash", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const txHashParam = req.params.txHash;
+    const txHash = Array.isArray(txHashParam) ? txHashParam[0] : txHashParam;
+    if (!txHash || !/^[a-fA-F0-9]{64}$/.test(txHash)) {
+      throw new AppError(ErrorType.VALIDATION, ErrorCode.VALIDATION_ERROR, "Invalid transaction hash.");
+    }
+
+    const transaction = await payoutHistoryService.getPayoutByTxHash(txHash);
+    if (!transaction) {
+      throw new AppError(ErrorType.RPC, ErrorCode.NOT_FOUND, "Transaction not found.");
+    }
+
+    return res.status(200).json({
+      reference: transaction.txHash,
+      amount: transaction.amount,
+      token: transaction.token,
+      date: new Date(transaction.timestamp * 1000).toISOString(),
+      network: getEnv().SOROBAN_NETWORK_PASSPHRASE,
+      status: transaction.status,
+      recipient: transaction.recipient,
+      projectId: transaction.roundId,
     });
   } catch (error) {
     return next(error);

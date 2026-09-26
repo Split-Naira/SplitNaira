@@ -22,6 +22,7 @@ export interface PayoutHistoryIndex {
   getPayouts(filters?: PayoutFilters): Promise<PayoutRecord[]>;
   getPayoutsWithCount(filters?: PayoutFilters): Promise<{ records: PayoutRecord[]; total: number }>;
   getPayoutById(id: string): Promise<PayoutRecord | null>;
+  getPayoutByTxHash(txHash: string): Promise<PayoutRecord | null>;
   getPayoutsByRound(roundId: string): Promise<PayoutRecord[]>;
   getPayoutsByRecipient(recipient: string): Promise<PayoutRecord[]>;
   searchPayouts(query: string): Promise<PayoutRecord[]>;
@@ -120,6 +121,11 @@ export function createPayoutHistoryService(_config?: Partial<PayoutIndexConfig>)
         logger.error("Error fetching payout by ID", { id, error });
         return null;
       }
+    },
+
+    async getPayoutByTxHash(txHash) {
+      const repo = getDataSource().getRepository(TransactionRecord);
+      return repo.findOneBy({ txHash });
     },
 
     async getPayoutsByRound(roundId) {

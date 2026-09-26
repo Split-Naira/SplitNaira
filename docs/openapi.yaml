@@ -2943,6 +2943,84 @@ paths:
                 error: INTERNAL_ERROR
                 message: An unexpected error occurred. Please try again later.
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
+  /transactions/receipt/{txHash}:
+    get:
+      summary: Generate a transaction receipt
+      description: Returns receipt fields from the indexed payout and configured
+        Stellar network.
+      tags:
+        - Transactions
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[a-fA-F0-9]{64}$
+          required: true
+          name: txHash
+          in: path
+      responses:
+        "200":
+          description: Transaction receipt
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reference:
+                    type: string
+                  amount:
+                    type: string
+                  token:
+                    type: string
+                  date:
+                    type: string
+                    format: date-time
+                  network:
+                    type: string
+                  status:
+                    type: string
+                    enum:
+                      - pending
+                      - completed
+                      - failed
+                  recipient:
+                    type: string
+                  projectId:
+                    type: string
+                required:
+                  - reference
+                  - amount
+                  - token
+                  - date
+                  - network
+                  - status
+                  - recipient
+                  - projectId
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                error: NOT_FOUND
+                message: Project afrobeats_001 does not exist.
+                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                error: INTERNAL_ERROR
+                message: An unexpected error occurred. Please try again later.
+                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
   /transactions/recipient/{walletAddress}:
     get:
       summary: List transactions for a recipient

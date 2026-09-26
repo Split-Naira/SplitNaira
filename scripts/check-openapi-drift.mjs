@@ -156,7 +156,9 @@ function main() {
   const tempYamlCanonical = canonicalJson(yaml.parse(tempYamlRaw));
   const committedYamlCanonical = canonicalJson(yaml.parse(committedYamlRaw));
 
-  const tempJsonCanonical = readFileSync(TEMP_JSON, "utf-8");
+  const tempJsonCanonical = canonicalJson(
+    JSON.parse(readFileSync(TEMP_JSON, "utf-8")),
+  );
   const committedJsonCanonical = canonicalJson(
     JSON.parse(readFileSync(COMMITTED_JSON, "utf-8")),
   );

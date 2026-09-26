@@ -144,6 +144,51 @@ describe("Transaction History API", () => {
     });
   });
 
+  describe("GET /transactions/receipt/:txHash", () => {
+    const hash = "a".repeat(64);
+
+    it("builds receipt fields from the saved payout and configured network", async () => {
+      mockFindOneBy.mockResolvedValueOnce({
+        ...mockTransactionRecords[0],
+        txHash: hash,
+        timestamp: 1_700_000_000,
+      });
+
+      const response = await request(app).get(`/transactions/receipt/${hash}`);
+
+      expect(response.status).toBe(200);
+      expect(mockFindOneBy).toHaveBeenCalledWith({ txHash: hash });
+      expect(response.body).toEqual({
+        reference: hash,
+        amount: "1000",
+        token: "CAS3...",
+        date: "2023-11-14T22:13:20.000Z",
+        network: process.env.SOROBAN_NETWORK_PASSPHRASE,
+        status: "completed",
+        recipient: mockTransactionRecords[0].recipient,
+        projectId: "round-1",
+      });
+    });
+
+    it("rejects malformed hashes without querying the database", async () => {
+      const before = mockFindOneBy.mock.calls.length;
+      const response = await request(app).get("/transactions/receipt/not-a-hash");
+      expect(response.status).toBe(400);
+      expect(mockFindOneBy.mock.calls.length).toBe(before);
+    });
+
+    it("returns 404 for an unknown payout", async () => {
+      const response = await request(app).get(`/transactions/receipt/${hash}`);
+      expect(response.status).toBe(404);
+    });
+
+    it("does not issue a receipt when the transaction store is unavailable", async () => {
+      mockFindOneBy.mockRejectedValueOnce(new Error("database unavailable"));
+      const response = await request(app).get(`/transactions/receipt/${hash}`);
+      expect(response.status).toBe(500);
+    });
+  });
+
   describe("GET /transactions/recipient/:walletAddress", () => {
     it("should return transactions for valid wallet address", async () => {
       const walletAddress = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";

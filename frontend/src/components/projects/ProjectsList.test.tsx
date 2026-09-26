@@ -206,3 +206,16 @@ describe("ProjectsList search and filtering", () => {
     }
   });
 });
+
+describe("ProjectsList payout receipts", () => {
+  it("links a payout to its receipt, but not a distribution round", () => {
+    const hash = "a".repeat(64);
+    const history = [
+      { id: "payment-1", type: "payment" as const, round: 1, amount: "100", recipient: "GRECIPIENT", ledgerCloseTime: 1_700_000_000, txHash: hash },
+      { id: "round-1", type: "round" as const, round: 1, amount: "100", recipient: "", ledgerCloseTime: 1_700_000_000, txHash: "b".repeat(64) },
+    ];
+    render(<ProjectsList {...baseProps({ selectedProjectId: "P1", fetchedProject: buildProject(), history })} />);
+
+    expect(screen.getByRole("link", { name: "View receipt" })).toHaveAttribute("href", `/receipts/${hash}`);
+  });
+});

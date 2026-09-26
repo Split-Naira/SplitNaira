@@ -3815,6 +3815,120 @@
         ]
       }
     },
+    "/transactions/receipt/{txHash}": {
+      "get": {
+        "description": "Returns receipt fields from the indexed payout and configured Stellar network.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "txHash",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-fA-F0-9]{64}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "amount": {
+                      "type": "string"
+                    },
+                    "date": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "network": {
+                      "type": "string"
+                    },
+                    "projectId": {
+                      "type": "string"
+                    },
+                    "recipient": {
+                      "type": "string"
+                    },
+                    "reference": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "enum": [
+                        "pending",
+                        "completed",
+                        "failed"
+                      ],
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "reference",
+                    "amount",
+                    "token",
+                    "date",
+                    "network",
+                    "status",
+                    "recipient",
+                    "projectId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Transaction receipt"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "NOT_FOUND",
+                  "message": "Project afrobeats_001 does not exist.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Generate a transaction receipt",
+        "tags": [
+          "Transactions"
+        ]
+      }
+    },
     "/transactions/recipient/{walletAddress}": {
       "get": {
         "description": "Returns all payout records sent to the given Stellar wallet address.",
