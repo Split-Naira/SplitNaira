@@ -73,6 +73,9 @@ export function CreateSplitWizard({
   setFetchedProject,
 }: CreateSplitWizardProps) {
   const t = useTranslations("SplitApp.wizard.validation");
+  const isDuplicateProjectId = Boolean(
+    createRetryError && /project id .*already exists/i.test(createRetryError),
+  );
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="glass-card rounded-[2.5rem] p-8 md:p-10 space-y-12">
@@ -340,16 +343,22 @@ export function CreateSplitWizard({
       <div className="mt-12 pt-12 border-t border-white/5">
         {createRetryError && (
           <div role="status" className="mb-6 rounded-2xl border border-orange-400/40 bg-orange-500/10 p-4 text-sm">
-            <p className="font-semibold text-orange-200">Submission interrupted. Retry when your network is stable.</p>
+            <p className="font-semibold text-orange-200">
+              {isDuplicateProjectId
+                ? "Project ID already in use."
+                : "Submission interrupted. Retry when your network is stable."}
+            </p>
             <p className="mt-1 text-orange-100/90">{createRetryError}</p>
-            <button
-              type="button"
-              onClick={onRetryCreateSubmission}
-              disabled={isSubmitting || sorobanSplitFlowBusy}
-              className="mt-3 rounded-xl border border-orange-300/40 bg-orange-400/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-orange-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Retry Submission
-            </button>
+            {!isDuplicateProjectId && (
+              <button
+                type="button"
+                onClick={onRetryCreateSubmission}
+                disabled={isSubmitting || sorobanSplitFlowBusy}
+                className="mt-3 rounded-xl border border-orange-300/40 bg-orange-400/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-orange-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Retry Submission
+              </button>
+            )}
           </div>
         )}
         <button
