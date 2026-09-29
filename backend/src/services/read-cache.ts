@@ -81,13 +81,18 @@ export class ReadCache {
       return existing;
     }
 
-    const promise = fetcher()
+    let promise: Promise<T>;
+    promise = fetcher()
       .then((value) => {
-        this.set(key, value);
+        if (this.inflight.get(key) === promise) {
+          this.set(key, value);
+        }
         return value;
       })
       .finally(() => {
-        this.inflight.delete(key);
+        if (this.inflight.get(key) === promise) {
+          this.inflight.delete(key);
+        }
       });
 
     this.inflight.set(key, promise);
@@ -103,7 +108,9 @@ export class ReadCache {
   }
 
   delete(key: string): boolean {
-    return this.store.delete(key);
+    const deleted = this.store.delete(key);
+    this.inflight.delete(key);
+    return deleted;
   }
 
   deleteByPrefix(prefix: string): number {
@@ -112,6 +119,11 @@ export class ReadCache {
       if (key.startsWith(prefix)) {
         this.store.delete(key);
         removed++;
+      }
+    }
+    for (const key of this.inflight.keys()) {
+      if (key.startsWith(prefix)) {
+        this.inflight.delete(key);
       }
     }
     return removed;
@@ -124,7 +136,12 @@ export class ReadCache {
 
   stats(): ReadCacheStats {
     this.purgeExpired();
-    return { size: this.store.size, keys: Array.from(this.store.keys()), hits: this.hits, misses: this.misses };
+    return {
+      size: this.store.size,
+      keys: Array.from(this.store.keys()),
+      hits: this.hits,
+      misses: this.misses,
+    };
   }
 
   private purgeExpired(): void {

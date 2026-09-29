@@ -207,6 +207,46 @@ describe("ProjectsList search and filtering", () => {
   });
 });
 
+describe("ProjectsList paused distribution badges", () => {
+  it("marks every listed project as paused when the contract admin has paused distributions", () => {
+    const projectsList = [
+      buildProject({ projectId: "P1", title: "Alpha Rocket" }),
+      buildProject({ projectId: "P2", title: "Beta Launch" }),
+    ];
+    render(
+      <ProjectsList
+        {...baseProps({
+          projectsList,
+          adminStatus: { admin: null, isPaused: true },
+        })}
+      />,
+    );
+
+    expect(screen.getAllByTestId("project-card-paused-badge")).toHaveLength(2);
+  });
+
+  it("shows no paused badge while the admin status is unknown", () => {
+    const projectsList = [buildProject({ projectId: "P1", title: "Alpha Rocket" })];
+    render(<ProjectsList {...baseProps({ projectsList, adminStatus: null })} />);
+
+    expect(screen.queryByTestId("project-card-paused-badge")).toBeNull();
+  });
+
+  it("shows no paused badge when the admin status reports active distributions", () => {
+    const projectsList = [buildProject({ projectId: "P1", title: "Alpha Rocket" })];
+    render(
+      <ProjectsList
+        {...baseProps({
+          projectsList,
+          adminStatus: { admin: null, isPaused: false },
+        })}
+      />,
+    );
+
+    expect(screen.queryByTestId("project-card-paused-badge")).toBeNull();
+  });
+});
+
 describe("ProjectsList payout receipts", () => {
   it("links a payout to its receipt, but not a distribution round", () => {
     const hash = "a".repeat(64);

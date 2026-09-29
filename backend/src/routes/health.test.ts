@@ -36,7 +36,9 @@ import { requestIdMiddleware } from "../middleware/request-id.js";
 import { errorHandler } from "../middleware/error.js";
 import {
   healthRouter,
+  markShuttingDown,
   markStartupComplete,
+  resetShuttingDown,
   resetStartupComplete,
 } from "./health.js";
 
@@ -382,5 +384,197 @@ describe("GET /health/ready - dependency timeout (Issue #843)", () => {
 
     // Should not crash — uses the fallback timeout and responds normally
     expect([200, 503]).toContain(res.status);
+  });
+});
+
+// ─── Issue #1281: diagnostics must not invent dependency failures ─────────
+//
+// The readiness body reports one component per dependency, and every early
+// return used to leave db/rpc/contract at their initial "down" value even
+// though no probe had run — a `starting` response read as "the database, the
+// RPC and the contract are all down". These tests pin "unknown" for anything
+// that was not actually probed, and pin that a probe that *did* fail is still
+// reported as "down".
+
+describe("GET /health/ready - unprobed dependencies are 'unknown', not 'down' (Issue #1281)", () => {
+  const UNPROBED = ["db", "rpc", "contract"] as const;
+
+  beforeEach(() => {
+    markStartupComplete();
+    vi.mocked(getEnvDiagnostics).mockReturnValue({ ok: true });
+    vi.mocked(getServiceHealth).mockReturnValue({
+      status: "healthy",
+      lastSuccessfulPoll: new Date().toISOString(),
+      consecutiveErrors: 0,
+    });
+    delete process.env.HEALTH_DB_DEGRADED_LATENCY_MS;
+    delete process.env.HEALTH_RPC_DEGRADED_LATENCY_MS;
+    delete process.env.HEALTH_DB_CHECK_TIMEOUT_MS;
+    delete process.env.HEALTH_RPC_CHECK_TIMEOUT_MS;
+    process.env.DATABASE_URL = FIXTURE_DATABASE_URL;
+    process.env.SOROBAN_RPC_URL = FIXTURE_RPC_URL;
+  });
+
+  afterEach(() => {
+    resetStartupComplete();
+    resetShuttingDown();
+    vi.resetAllMocks();
+    delete process.env.HEALTH_DB_DEGRADED_LATENCY_MS;
+    delete process.env.HEALTH_RPC_DEGRADED_LATENCY_MS;
+    delete process.env.HEALTH_DB_CHECK_TIMEOUT_MS;
+    delete process.env.HEALTH_RPC_CHECK_TIMEOUT_MS;
+    delete process.env.DATABASE_URL;
+    delete process.env.SOROBAN_RPC_URL;
+  });
+
+  it("reports db/rpc/contract as unknown while startup is incomplete", async () => {
+    resetStartupComplete();
+
+    const res = await request(app).get("/health/ready");
+
+    expect(res.status).toBe(503);
+    expect(res.body.status).toBe("not_ready");
+    expect(res.body.error).toBe("starting");
+
+    for (const name of UNPROBED) {
+      expect(res.body.components[name].status).toBe("unknown");
+      expect(res.body.components[name].message).toContain("not_checked");
+    }
+
+    // The point of "unknown" — nothing was probed, so nothing may be blamed.
+    expect(vi.mocked(getDataSource)).not.toHaveBeenCalled();
+    expect(vi.mocked(checkSorobanReachability)).not.toHaveBeenCalled();
+  });
+
+  it("reports db/rpc/contract as unknown while shutting down", async () => {
+    markShuttingDown();
+
+    const res = await request(app).get("/health/ready");
+
+    expect(res.status).toBe(503);
+    expect(res.body.status).toBe("not_ready");
+    expect(res.body.error).toBe("shutting_down");
+
+    for (const name of UNPROBED) {
+      expect(res.body.components[name].status).toBe("unknown");
+    }
+    expect(vi.mocked(getDataSource)).not.toHaveBeenCalled();
+    expect(vi.mocked(checkSorobanReachability)).not.toHaveBeenCalled();
+  });
+
+  it("reports the unprobed dependencies as unknown when env config is invalid", async () => {
+    vi.mocked(getEnvDiagnostics).mockReturnValue({
+      ok: false,
+      issues: [{ key: "DATABASE_URL", message: "invalid" }],
+    });
+
+    const res = await request(app).get("/health/ready");
+
+    expect(res.status).toBe(503);
+    expect(res.body.error).toBe("missing_config");
+    // env *was* checked, and it failed — that one stays a real verdict.
+    expect(res.body.components.env.ok).toBe(false);
+    for (const name of UNPROBED) {
+      expect(res.body.components[name].status).toBe("unknown");
+    }
+    expect(vi.mocked(getDataSource)).not.toHaveBeenCalled();
+  });
+
+  it("does not report the contract as down when the RPC check threw and skipped it", async () => {
+    mockFastDb();
+    vi.mocked(checkSorobanReachability).mockRejectedValue(
+      new Error(`probe blew up: ${FIXTURE_RPC_URL}`)
+    );
+
+    const res = await request(app).get("/health/ready");
+
+    expect(res.status).toBe(503);
+    expect(res.body.error).toBe("rpc_unavailable");
+    // rpc was probed and threw => down. contract never ran => unknown.
+    expect(res.body.components.rpc.status).toBe("down");
+    expect(res.body.components.contract.status).toBe("unknown");
+    expect(res.body.components.contract.message).toContain("not_checked");
+    // The thrown message still gets scrubbed on its way into the body.
+    expect(JSON.stringify(res.body)).not.toContain(FIXTURE_RPC_URL);
+  });
+
+  it("keeps the service's own verdict when the service says the contract check was skipped", async () => {
+    mockFastDb();
+    // The real checkSorobanReachability *returns* (rather than throwing) with an
+    // explicit "Skipped because Soroban RPC is unreachable" message when the RPC
+    // lookup fails, so that contract verdict belongs to the service and the
+    // route must not overwrite it.
+    vi.mocked(checkSorobanReachability).mockResolvedValue({
+      rpc: { ok: false, message: `unreachable: ${FIXTURE_RPC_URL}` },
+      contract: { ok: false, message: "Skipped because Soroban RPC is unreachable" },
+    });
+
+    const res = await request(app).get("/health/ready");
+
+    expect(res.status).toBe(503);
+    expect(res.body.error).toBe("rpc_unavailable");
+    expect(res.body.components.rpc.status).toBe("down");
+    expect(res.body.components.contract.status).toBe("down");
+    expect(res.body.components.contract.message).toContain("Skipped");
+  });
+
+  it("reports rpc/contract as unknown when the database is unreachable", async () => {
+    mockDownDb(`connection error near ${FIXTURE_DATABASE_URL}`);
+    mockFastRpc();
+
+    const res = await request(app).get("/health/ready");
+
+    expect(res.status).toBe(503);
+    expect(res.body.components.db.status).toBe("down");
+    expect(res.body.components.rpc.status).toBe("unknown");
+    expect(res.body.components.contract.status).toBe("unknown");
+    // The DB failure short-circuits the request — the RPC is never contacted.
+    expect(vi.mocked(checkSorobanReachability)).not.toHaveBeenCalled();
+  });
+
+  it("still reports a probed dependency as down (no regression)", async () => {
+    process.env.HEALTH_DB_CHECK_TIMEOUT_MS = "100";
+    mockHungDb();
+    mockFastRpc();
+
+    const res = await request(app).get("/health/ready");
+
+    expect(res.status).toBe(503);
+    expect(res.body.components.db.status).toBe("down");
+    expect(res.body.components.db.message).toContain("timeout");
+  });
+
+  it("carries a correlation id on ready and degraded responses too", async () => {
+    mockFastDb();
+    mockFastRpc();
+
+    const ready = await request(app).get("/health/ready").set("x-request-id", "corr-ready");
+
+    expect(ready.status).toBe(200);
+    expect(ready.body.status).toBe("ready");
+    expect(ready.body.requestId).toBe("corr-ready");
+
+    process.env.HEALTH_DB_DEGRADED_LATENCY_MS = "5";
+    mockSlowDb(40);
+
+    const degraded = await request(app)
+      .get("/health/ready")
+      .set("x-request-id", "corr-degraded");
+
+    expect(degraded.status).toBe(200);
+    expect(degraded.body.status).toBe("degraded");
+    expect(degraded.body.requestId).toBe("corr-degraded");
+  });
+
+  it("redacts credentials from a connection URL that is not in the env list", async () => {
+    mockDownDb("failed talking to redis://:sup3rSecretPW@cache.internal:6379");
+
+    const res = await request(app).get("/health/ready");
+    const serialized = JSON.stringify(res.body);
+
+    // Defence in depth: this URL is not one of the literal env values, so only
+    // the generic scheme://user:pass@host scrub can catch it.
+    expect(serialized).not.toContain("sup3rSecretPW");
+    expect(serialized).toContain("[REDACTED]");
   });
 });

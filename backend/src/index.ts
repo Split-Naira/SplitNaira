@@ -19,7 +19,11 @@ import { ledgerRouter } from "./routes/ledger.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { errorHandler, notFoundHandler } from "./middleware/error.js";
 import { requestIdMiddleware } from "./middleware/request-id.js";
-import { metricsMiddleware, payloadSizeMetricsMiddleware } from "./middleware/metrics.js";
+import {
+  metricsMiddleware,
+  payloadSizeMetricsMiddleware,
+  splitLifecycleMetricsMiddleware,
+} from "./middleware/metrics.js";
 import { requestTimeout } from "./middleware/timeout.js";
 import {
   globalLimiter,
@@ -78,6 +82,7 @@ app.use(
 app.use(cors({ origin: corsOrigin, credentials: false }));
 // Before express.json() so 413 rejections are still counted (Issue #1090).
 app.use(payloadSizeMetricsMiddleware);
+app.use(splitLifecycleMetricsMiddleware);
 app.use(express.json({ limit: "1mb" }));
 app.use(requestIdMiddleware);
 app.use(metricsMiddleware);

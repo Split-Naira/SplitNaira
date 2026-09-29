@@ -147,10 +147,12 @@ export function TransactionReceiptView({
   receipt: TransactionReceipt;
   network: string | null;
   /** Explorer URL for this transaction. When omitted, it is derived from
-   * `getExplorerUrl(receipt.hash, network)` so existing callers keep working. */
-  explorerUrl?: string;
-  /** Explorer label. When omitted, derived from `getExplorerLabel(network)`. */
-  explorerLabel?: string;
+   * `getExplorerUrl(receipt.hash, network)` so existing callers keep working.
+   * Null when no link can be built for this network (#1114). */
+  explorerUrl?: string | null;
+  /** Explorer label. When omitted, derived from `getExplorerLabel(network)`.
+   * Null when the network is unsupported (#1114). */
+  explorerLabel?: string | null;
   /** Called when the user clicks "Refresh to Retry" on a timeout.
    * Defaults to a full page reload if not provided, preserving the
    * original behavior for existing call sites. */
@@ -183,6 +185,12 @@ export function TransactionReceiptView({
   const isFailed = receipt.lifecycle === "failed";
   const isSuccess = receipt.lifecycle === "success";
   const isTimeout = receipt.lifecycle === "timeout";
+
+  // A link needs both the URL and the chain label. Without the label the
+  // anchor would read "Verify on " — a link the user cannot place on a chain.
+  const canLinkExplorer = Boolean(resolvedExplorerUrl && resolvedExplorerLabel);
+  const showsExplorerAction =
+    isSuccess || isConfirming || isTimeout || isFailed;
 
   const title = isFailed
     ? actionCopy.failedTitle
@@ -309,9 +317,9 @@ export function TransactionReceiptView({
               </p>
               <CopyHashButton hash={receipt.hash} className="shrink-0" />
             </div>
-            {resolvedExplorerUrl && (isSuccess || isConfirming || isTimeout) && (
+            {canLinkExplorer && (isSuccess || isConfirming || isTimeout) && (
               <a
-                href={resolvedExplorerUrl}
+                href={resolvedExplorerUrl as string}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-[10px] font-bold text-greenBright underline underline-offset-4 hover:text-white transition-colors"
@@ -321,9 +329,9 @@ export function TransactionReceiptView({
                 {EXTERNAL_LINK_ICON}
               </a>
             )}
-            {resolvedExplorerUrl && isFailed && (
+            {canLinkExplorer && isFailed && (
               <a
-                href={resolvedExplorerUrl}
+                href={resolvedExplorerUrl as string}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-[10px] font-bold text-red-300/90 underline underline-offset-4 hover:text-white transition-colors"
@@ -332,6 +340,17 @@ export function TransactionReceiptView({
                 <span className="sr-only"> (opens in a new tab)</span>
                 {EXTERNAL_LINK_ICON}
               </a>
+            )}
+            {/* The on-chain action finished or failed and there is a hash to
+                look up, but no link can be built for this network. Say so
+                rather than leaving a silent gap (#1114). */}
+            {!canLinkExplorer && showsExplorerAction && (
+              <p
+                data-testid="explorer-link-unavailable"
+                className="text-[10px] font-bold uppercase tracking-widest text-muted opacity-60"
+              >
+                Explorer link unavailable for this network
+              </p>
             )}
           </div>
         </div>

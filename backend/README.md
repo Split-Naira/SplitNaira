@@ -1,9 +1,12 @@
 # SplitNaira Backend
 
 Express + TypeScript API scaffold for SplitNaira.
-<!-- 
+
+<!--
 This fix addresses GitHub Issue #292 (Security: Cross-Site Scripting (XSS) in Split Description Field) by implementing comprehensive XSS prevention across the entire application using a 3-layer defense strategy. -->
+
 ## Scripts
+
 - `npm ci`
 - `npm run dev`
 - `npm run build`
@@ -13,12 +16,21 @@ This fix addresses GitHub Issue #292 (Security: Cross-Site Scripting (XSS) in Sp
 - `npm run generate:openapi` - Regenerates the OpenAPI specification
 
 ## OpenAPI
+
 The API documentation is defined using Zod schemas and generated into an OpenAPI 3.0 specification.
+
 - Source: `src/openapi.ts`
 - Output: `openapi/openapi.yaml`
 - Command: `npm run generate:openapi`
 
+## Read caching
+
+The shared in-process read cache is limited to public Soroban contract reads: paginated project lists and project details (including their on-chain balance). Entries live for 30 seconds by default; `READ_CACHE_TTL_MS` and `READ_CACHE_MAX_ENTRIES` configure the TTL and bounded capacity. Cache keys are resource-based, never user-based, because these endpoints contain shared on-chain state and no caller-specific fields. Do not add authenticated account data, permissions, or personalized results to this cache; those require user-scoped keys or must remain uncached.
+
+Preparing project mutation XDRs evicts affected project detail and list entries so the next request re-reads Soroban state. Because the client submits the XDR after receiving it, the TTL is also the backstop for submitted transactions and state changes made outside this API. Invalidated in-flight reads can complete for their original callers, but cannot repopulate the cache or replace a newer read.
+
 ## Notes
+
 - Dependencies are pinned to exact versions in `package.json` and `package-lock.json`.
 - Use `npm ci` to install and keep lockfile-based resolution deterministic across local and CI.
 - Run `npm run deps:check` before opening a PR to catch peer graph or lockfile health issues early.
@@ -26,6 +38,7 @@ The API documentation is defined using Zod schemas and generated into an OpenAPI
 - Copy `.env.example` to `.env` and fill in Stellar config before wiring endpoints.
 
 ## Deployment
+
 - CI/CD workflow: `../.github/workflows/backend-deploy.yml`
 - Deployment configuration and required secrets: [`../docs/backend-deploy.md`](../docs/backend-deploy.md)
 - **Release Operations (Wave 5)**: [`../docs/backend-release-ops-wave5.md`](../docs/backend-release-ops-wave5.md) — deployment checklist, rollback notes, and local CI steps.
@@ -52,6 +65,7 @@ The backend includes comprehensive production-grade hardening:
 - **Payments admin hardening** — `/splits/admin/*` protected by `PAYMENTS_ADMIN_API_KEY`; writes toggleable via `PAYMENTS_ADMIN_WRITE_ENABLED`
 
 **Documentation**:
+
 - [`../docs/PLATFORM_HARDENING_IMPLEMENTATION.md`](../docs/PLATFORM_HARDENING_IMPLEMENTATION.md) — implementation details, monitoring, and rollback
 - [`../docs/PLATFORM_HARDENING_DEPLOYMENT_CHECKLIST.md`](../docs/PLATFORM_HARDENING_DEPLOYMENT_CHECKLIST.md) — operator checklist for safe deployment
 - [`../docs/backend-release-ops-wave5.md`](../docs/backend-release-ops-wave5.md) — deployment procedures and CI commands
@@ -65,7 +79,7 @@ const user = await withTransaction(async (queryRunner) => {
   const repo = queryRunner.manager.getRepository(User);
   const existing = await repo.findOne({ where: { walletAddress } });
   if (existing) throw new Error("User exists");
-  
+
   const newUser = repo.create({ walletAddress, email });
   return await repo.save(newUser);
 });
@@ -83,6 +97,7 @@ npm test                                # All tests
 ```
 
 ## Structure
+
 - `src/index.ts` - App entry
 - `src/routes` - HTTP routes
 - `src/services` - Stellar/Soroban integrations

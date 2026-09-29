@@ -6,6 +6,7 @@ export type LedgerBlockType = (typeof LEDGER_BLOCK_TYPES)[number];
 @Entity("ledger_blocks")
 @Index("IDX_ledger_blocks_ledger_seq", ["ledgerSeq"])
 @Index("IDX_ledger_blocks_tx_hash", ["txHash"])
+@Index("IDX_ledger_blocks_project_id", ["projectId"])
 export class LedgerBlock {
   @PrimaryGeneratedColumn("uuid")
   id!: string;

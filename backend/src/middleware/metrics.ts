@@ -5,7 +5,17 @@ import {
   recordRequestMetrics,
   recordRequestPayloadRejected,
   recordRequestPayloadSize,
+  recordSplitLifecycleOperation,
+  type SplitLifecycleOperation,
 } from "../services/metrics.js";
+
+function getSplitLifecycleOperation(method: string, path: string): SplitLifecycleOperation | null {
+  if (method !== "POST") return null;
+  if (path === "/splits") return "creation";
+  if (/^\/splits\/[^/]+\/deposit$/.test(path)) return "funding";
+  if (/^\/splits\/[^/]+\/distribute$/.test(path)) return "settlement";
+  return null;
+}
 
 function sanitizeRoute(req: Parameters<RequestHandler>[0]): string {
   const baseUrl = req.baseUrl ?? "";
@@ -34,6 +44,16 @@ export const metricsMiddleware: RequestHandler = (req, res, next) => {
   });
 
   res.once("close", finalize);
+  next();
+};
+
+export const splitLifecycleMetricsMiddleware: RequestHandler = (req, res, next) => {
+  res.once("finish", () => {
+    const operation = getSplitLifecycleOperation(req.method, req.path);
+    if (operation) {
+      recordSplitLifecycleOperation(operation, res.statusCode < 400 ? "success" : "failure");
+    }
+  });
   next();
 };
 

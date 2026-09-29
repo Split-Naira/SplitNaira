@@ -1,359 +1,480 @@
 #![cfg(test)]
-//! Collaborator address validation tests (issue #948).
+
+//! Collaborator validation tests (issue #948).
 //!
-//! Covers `validate_collaborators` and `create_project` responses to invalid
-//! inputs: zero basis points, duplicate addresses, too few collaborators,
-//! invalid split totals, and the happy-path confirming that well-formed
-//! collaborator lists are accepted.
+//! Covers collaborator validation during project creation, including:
+//!
+//! - valid collaborator lists;
+//! - minimum collaborator requirements;
+//! - zero-share collaborators;
+//! - duplicate collaborator addresses;
+//! - invalid basis-point totals.
+//!
+//! Each invalid input must return the documented `SplitError` and must not
+//! create a project.
 
-use crate::{errors::SplitError, Collaborator, SplitNairaContract, SplitNairaContractClient};
-use soroban_sdk::{testutils::Address as _, vec, Address, Env, String, Symbol, Vec};
+use crate::{
+    errors::SplitError,
+    Collaborator,
+    SplitNairaContract,
+    SplitNairaContractClient,
+};
+use soroban_sdk::{
+    testutils::Address as _,
+    vec,
+    Address,
+    Env,
+    String,
+    Symbol,
+    Vec,
+};
 
+// -----------------------------------------------------------------------------
+// Shared helpers
+// -----------------------------------------------------------------------------
+
+/// Creates a test environment with a registered SplitNaira contract and token.
+///
+/// Authentication is mocked because these tests focus on collaborator
+/// validation rather than Soroban authorization.
 fn setup() -> (Env, SplitNairaContractClient, Address) {
     let env = Env::default();
     env.mock_all_auths();
 
     let token_admin = Address::generate(&env);
     let token = env.register_stellar_asset_contract(token_admin);
+
     let contract_id = env.register_contract(None, SplitNairaContract);
     let client = SplitNairaContractClient::new(&env, &contract_id);
+
     (env, client, token)
 }
 
-fn new_project_id(env: &Env, name: &str) -> Symbol {
+/// Creates a deterministic project ID for a test.
+fn project_id(env: &Env, name: &str) -> Symbol {
     Symbol::new(env, name)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Happy path
-// ─────────────────────────────────────────────────────────────────────────────
+/// Creates a collaborator with the supplied address, alias, and share.
+fn collaborator(
+    env: &Env,
+    address: Address,
+    alias: &str,
+    basis_points: i128,
+) -> Collaborator {
+    Collaborator {
+        address,
+        alias: String::from_str(env, alias),
+        basis_points,
+    }
+}
 
+/// Attempts to create a project using the supplied collaborator list.
+fn try_create_project(
+    env: &Env,
+    client: &SplitNairaContractClient,
+    token: &Address,
+    id: &Symbol,
+    collaborators: &Vec<Collaborator>,
+) -> Result<(), Result<SplitError, soroban_sdk::Error>> {
+    let owner = Address::generate(env);
+
+    client.try_create_project(
+        &owner,
+        id,
+        &String::from_str(env, "Test Project"),
+        &String::from_str(env, "music"),
+        token,
+        collaborators,
+    )
+}
+
+/// Asserts that an invalid collaborator list does not create a project.
+fn assert_invalid_collaborators(
+    env: &Env,
+    client: &SplitNairaContractClient,
+    token: &Address,
+    id: &Symbol,
+    collaborators: &Vec<Collaborator>,
+    expected: SplitError,
+) {
+    let before_count = client.get_project_count();
+
+    let result = try_create_project(
+        env,
+        client,
+        token,
+        id,
+        collaborators,
+    );
+
+    assert_eq!(result, Err(Ok(expected)));
+
+    assert_eq!(
+        client.get_project_count(),
+        before_count,
+        "rejected collaborator validation must not create a project"
+    );
+
+    assert!(
+        !client.project_exists(id),
+        "invalid collaborator input must not create the project"
+    );
+}
+
+// -----------------------------------------------------------------------------
+// Happy path
+// -----------------------------------------------------------------------------
+
+/// A valid two-collaborator split is accepted.
 #[test]
-fn create_project_with_valid_addresses_succeeds() {
+fn create_project_with_valid_two_collaborators_succeeds() {
     let (env, client, token) = setup();
+
     let owner = Address::generate(&env);
     let alice = Address::generate(&env);
     let bob = Address::generate(&env);
 
-    let collabs = vec![
+    let collaborators = vec![
         &env,
-        Collaborator {
-            address: alice,
-            alias: String::from_str(&env, "Alice"),
-            basis_points: 6000,
-        },
-        Collaborator {
-            address: bob,
-            alias: String::from_str(&env, "Bob"),
-            basis_points: 4000,
-        },
+        collaborator(&env, alice, "Alice", 6000),
+        collaborator(&env, bob, "Bob", 4000),
     ];
+
+    let id = project_id(&env, "valid_split");
 
     client.create_project(
         &owner,
-        &new_project_id(&env, "valid_split"),
+        &id,
         &String::from_str(&env, "Valid Split Project"),
         &String::from_str(&env, "music"),
         &token,
-        &collabs,
+        &collaborators,
     );
+
     assert_eq!(client.get_project_count(), 1);
+    assert!(client.project_exists(&id));
+
+    let project = client.get_project(&id).unwrap();
+
+    assert_eq!(project.owner, owner);
+    assert_eq!(project.collaborators.len(), 2);
 }
 
-
-use crate::{errors::SplitError, Collaborator, SplitNairaContract, SplitNairaContractClient};
-use soroban_sdk::{testutils::Address as _, vec, Address, Env, String, Symbol, Vec};
-
-fn setup() -> (Env, SplitNairaContractClient, Address) {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let token_admin = Address::generate(&env);
-    let token = env.register_stellar_asset_contract(token_admin);
-    let contract_id = env.register_contract(None, SplitNairaContract);
-    let client = SplitNairaContractClient::new(&env, &contract_id);
-    (env, client, token)
-}
-
+/// A valid three-collaborator split is accepted.
 #[test]
-fn create_project_with_three_collaborators_succeeds() {
+fn create_project_with_valid_three_collaborators_succeeds() {
     let (env, client, token) = setup();
+
     let owner = Address::generate(&env);
 
-    let collabs = vec![
+    let collaborators = vec![
         &env,
-        Collaborator {
-            address: Address::generate(&env),
-            alias: String::from_str(&env, "Producer"),
-            basis_points: 5000,
-        },
-        Collaborator {
-            address: Address::generate(&env),
-            alias: String::from_str(&env, "Artist"),
-            basis_points: 3000,
-        },
-        Collaborator {
-            address: Address::generate(&env),
-            alias: String::from_str(&env, "Label"),
-            basis_points: 2000,
-        },
+        collaborator(
+            &env,
+            Address::generate(&env),
+            "Producer",
+            5000,
+        ),
+        collaborator(
+            &env,
+            Address::generate(&env),
+            "Artist",
+            3000,
+        ),
+        collaborator(
+            &env,
+            Address::generate(&env),
+            "Label",
+            2000,
+        ),
     ];
+
+    let id = project_id(&env, "triple_split");
 
     client.create_project(
         &owner,
-        &new_project_id(&env, "triple_split"),
+        &id,
         &String::from_str(&env, "Triple Split"),
         &String::from_str(&env, "music"),
         &token,
-        &collabs,
+        &collaborators,
     );
+
     assert_eq!(client.get_project_count(), 1);
+    assert!(client.project_exists(&id));
+
+    let project = client.get_project(&id).unwrap();
+    assert_eq!(project.collaborators.len(), 3);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // TooFewCollaborators
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
+/// A project cannot be created with only one collaborator.
 #[test]
 fn create_project_with_one_collaborator_returns_too_few() {
     let (env, client, token) = setup();
-    let owner = Address::generate(&env);
 
-    let collabs = vec![
+    let collaborators = vec![
         &env,
-        Collaborator {
-            address: Address::generate(&env),
-            alias: String::from_str(&env, "Solo"),
-            basis_points: 10000,
-        },
+        collaborator(
+            &env,
+            Address::generate(&env),
+            "Solo",
+            10000,
+        ),
     ];
 
-    let result = client.try_create_project(
-        &owner,
-        &new_project_id(&env, "solo_project"),
-        &String::from_str(&env, "Solo Project"),
-        &String::from_str(&env, "music"),
+    let id = project_id(&env, "solo_project");
+
+    assert_invalid_collaborators(
+        &env,
+        &client,
         &token,
-        &collabs,
+        &id,
+        &collaborators,
+        SplitError::TooFewCollaborators,
     );
-    assert_eq!(result, Err(Ok(SplitError::TooFewCollaborators)));
 }
 
+/// An empty collaborator list is rejected.
 #[test]
 fn create_project_with_empty_collaborators_returns_too_few() {
     let (env, client, token) = setup();
-    let owner = Address::generate(&env);
 
-    let collabs: Vec<Collaborator> = Vec::new(&env);
+    let collaborators: Vec<Collaborator> = Vec::new(&env);
+    let id = project_id(&env, "empty_project");
 
-    let result = client.try_create_project(
-        &owner,
-        &new_project_id(&env, "empty_project"),
-        &String::from_str(&env, "Empty Project"),
-        &String::from_str(&env, "music"),
+    assert_invalid_collaborators(
+        &env,
+        &client,
         &token,
-        &collabs,
+        &id,
+        &collaborators,
+        SplitError::TooFewCollaborators,
     );
-    assert_eq!(result, Err(Ok(SplitError::TooFewCollaborators)));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // ZeroShare
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
+/// A collaborator with zero basis points is rejected.
 #[test]
-fn create_project_with_zero_basis_points_returns_zero_share() {
+fn create_project_with_zero_share_returns_zero_share_error() {
     let (env, client, token) = setup();
-    let owner = Address::generate(&env);
-    let alice = Address::generate(&env);
-    let bob = Address::generate(&env);
 
-    let collabs = vec![
+    let collaborators = vec![
         &env,
-        Collaborator {
-            address: alice,
-            alias: String::from_str(&env, "Alice"),
-            basis_points: 0, // invalid — zero share
-        },
-        Collaborator {
-            address: bob,
-            alias: String::from_str(&env, "Bob"),
-            basis_points: 10000,
-        },
+        collaborator(
+            &env,
+            Address::generate(&env),
+            "Alice",
+            0,
+        ),
+        collaborator(
+            &env,
+            Address::generate(&env),
+            "Bob",
+            10000,
+        ),
     ];
 
-    let result = client.try_create_project(
-        &owner,
-        &new_project_id(&env, "zero_share"),
-        &String::from_str(&env, "Zero Share Project"),
-        &String::from_str(&env, "music"),
+    let id = project_id(&env, "zero_share");
+
+    assert_invalid_collaborators(
+        &env,
+        &client,
         &token,
-        &collabs,
+        &id,
+        &collaborators,
+        SplitError::ZeroShare,
     );
-    assert_eq!(result, Err(Ok(SplitError::ZeroShare)));
 }
 
+/// A collaborator list containing only zero-share entries is rejected.
 #[test]
-fn create_project_all_zero_basis_points_returns_zero_share() {
+fn create_project_with_all_zero_shares_returns_zero_share_error() {
     let (env, client, token) = setup();
-    let owner = Address::generate(&env);
 
-    let collabs = vec![
+    let collaborators = vec![
         &env,
-        Collaborator {
-            address: Address::generate(&env),
-            alias: String::from_str(&env, "A"),
-            basis_points: 0,
-        },
-        Collaborator {
-            address: Address::generate(&env),
-            alias: String::from_str(&env, "B"),
-            basis_points: 0,
-        },
+        collaborator(
+            &env,
+            Address::generate(&env),
+            "Alice",
+            0,
+        ),
+        collaborator(
+            &env,
+            Address::generate(&env),
+            "Bob",
+            0,
+        ),
     ];
 
-    let result = client.try_create_project(
-        &owner,
-        &new_project_id(&env, "all_zero"),
-        &String::from_str(&env, "All Zero Project"),
-        &String::from_str(&env, "music"),
+    let id = project_id(&env, "all_zero");
+
+    assert_invalid_collaborators(
+        &env,
+        &client,
         &token,
-        &collabs,
+        &id,
+        &collaborators,
+        SplitError::ZeroShare,
     );
-    assert_eq!(result, Err(Ok(SplitError::ZeroShare)));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // DuplicateCollaborator
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
+/// Duplicate collaborator addresses are rejected even when their aliases
+/// differ.
 #[test]
 fn create_project_with_duplicate_address_returns_duplicate_error() {
     let (env, client, token) = setup();
-    let owner = Address::generate(&env);
-    let same_addr = Address::generate(&env);
 
-    let collabs = vec![
+    let duplicate_address = Address::generate(&env);
+
+    let collaborators = vec![
         &env,
-        Collaborator {
-            address: same_addr.clone(),
-            alias: String::from_str(&env, "Alice"),
-            basis_points: 5000,
-        },
-        Collaborator {
-            address: same_addr.clone(), // same address again
-            alias: String::from_str(&env, "Also Alice"),
-            basis_points: 5000,
-        },
+        collaborator(
+            &env,
+            duplicate_address.clone(),
+            "Alice",
+            5000,
+        ),
+        collaborator(
+            &env,
+            duplicate_address,
+            "Also Alice",
+            5000,
+        ),
     ];
 
-    let result = client.try_create_project(
-        &owner,
-        &new_project_id(&env, "dup_collab"),
-        &String::from_str(&env, "Duplicate Collaborator Project"),
-        &String::from_str(&env, "music"),
+    let id = project_id(&env, "duplicate_collaborator");
+
+    assert_invalid_collaborators(
+        &env,
+        &client,
         &token,
-        &collabs,
+        &id,
+        &collaborators,
+        SplitError::DuplicateCollaborator,
     );
-    assert_eq!(result, Err(Ok(SplitError::DuplicateCollaborator)));
 }
 
+/// A duplicate address is rejected even when it appears among three
+/// collaborators rather than adjacent to the first entry.
 #[test]
-fn create_project_duplicate_in_three_returns_duplicate_error() {
+fn create_project_with_duplicate_address_among_three_returns_duplicate_error() {
     let (env, client, token) = setup();
-    let owner = Address::generate(&env);
-    let dup_addr = Address::generate(&env);
 
-    let collabs = vec![
+    let duplicate_address = Address::generate(&env);
+
+    let collaborators = vec![
         &env,
-        Collaborator {
-            address: Address::generate(&env),
-            alias: String::from_str(&env, "First"),
-            basis_points: 4000,
-        },
-        Collaborator {
-            address: dup_addr.clone(),
-            alias: String::from_str(&env, "Second"),
-            basis_points: 3000,
-        },
-        Collaborator {
-            address: dup_addr.clone(), // duplicate of Second
-            alias: String::from_str(&env, "Third"),
-            basis_points: 3000,
-        },
+        collaborator(
+            &env,
+            Address::generate(&env),
+            "First",
+            4000,
+        ),
+        collaborator(
+            &env,
+            duplicate_address.clone(),
+            "Second",
+            3000,
+        ),
+        collaborator(
+            &env,
+            duplicate_address,
+            "Third",
+            3000,
+        ),
     ];
 
-    let result = client.try_create_project(
-        &owner,
-        &new_project_id(&env, "dup_mid"),
-        &String::from_str(&env, "Mid Duplicate Project"),
-        &String::from_str(&env, "music"),
+    let id = project_id(&env, "duplicate_middle");
+
+    assert_invalid_collaborators(
+        &env,
+        &client,
         &token,
-        &collabs,
+        &id,
+        &collaborators,
+        SplitError::DuplicateCollaborator,
     );
-    assert_eq!(result, Err(Ok(SplitError::DuplicateCollaborator)));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// InvalidSplit (basis points don't sum to 10 000)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// InvalidSplit
+// -----------------------------------------------------------------------------
 
+/// A collaborator split below 10,000 basis points is rejected.
 #[test]
-fn create_project_basis_points_under_ten_thousand_returns_invalid_split() {
+fn create_project_with_underallocated_split_returns_invalid_split() {
     let (env, client, token) = setup();
-    let owner = Address::generate(&env);
 
-    let collabs = vec![
+    let collaborators = vec![
         &env,
-        Collaborator {
-            address: Address::generate(&env),
-            alias: String::from_str(&env, "A"),
-            basis_points: 4000, // total = 7000 ≠ 10000
-        },
-        Collaborator {
-            address: Address::generate(&env),
-            alias: String::from_str(&env, "B"),
-            basis_points: 3000,
-        },
+        collaborator(
+            &env,
+            Address::generate(&env),
+            "Alice",
+            4000,
+        ),
+        collaborator(
+            &env,
+            Address::generate(&env),
+            "Bob",
+            3000,
+        ),
     ];
 
-    let result = client.try_create_project(
-        &owner,
-        &new_project_id(&env, "under_split"),
-        &String::from_str(&env, "Under Split"),
-        &String::from_str(&env, "music"),
+    let id = project_id(&env, "under_split");
+
+    assert_invalid_collaborators(
+        &env,
+        &client,
         &token,
-        &collabs,
+        &id,
+        &collaborators,
+        SplitError::InvalidSplit,
     );
-    assert_eq!(result, Err(Ok(SplitError::InvalidSplit)));
 }
 
+/// A collaborator split above 10,000 basis points is rejected.
 #[test]
-fn create_project_basis_points_over_ten_thousand_returns_invalid_split() {
+fn create_project_with_overallocated_split_returns_invalid_split() {
     let (env, client, token) = setup();
-    let owner = Address::generate(&env);
 
-    let collabs = vec![
+    let collaborators = vec![
         &env,
-        Collaborator {
-            address: Address::generate(&env),
-            alias: String::from_str(&env, "A"),
-            basis_points: 7000, // total = 13000 ≠ 10000
-        },
-        Collaborator {
-            address: Address::generate(&env),
-            alias: String::from_str(&env, "B"),
-            basis_points: 6000,
-        },
+        collaborator(
+            &env,
+            Address::generate(&env),
+            "Alice",
+            7000,
+        ),
+        collaborator(
+            &env,
+            Address::generate(&env),
+            "Bob",
+            6000,
+        ),
     ];
 
-    let result = client.try_create_project(
-        &owner,
-        &new_project_id(&env, "over_split"),
-        &String::from_str(&env, "Over Split"),
-        &String::from_str(&env, "music"),
+    let id = project_id(&env, "over_split");
+
+    assert_invalid_collaborators(
+        &env,
+        &client,
         &token,
-        &collabs,
+        &id,
+        &collaborators,
+        SplitError::InvalidSplit,
     );
-    assert_eq!(result, Err(Ok(SplitError::InvalidSplit)));
 }

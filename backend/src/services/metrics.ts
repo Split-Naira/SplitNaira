@@ -152,6 +152,36 @@ export function getRequestPayloadRejectedSnapshots(): Array<{ routeGroup: string
 let idempotencyConflictsTotal = 0;
 let idempotencyReplaysTotal = 0;
 
+export const SPLIT_LIFECYCLE_OPERATIONS = ["creation", "funding", "settlement"] as const;
+export const SPLIT_LIFECYCLE_OUTCOMES = ["success", "failure"] as const;
+
+export type SplitLifecycleOperation = (typeof SPLIT_LIFECYCLE_OPERATIONS)[number];
+export type SplitLifecycleOutcome = (typeof SPLIT_LIFECYCLE_OUTCOMES)[number];
+
+const splitLifecycleOperations = new Map<string, number>();
+
+export function recordSplitLifecycleOperation(
+  operation: SplitLifecycleOperation,
+  outcome: SplitLifecycleOutcome,
+): void {
+  const key = `${operation}||${outcome}`;
+  splitLifecycleOperations.set(key, (splitLifecycleOperations.get(key) ?? 0) + 1);
+}
+
+export function getSplitLifecycleOperationSnapshots(): Array<{
+  operation: SplitLifecycleOperation;
+  outcome: SplitLifecycleOutcome;
+  count: number;
+}> {
+  return SPLIT_LIFECYCLE_OPERATIONS.flatMap((operation) =>
+    SPLIT_LIFECYCLE_OUTCOMES.map((outcome) => ({
+      operation,
+      outcome,
+      count: splitLifecycleOperations.get(`${operation}||${outcome}`) ?? 0,
+    })),
+  );
+}
+
 export function resetRequestMetrics(): void {
   requestCounters.clear();
   requestDurations.clear();
@@ -172,6 +202,7 @@ export function resetRequestMetrics(): void {
 
   idempotencyConflictsTotal = 0;
   idempotencyReplaysTotal = 0;
+  splitLifecycleOperations.clear();
 }
 
 /**

@@ -2,7 +2,12 @@ import { describe, expect, it, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
 import { metricsRouter } from "../routes/metrics.js";
-import { metricsMiddleware, payloadSizeMetricsMiddleware, resolveRouteGroup } from "../middleware/metrics.js";
+import {
+  metricsMiddleware,
+  payloadSizeMetricsMiddleware,
+  resolveRouteGroup,
+  splitLifecycleMetricsMiddleware,
+} from "../middleware/metrics.js";
 import { requestIdMiddleware } from "../middleware/request-id.js";
 import { errorHandler } from "../middleware/error.js";
 import { resetValidationFailureCount } from "../middleware/validateResponse.js";
@@ -53,6 +58,56 @@ describe("GET /metrics", () => {
     expect(res.text).toContain('splitnaira_rpc_retry_budget_allowed_total{operation="getAccount",endpoint="rpc"} 6');
     expect(res.text).toContain('splitnaira_rpc_retry_budget_used_total{operation="getAccount",endpoint="rpc"} 4');
     expect(res.text).toContain('splitnaira_rpc_retry_budget_exhausted_total{operation="getAccount",endpoint="rpc"} 1');
+  });
+});
+
+describe("split lifecycle operation metrics", () => {
+  const lifecycleApp = express();
+  lifecycleApp.use(splitLifecycleMetricsMiddleware);
+  lifecycleApp.use(express.json());
+  lifecycleApp.use(metricsMiddleware);
+  lifecycleApp.post("/splits", (_req, res) => res.sendStatus(200));
+  lifecycleApp.post("/splits/:projectId/deposit", (_req, res) => res.sendStatus(200));
+  lifecycleApp.post("/splits/:projectId/distribute", (_req, res) => res.sendStatus(422));
+  lifecycleApp.use("/metrics", metricsRouter);
+
+  beforeEach(() => {
+    resetRequestMetrics();
+  });
+
+  it("counts lifecycle outcomes with fixed, non-identifying labels", async () => {
+    await request(lifecycleApp).post("/splits").expect(200);
+    await request(lifecycleApp).post("/splits/project-private-123/deposit").expect(200);
+    await request(lifecycleApp).post("/splits/project-private-123/distribute").expect(422);
+    await request(lifecycleApp)
+      .post("/splits")
+      .set("Content-Type", "application/json")
+      .send("{")
+      .expect(400);
+
+    const res = await request(lifecycleApp).get("/metrics").expect(200);
+    const lifecycleLines = res.text
+      .split("\n")
+      .filter((line) => line.startsWith("splitnaira_split_lifecycle_operations_total{"));
+
+    expect(res.text).toContain("# TYPE splitnaira_split_lifecycle_operations_total counter");
+    expect(res.text).toContain(
+      "success means unsigned transaction preparation succeeded, not on-chain confirmation.",
+    );
+    expect(lifecycleLines).toContain(
+      'splitnaira_split_lifecycle_operations_total{operation="creation",outcome="success"} 1',
+    );
+    expect(lifecycleLines).toContain(
+      'splitnaira_split_lifecycle_operations_total{operation="funding",outcome="success"} 1',
+    );
+    expect(lifecycleLines).toContain(
+      'splitnaira_split_lifecycle_operations_total{operation="settlement",outcome="failure"} 1',
+    );
+    expect(lifecycleLines).toContain(
+      'splitnaira_split_lifecycle_operations_total{operation="creation",outcome="failure"} 1',
+    );
+    expect(lifecycleLines.join("\n")).not.toContain("project-private-123");
+    expect(lifecycleLines).toHaveLength(6);
   });
 });
 

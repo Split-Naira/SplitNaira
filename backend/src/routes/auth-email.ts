@@ -10,6 +10,7 @@ import {
 import {
   acceptInvitationByTokenJti,
   cancelInvitation,
+  listPendingInvitations,
   registerInvitation,
 } from "../services/collaboration/invitation-registry.js";
 import { createHash } from "node:crypto";
@@ -143,6 +144,35 @@ authEmailRouter.post("/invitations/accept", async (req: Request, res: Response, 
 });
 
 /**
+ * List the invitations still awaiting a response, so an owner can find the one
+ * they need to cancel (#1299). Invitation ids are opaque, so without this the
+ * cancel endpoint is only reachable if the caller already stored the id.
+ */
+authEmailRouter.get("/invitations/pending", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const filterSchema = z.object({
+      projectId: z.string().min(1).optional(),
+      inviterWalletAddress: z.string().min(1).optional(),
+    });
+    const filter = filterSchema.parse(req.query);
+    const pending = listPendingInvitations(filter);
+
+    return res.status(200).json({
+      count: pending.length,
+      invitations: pending.map((record) => ({
+        id: record.id,
+        email: record.email,
+        projectId: record.projectId ?? null,
+        inviterWalletAddress: record.inviterWalletAddress ?? null,
+        createdAt: record.createdAt,
+      })),
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
  * Issue #1299 – Cancel a pending collaborator invitation (authorized inviter only).
  */
 authEmailRouter.post("/invitations/:invitationId/cancel", async (req: Request, res: Response, next: NextFunction) => {
@@ -154,6 +184,11 @@ authEmailRouter.post("/invitations/:invitationId/cancel", async (req: Request, r
     const invitationId = req.params.invitationId as string;
 
     try {
+      // `projectOwnerAddress` is deliberately not accepted from the request
+      // body: it is an authorization claim, and a caller that can assert
+      // ownership can cancel invitations it does not own. Invitations recorded
+      // without an inviter therefore stay uncancellable here rather than being
+      // cancellable by anyone (#1299).
       const record = cancelInvitation({ invitationId, actorWalletAddress });
       return res.status(200).json({
         success: true,
@@ -167,6 +202,13 @@ authEmailRouter.post("/invitations/:invitationId/cancel", async (req: Request, r
       });
     } catch (err: unknown) {
       const e = err as { code?: string; status?: number };
+      if (e.code === "inviter_unknown") {
+        return res.status(403).json({
+          error: "inviter_unknown",
+          message:
+            "This invitation has no recorded inviter, so it can only be cancelled by the project owner.",
+        });
+      }
       return res.status(e.status ?? 400).json({ error: e.code ?? "cancel_failed" });
     }
   } catch (error) {

@@ -4,6 +4,7 @@ import {
   isMandatoryCategory,
   type PreferenceCategory,
 } from "../entities/NotificationPreference.js";
+import type { NotificationCategory } from "../entities/Notification.js";
 import { getDataSource } from "./database.js";
 
 export interface ResolvedPreference {
@@ -95,6 +96,36 @@ export async function updatePreferences(
   }
 
   return getPreferences(normalised);
+}
+
+/**
+ * Which preference governs each *delivered* notification category (#1327).
+ *
+ * The two vocabularies are not the same list, so the mapping is explicit rather
+ * than derived from the names. `null` means the notice is operational
+ * (account/infrastructure plumbing) and is always delivered: there is nothing
+ * meaningful to opt out of, and silently dropping it would hide state from the
+ * person who needs it.
+ *
+ * `PREFERENCE_CATEGORIES` is a superset — `marketing` has no delivery category
+ * yet — so this is a total map from delivery category, not onto preferences.
+ */
+export const PREFERENCE_FOR_NOTIFICATION_CATEGORY: Record<
+  NotificationCategory,
+  PreferenceCategory | null
+> = {
+  security: "security",
+  payment: "payment",
+  project: "project_activity",
+  participant: "participant_activity",
+  system: null,
+};
+
+/** Resolves the preference category for a delivery, or `null` if unmapped. */
+export function preferenceCategoryForNotification(
+  category: NotificationCategory,
+): PreferenceCategory | null {
+  return PREFERENCE_FOR_NOTIFICATION_CATEGORY[category] ?? null;
 }
 
 /**

@@ -1,7 +1,39 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { logger } from "../services/logger.js";
 
-describe("Winston logger — wallet address redaction", () => {
+const sensitiveFields = [
+  {
+    operation: "authentication",
+    fields: [
+      "password",
+      "accessToken",
+      "refresh_token",
+      "authorization",
+      "cookie",
+      "api_key",
+      "sessionId",
+    ],
+  },
+  {
+    operation: "payments",
+    fields: [
+      "cardNumber",
+      "cvv",
+      "cvc",
+      "security_code",
+      "accountNumber",
+      "routing_number",
+      "iban",
+      "paymentToken",
+    ],
+  },
+  {
+    operation: "wallet",
+    fields: ["walletAddress", "privateKey", "secret_key", "mnemonic", "seed"],
+  },
+] as const;
+
+describe("Winston logger — structured sensitive-field redaction", () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
@@ -12,38 +44,29 @@ describe("Winston logger — wallet address redaction", () => {
     consoleSpy.mockRestore();
   });
 
-  it("redacts walletAddress from structured log metadata", () => {
-    logger.info("User registered", {
-      walletAddress: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
-      requestId: "test-request"
+  for (const { operation, fields } of sensitiveFields) {
+    describe(`${operation} operations`, () => {
+      it.each(fields)("redacts $0 from nested structured metadata", (field) => {
+        const sensitiveValue = `sensitive-${operation}-${field}`;
+        logger.info(`${operation} operation`, {
+          details: [{ [field]: sensitiveValue }],
+          outcome: "accepted",
+        });
+
+        expect(consoleSpy).toHaveBeenCalledOnce();
+        const output = consoleSpy.mock.calls[0][0] as string;
+        expect(output).not.toContain(sensitiveValue);
+        expect(output).toContain("[REDACTED]");
+        expect(output).toContain("accepted");
+      });
     });
-
-    expect(consoleSpy).toHaveBeenCalledOnce();
-    const output = consoleSpy.mock.calls[0][0] as string;
-    expect(output).not.toContain("GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF");
-    expect(output).toContain("[REDACTED]");
-  });
-
-  it("redacts nested walletAddress fields", () => {
-    logger.info("Split created", {
-      project: {
-        owner: {
-          walletAddress: "GBIRMAYQUTHQC762ZTJTNXWDSHSDGN64ZXPXJ6XRLWJCAF6TS4Z7J7IO"
-        }
-      }
-    });
-
-    expect(consoleSpy).toHaveBeenCalledOnce();
-    const output = consoleSpy.mock.calls[0][0] as string;
-    expect(output).not.toContain("GBIRMAYQUTHQC762ZTJTNXWDSHSDGN64ZXPXJ6XRLWJCAF6TS4Z7J7IO");
-    expect(output).toContain("[REDACTED]");
-  });
+  }
 
   it("preserves non-sensitive metadata alongside redacted walletAddress", () => {
     logger.info("Transaction recorded", {
       walletAddress: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
       txHash: "abc123",
-      amount: "100.00"
+      amount: "100.00",
     });
 
     const output = consoleSpy.mock.calls[0][0] as string;
@@ -53,14 +76,14 @@ describe("Winston logger — wallet address redaction", () => {
     expect(output).toContain("100.00");
   });
 
-  it("redacts walletAddress regardless of casing in the key", () => {
+  it("redacts sensitive keys regardless of casing or separators", () => {
     logger.info("User login", {
-      WalletAddress: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
-      requestId: "test-request"
+      Access_Token: "mixed-case-access-token",
+      requestId: "test-request",
     });
 
     const output = consoleSpy.mock.calls[0][0] as string;
-    expect(output).not.toContain("GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF");
+    expect(output).not.toContain("mixed-case-access-token");
     expect(output).toContain("[REDACTED]");
   });
 });

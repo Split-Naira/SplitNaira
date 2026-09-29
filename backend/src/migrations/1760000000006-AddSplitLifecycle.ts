@@ -59,12 +59,12 @@ export class AddSplitLifecycle1760000000006 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX "IDX_notification_preferences_wallet"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_notification_preferences_wallet"`);
     await queryRunner.query(
-      `DROP INDEX "IDX_notification_preferences_wallet_category"`,
+      `DROP INDEX IF EXISTS "IDX_notification_preferences_wallet_category"`,
     );
-    await queryRunner.query(`DROP TABLE "notification_preferences"`);
-    await queryRunner.query(`DROP TYPE "notification_preference_category_enum"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "notification_preferences"`);
+    await queryRunner.query(`DROP TYPE IF EXISTS "notification_preference_category_enum"`);
     await queryRunner.query(`DROP INDEX "IDX_split_cancellations_project"`);
     await queryRunner.query(`DROP TABLE "split_cancellations"`);
   }

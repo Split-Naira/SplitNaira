@@ -9,6 +9,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import {
+  appendToastHistory,
+  clearToastHistory,
+  isPersistableVariant,
+  readToastHistory,
+  type ToastHistoryEntry,
+} from "@/lib/toast-history";
+import { ToastHistoryPanel } from "./ToastHistory";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -25,6 +33,10 @@ interface ToastContextValue {
   toasts: Toast[];
   toast: (message: string, variant?: ToastVariant, duration?: number) => void;
   dismiss: (id: string) => void;
+  /** Failure toasts kept across the toast timeout and page reloads (#1109). */
+  history: ToastHistoryEntry[];
+  /** Wipes the rendered and persisted failure history. */
+  clearHistory: () => void;
 }
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -41,6 +53,7 @@ export function useToast() {
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [history, setHistory] = useState<ToastHistoryEntry[]>([]);
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const dismiss = useCallback((id: string) => {
@@ -52,11 +65,23 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const clearHistory = useCallback(() => {
+    clearToastHistory();
+    setHistory([]);
+  }, []);
+
   const toast = useCallback(
     (message: string, variant: ToastVariant = "info", duration = 5000) => {
       const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const newToast: Toast = { id, message, variant, duration };
       setToasts((prev) => [...prev, newToast]);
+
+      if (isPersistableVariant(variant)) {
+        // Only failures outlive their toast — see `lib/toast-history.ts`.
+        setHistory(
+          appendToastHistory({ id, message, variant, createdAt: Date.now() }),
+        );
+      }
 
       if (duration > 0) {
         const timer = setTimeout(() => dismiss(id), duration);
@@ -65,6 +90,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     },
     [dismiss],
   );
+
+  // Hydrated after mount rather than in the state initialiser so the server
+  // and first client render agree (both start empty); the panel appears once
+  // the persisted history has been read.
+  useEffect(() => {
+    setHistory(readToastHistory());
+  }, []);
 
   // Sync with global notification API
   useEffect(() => {
@@ -87,9 +119,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <ToastContext.Provider value={{ toasts, toast, dismiss }}>
+    <ToastContext.Provider value={{ toasts, toast, dismiss, history, clearHistory }}>
       {children}
       <ToastContainer toasts={toasts} dismiss={dismiss} />
+      <ToastHistoryPanel entries={history} onClear={clearHistory} />
     </ToastContext.Provider>
   );
 }

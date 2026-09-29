@@ -27,6 +27,7 @@ export const SPLIT_STATES = [
   "distributing",
   "settled",
   "cancelled",
+  "expired",
 ] as const;
 
 export type SplitState = (typeof SPLIT_STATES)[number];
@@ -45,6 +46,10 @@ export interface ProjectSnapshot {
   totalDistributed: string | number | bigint;
   distributionRound: number;
   collaborators: Collaborator[];
+  /** When true, force lifecycle state to draft (off-chain draft flag, #1302). */
+  isDraft?: boolean;
+  /** ISO timestamp deadline; when past, force expired (#1303). */
+  expiresAt?: string | null;
 }
 
 /** The subset of a transaction record the derivation depends on. */
@@ -96,8 +101,20 @@ function sameAddress(a: string, b: string): boolean {
 export function deriveSplitState(
   project: ProjectSnapshot,
   cancellation?: CancellationSnapshot | null,
+  now: Date = new Date(),
 ): SplitState {
   if (cancellation) return "cancelled";
+
+  // Explicit off-chain draft marker wins over balance heuristics (#1302).
+  if (project.isDraft) return "draft";
+
+  // Optional completion deadline (#1303). Expired blocks further funding in the API.
+  if (project.expiresAt) {
+    const deadline = new Date(project.expiresAt).getTime();
+    if (!Number.isNaN(deadline) && deadline <= now.getTime()) {
+      return "expired";
+    }
+  }
 
   const balance = toBigInt(project.balance);
   const distributed = toBigInt(project.totalDistributed);
@@ -113,17 +130,79 @@ export function deriveSplitState(
 
 /** True when the split has reached a state no further funding should enter. */
 export function isTerminal(state: SplitState): boolean {
-  return state === "settled" || state === "cancelled";
+  return state === "settled" || state === "cancelled" || state === "expired";
+}
+
+/**
+ * Mutating actions a caller can ask for against a split (#1305).
+ *
+ * `read` is included because it is the one action every state permits; keeping
+ * it in the same table is what lets the guard be a single decision rather than
+ * a scattering of state comparisons at each call site.
+ */
+export const SPLIT_ACTIONS = [
+  "read",
+  "deposit",
+  "update_metadata",
+  "update_collaborators",
+  "lock",
+  "distribute",
+  "cancel",
+] as const;
+
+export type SplitAction = (typeof SPLIT_ACTIONS)[number];
+
+/**
+ * Whether `action` is permitted in `state` (#1305).
+ *
+ * Terminal states accept no mutation at all:
+ *
+ *  - `cancelled` — the split was called off; nothing downstream should act on
+ *    it, including another cancellation.
+ *  - `settled` — every claim has been paid. Editing participants or metadata
+ *    now would rewrite the record that the payments were made against.
+ *
+ * `distributing` is a locked split that still holds a balance, so it accepts
+ * only `distribute`: the remaining payouts. New funding, new collaborators and
+ * metadata edits are all closed at lock time.
+ */
+export function isActionAllowed(state: SplitState, action: SplitAction): boolean {
+  if (action === "read") return true;
+  if (state === "cancelled" || state === "settled") return false;
+  if (state === "distributing") return action === "distribute";
+  return true; // draft / active
+}
+
+/**
+ * Throws unless `action` is permitted in `state`.
+ *
+ * The message names both, because "this project is settled" and "you cannot
+ * deposit into a locked project" are different problems for the caller.
+ */
+export function assertActionAllowed(state: SplitState, action: SplitAction): void {
+  if (isActionAllowed(state, action)) return;
+
+  throw Object.assign(
+    new Error(`split_not_mutable: cannot ${action} a ${state} split`),
+    { code: "split_not_mutable", status: 409, state, action },
+  );
 }
 
 /**
  * Whether a split may still be cancelled (#1304).
  *
  * Cancelling something already settled would rewrite history, and cancelling
- * an already-cancelled split is a no-op the caller should be told about.
+ * an already-cancelled split is a no-op the caller should be told about. This
+ * delegates to the action table so cancellation can never drift from the rest
+ * of the post-completion policy.
  */
 export function isCancellable(state: SplitState): boolean {
-  return state === "draft" || state === "active";
+  return isActionAllowed(state, "cancel");
+}
+
+/** Whether the API should reject deposit / distribute / lock (#1302, #1303). */
+export function isFinancialActionAllowed(state: SplitState): boolean {
+  return state === "active" || state === "distributing";
 }
 
 export interface ParticipantPaymentStatus {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { clsx } from "clsx";
 import { sanitizeText } from "@/lib/security";
 import type { SplitProject } from "@/lib/stellar";
@@ -10,10 +11,27 @@ export interface ProjectCardProps {
   onDistribute?: () => void;
   onSelect?: () => void;
   isSelected?: boolean;
+  /**
+   * True while the contract admin has paused distributions globally (#1116).
+   *
+   * Pause is a contract-wide emergency stop, not a per-project flag, so it is
+   * passed in from the caller's `adminStatus` rather than read off the project.
+   * A paused card that still offered an enabled "Trigger Distribution" button
+   * would promise an action the contract rejects.
+   */
+  distributionPaused?: boolean;
 }
 
-export function ProjectCard({ project, userEarnings, onDistribute, onSelect, isSelected }: ProjectCardProps) {
+export function ProjectCard({
+  project,
+  userEarnings,
+  onDistribute,
+  onSelect,
+  isSelected,
+  distributionPaused = false,
+}: ProjectCardProps) {
   const Compact = Boolean(userEarnings);
+  const pausedNoteId = useId();
 
   const outerClass = Compact
     ? "bg-white/5 rounded-2xl p-5 border border-white/5 flex justify-between items-center"
@@ -32,6 +50,14 @@ export function ProjectCard({ project, userEarnings, onDistribute, onSelect, isS
           {project.locked && (
             <span className="ml-2 rounded-full bg-amber-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-300 border border-amber-400/20">
               Locked
+            </span>
+          )}
+          {distributionPaused && (
+            <span
+              data-testid="project-card-paused-badge"
+              className="shrink-0 whitespace-nowrap rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-red-300"
+            >
+              Paused
             </span>
           )}
         </div>
@@ -60,11 +86,20 @@ export function ProjectCard({ project, userEarnings, onDistribute, onSelect, isS
                 e.stopPropagation();
                 onDistribute();
               }}
-              disabled={Number(project.balance) <= 0}
+              disabled={Number(project.balance) <= 0 || distributionPaused}
+              aria-describedby={distributionPaused ? pausedNoteId : undefined}
               className="premium-button rounded-2xl bg-greenBright py-3 px-6 text-xs font-black uppercase tracking-[0.3em] text-[#0a0a09] shadow-xl shadow-greenBright/10 disabled:opacity-30"
             >
               Trigger Distribution
             </button>
+            {distributionPaused && (
+              <p
+                id={pausedNoteId}
+                className="mt-2 text-[10px] font-bold uppercase tracking-widest text-red-300"
+              >
+                Distributions are paused by the contract admin
+              </p>
+            )}
           </div>
         )}
       </div>

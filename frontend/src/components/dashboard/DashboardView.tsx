@@ -620,6 +620,7 @@ export function DashboardView({
                     key={p.projectId}
                     project={p}
                     userEarnings={userEarnings[p.projectId]}
+                    distributionPaused={adminStatus?.isPaused === true}
                   />
                 ))}
             </div>

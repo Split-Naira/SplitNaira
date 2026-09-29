@@ -13,6 +13,7 @@ export type TransactionStatus = (typeof TRANSACTION_STATUSES)[number];
 @Index("IDX_transactions_round_id", ["roundId"])
 @Index("IDX_transactions_recipient", ["recipient"])
 @Index("IDX_transactions_timestamp", ["timestamp"])
+@Index("IDX_transactions_recipient_timestamp", ["recipient", "timestamp"])
 export class TransactionRecord {
   @PrimaryGeneratedColumn("uuid")
   id!: string;

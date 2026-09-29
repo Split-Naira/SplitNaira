@@ -6,7 +6,7 @@ const logLevels = {
   warn: 1,
   info: 2,
   http: 3,
-  debug: 4
+  debug: 4,
 };
 
 const logColors = {
@@ -14,7 +14,7 @@ const logColors = {
   warn: "yellow",
   info: "green",
   http: "magenta",
-  debug: "cyan"
+  debug: "cyan",
 };
 
 winston.addColors(logColors);
@@ -24,13 +24,29 @@ const SCRUB_KEYS = new Set([
   "password",
   "passwd",
   "secret",
+  "secretkey",
   "token",
+  "accesstoken",
+  "refreshtoken",
+  "jwt",
   "authorization",
   "cookie",
+  "session",
+  "sessionid",
+  "apikey",
   "private_key",
   "privatekey",
   "mnemonic",
   "seed",
+  "cardnumber",
+  "cvv",
+  "cvc",
+  "securitycode",
+  "accountnumber",
+  "routingnumber",
+  "bankaccountnumber",
+  "iban",
+  "paymenttoken",
   "database_url",
   "databaseurl",
   "sentry_dsn",
@@ -38,15 +54,27 @@ const SCRUB_KEYS = new Set([
   "walletaddress",
 ]);
 
+function normalizeKey(key: string): string {
+  return key.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function scrubValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(scrubValue);
+  }
+  if (value !== null && typeof value === "object") {
+    return scrubSecrets(value as Record<string, unknown>);
+  }
+  return value;
+}
+
 function scrubSecrets(obj: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(obj)) {
-    if (SCRUB_KEYS.has(k.toLowerCase())) {
+    if (SCRUB_KEYS.has(normalizeKey(k))) {
       result[k] = "[REDACTED]";
-    } else if (v !== null && typeof v === "object" && !Array.isArray(v)) {
-      result[k] = scrubSecrets(v as Record<string, unknown>);
     } else {
-      result[k] = v;
+      result[k] = scrubValue(v);
     }
   }
   return result;
@@ -57,10 +85,10 @@ const scrubFormat = winston.format((info) => {
   const reserved = new Set(["level", "message", "timestamp", "splat"]);
   const record = info as Record<string, unknown>;
   for (const key of Object.keys(record)) {
-    if (!reserved.has(key) && SCRUB_KEYS.has(key.toLowerCase())) {
+    if (!reserved.has(key) && SCRUB_KEYS.has(normalizeKey(key))) {
       record[key] = "[REDACTED]";
-    } else if (!reserved.has(key) && record[key] !== null && typeof record[key] === "object" && !Array.isArray(record[key])) {
-      record[key] = scrubSecrets(record[key] as Record<string, unknown>);
+    } else if (!reserved.has(key)) {
+      record[key] = scrubValue(record[key]);
     }
   }
   return info;
@@ -108,12 +136,12 @@ export const logger = winston.createLogger({
     new winston.transports.Console(),
     new winston.transports.File({
       filename: "logs/error.log",
-      level: "error"
+      level: "error",
     }),
     new winston.transports.File({
-      filename: "logs/combined.log"
-    })
-  ]
+      filename: "logs/combined.log",
+    }),
+  ],
 });
 
 /**

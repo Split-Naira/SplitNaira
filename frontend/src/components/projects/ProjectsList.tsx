@@ -9,6 +9,7 @@ import type { WalletState } from "@/lib/wallet";
 import { DashboardGridSkeleton, ListSkeleton } from "../Skeleton";
 import { ProjectCard } from "../ProjectCard";
 import { TransactionReceiptView, type TransactionReceipt } from "../TransactionReceiptView";
+import { ExplorerLink } from "../ExplorerLink";
 
 interface ProjectsListProps {
   wallet: WalletState;
@@ -32,8 +33,11 @@ interface ProjectsListProps {
   adminStatus: AdminStatusState | null;
   receipt: TransactionReceipt | null;
   sorobanSplitFlowBusy: boolean;
+  // Both may legitimately return null for an unsupported network (#1114); the
+  // history rows render an explicit fallback in that case rather than an
+  // inert `<a>` with no href.
   getExplorerUrl: (hash: string, network: string | null) => string | null;
-  getExplorerLabel: (network: string | null) => string;
+  getExplorerLabel: (network: string | null) => string | null;
 }
 
 export function ProjectsList({
@@ -157,6 +161,7 @@ export function ProjectsList({
                 <ProjectCard
                   key={p.projectId}
                   project={p}
+                  distributionPaused={adminStatus?.isPaused === true}
                   onSelect={() => {
                     setSelectedProjectId(p.projectId);
                     setFetchedProject(p);
@@ -290,7 +295,10 @@ export function ProjectsList({
                   {isLoadingHistory ? (
                     <ListSkeleton rows={4} />
                   ) : history.length > 0 ? (
-                    history.map((item) => (
+                    history.map((item) => {
+                      const explorerUrl = getExplorerUrl(item.txHash, wallet.network);
+                      const explorerLabel = getExplorerLabel(wallet.network);
+                      return (
                       <div key={item.id} className="relative pl-10 group">
                         <div className={clsx(
                           "absolute left-0 top-1 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-[#0a0a09] transition-all group-hover:border-greenBright/30",
@@ -322,14 +330,13 @@ export function ProjectsList({
                               <>To: <span className="text-ink font-mono">{item.recipient?.slice(0, 8) ?? "Unknown"}...</span> Amount: <span className="text-ink">{Number(item.amount).toLocaleString()}</span></>
                             )}
                           </div>
-                          <a
-                            href={getExplorerUrl(item.txHash, wallet.network) ?? undefined}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <ExplorerLink
+                            url={explorerUrl}
+                            label={explorerLabel}
+                            action="Verify on"
+                            testId="history-explorer-link"
                             className="text-[9px] font-bold text-greenBright/40 hover:text-greenBright transition-colors uppercase tracking-widest mt-1"
-                          >
-                            Verify on {getExplorerLabel(wallet.network)} →
-                          </a>
+                          />
                           {item.type === "payment" && /^[a-fA-F0-9]{64}$/.test(item.txHash) && (
                             <a
                               href={`/receipts/${item.txHash}`}
@@ -340,7 +347,8 @@ export function ProjectsList({
                           )}
                         </div>
                       </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <div className="pl-10 text-[10px] font-bold uppercase tracking-widest text-muted opacity-40 italic">
                       {historyError ? "History unavailable. Retry to refresh." : "No verified history found for this project"}
@@ -385,7 +393,8 @@ export function ProjectsList({
                   disabled={
                     Number(fetchedProject.balance) <= 0 ||
                     !wallet.connected ||
-                    sorobanSplitFlowBusy
+                    sorobanSplitFlowBusy ||
+                    adminStatus?.isPaused === true
                   }
                   className="premium-button w-full rounded-2xl bg-greenBright py-6 text-xs font-black uppercase tracking-[0.3em] text-[#0a0a09] shadow-xl shadow-greenBright/10 disabled:opacity-10 disabled:bg-white"
                 >
@@ -412,7 +421,7 @@ export function ProjectsList({
                   <TransactionReceiptView
                     receipt={receipt}
                     network={wallet.network ?? null}
-                    explorerUrl={getExplorerUrl(receipt.hash, wallet.network ?? null) ?? undefined}
+                    explorerUrl={getExplorerUrl(receipt.hash, wallet.network ?? null)}
                     explorerLabel={getExplorerLabel(wallet.network ?? null)}
                   />
                 )}

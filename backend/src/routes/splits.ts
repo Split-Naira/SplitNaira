@@ -6,7 +6,7 @@ import {
   TransactionBuilder,
   nativeToScVal,
   scValToNative,
-  xdr
+  xdr,
 } from "@stellar/stellar-sdk";
 
 import {
@@ -17,15 +17,10 @@ import {
   invalidateCache,
   invalidateCacheByPrefix,
   getCacheStats,
-  READ_CACHE_TTL_MS
+  READ_CACHE_TTL_MS,
 } from "../services/stellar.js";
 
-import {
-  AppError,
-  ErrorCode,
-  ErrorType,
-  translateSorobanError
-} from "../lib/errors.js";
+import { AppError, ErrorCode, ErrorType, translateSorobanError } from "../lib/errors.js";
 
 import {
   stellarAddressSchema,
@@ -44,7 +39,7 @@ import {
   isTokenAllowedQuerySchema,
   unallocatedQuerySchema,
   withdrawUnallocatedSchema,
-  claimSchema
+  claimSchema,
 } from "../schemas/splits.js";
 
 import {
@@ -54,14 +49,14 @@ import {
   AdminTokenCountResponseSchema,
   AdminUnallocatedResponseSchema,
   AdminCacheStatsResponseSchema,
-  AdminUnsignedXdrResponseSchema
+  AdminUnsignedXdrResponseSchema,
 } from "../schemas/admin.schemas.js";
 import { withResponseValidation } from "../middleware/validateResponse.js";
 
 import {
   buildHistoryTopicFilters,
   decodeRoundHistoryEventValue,
-  decodePaymentHistoryEventValue
+  decodePaymentHistoryEventValue,
 } from "../services/contract-helpers.js";
 
 import {
@@ -80,10 +75,11 @@ import {
   buildDisallowTokenUnsignedXdr,
   buildWithdrawUnallocatedUnsignedXdr,
   buildClaimUnsignedXdr,
-  buildUnsignedContractCall
+  buildUnsignedContractCall,
 } from "../services/splits.service.js";
 import { logger } from "../services/logger.js";
 import { idempotencyMiddleware } from "../middleware/idempotency.js";
+import { recordProjectEdit } from "../services/project-history.js";
 
 // Re-export all schemas, contract helpers, and services for backwards compatibility
 export {
@@ -104,7 +100,7 @@ export {
   isTokenAllowedQuerySchema,
   unallocatedQuerySchema,
   withdrawUnallocatedSchema,
-  claimSchema
+  claimSchema,
 } from "../schemas/splits.js";
 
 export {
@@ -114,7 +110,7 @@ export {
   AdminTokenCountResponseSchema,
   AdminUnallocatedResponseSchema,
   AdminCacheStatsResponseSchema,
-  AdminUnsignedXdrResponseSchema
+  AdminUnsignedXdrResponseSchema,
 } from "../schemas/admin.schemas.js";
 
 export {
@@ -127,7 +123,7 @@ export {
   parseStellarAddress,
   buildHistoryTopicFilters,
   decodeRoundHistoryEventValue,
-  decodePaymentHistoryEventValue
+  decodePaymentHistoryEventValue,
 } from "../services/contract-helpers.js";
 
 export {
@@ -149,7 +145,7 @@ export {
   buildWithdrawUnallocatedUnsignedXdr,
   buildClaimUnsignedXdr,
   encodeCursor,
-  decodeCursor
+  decodeCursor,
 } from "../services/splits.service.js";
 
 function sendValidationError(
@@ -162,7 +158,7 @@ function sendValidationError(
     error: "validation_error",
     message,
     requestId,
-    details
+    details,
   });
 }
 
@@ -171,7 +167,7 @@ function sendRpcError(res: Response, requestId: string, message: string, status 
     error: "rpc_error",
     message,
     requestId,
-    details: {}
+    details: {},
   });
 }
 
@@ -192,14 +188,10 @@ splitsRouter.get("/:projectId", ctrl.getProject.bind(ctrl));
 splitsRouter.post("/:projectId/lock", ctrl.lockProject.bind(ctrl));
 splitsRouter.post("/:projectId/deposit", ctrl.deposit.bind(ctrl));
 
-function logPaymentsAdminAction(
-  res: Response,
-  action: string,
-  details: Record<string, unknown>
-) {
+function logPaymentsAdminAction(res: Response, action: string, details: Record<string, unknown>) {
   logger.info("Payments admin action prepared", {
     action,
-    ...details
+    ...details,
   });
 }
 
@@ -219,12 +211,7 @@ splitsRouter.get("/", async (req: Request, res: Response, next: NextFunction) =>
 
     const { start, limit, search, type } = parsed.data;
 
-    const projects = await listProjects(
-      start,
-      limit,
-      search,
-      type
-    );
+    const projects = await listProjects(start, limit, search, type);
     const totalRetval = await simulateReadOnlyContractCall("get_project_count");
     const total = totalRetval ? Number(scValToNative(totalRetval)) : projects.length;
 
@@ -305,7 +292,7 @@ splitsRouter.post("/:projectId/lock", async (req: Request, res: Response, next: 
 
     const result = await buildLockProjectUnsignedXdr({
       projectId,
-      owner: parsedBody.data.owner
+      owner: parsedBody.data.owner,
     });
 
     return res.status(200).json(result);
@@ -327,43 +314,51 @@ splitsRouter.post("/:projectId/lock", async (req: Request, res: Response, next: 
  */
 splitsRouter.get(
   "/admin/allowlist",
-  withResponseValidation(AdminAllowlistResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const requestId = res.locals.requestId;
-      const parsed = allowlistQuerySchema.safeParse(req.query);
-      if (!parsed.success) {
-        return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
-      }
-
-      const { start, limit } = parsed.data;
-
+  withResponseValidation(
+    AdminAllowlistResponseSchema,
+    async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const [adminRetval, countRetval, tokensRetval] = await Promise.all([
-          simulateReadOnlyContractCall("get_admin"),
-          simulateReadOnlyContractCall("get_allowed_token_count"),
-          simulateReadOnlyContractCall("get_allowed_tokens", [
-            xdr.ScVal.scvU32(start),
-            xdr.ScVal.scvU32(limit)
-          ])
-        ]);
-
-        const adminValue = adminRetval ? scValToNative(adminRetval) : null;
-        const countValue = countRetval ? scValToNative(countRetval) : 0;
-        const tokensValue = tokensRetval ? scValToNative(tokensRetval) : [];
-
-        return res.status(200).json(
-          serializeBigInts({ admin: adminValue, count: countValue, tokens: tokensValue })
-        );
-      } catch (error) {
-        if (error instanceof RequestValidationError) {
-          return sendValidationError(res, requestId, error.message);
+        const requestId = res.locals.requestId;
+        const parsed = allowlistQuerySchema.safeParse(req.query);
+        if (!parsed.success) {
+          return sendValidationError(
+            res,
+            requestId,
+            "Invalid request payload.",
+            parsed.error.flatten()
+          );
         }
-        throw error;
+
+        const { start, limit } = parsed.data;
+
+        try {
+          const [adminRetval, countRetval, tokensRetval] = await Promise.all([
+            simulateReadOnlyContractCall("get_admin"),
+            simulateReadOnlyContractCall("get_allowed_token_count"),
+            simulateReadOnlyContractCall("get_allowed_tokens", [
+              xdr.ScVal.scvU32(start),
+              xdr.ScVal.scvU32(limit),
+            ]),
+          ]);
+
+          const adminValue = adminRetval ? scValToNative(adminRetval) : null;
+          const countValue = countRetval ? scValToNative(countRetval) : 0;
+          const tokensValue = tokensRetval ? scValToNative(tokensRetval) : [];
+
+          return res
+            .status(200)
+            .json(serializeBigInts({ admin: adminValue, count: countValue, tokens: tokensValue }));
+        } catch (error) {
+          if (error instanceof RequestValidationError) {
+            return sendValidationError(res, requestId, error.message);
+          }
+          throw error;
+        }
+      } catch (error) {
+        return next(error);
       }
-    } catch (error) {
-      return next(error);
     }
-  })
+  )
 );
 
 splitsRouter.post("/:projectId/deposit", async (req, res, next) => {
@@ -376,7 +371,7 @@ splitsRouter.post("/:projectId/deposit", async (req, res, next) => {
     if (!parsedParams.success || !parsedBody.success) {
       return sendValidationError(res, requestId, "Invalid request payload.", {
         params: parsedParams.success ? null : parsedParams.error.flatten(),
-        body: parsedBody.success ? null : parsedBody.error.flatten()
+        body: parsedBody.success ? null : parsedBody.error.flatten(),
       });
     }
 
@@ -385,7 +380,7 @@ splitsRouter.post("/:projectId/deposit", async (req, res, next) => {
         projectId: parsedParams.data,
         from: parsedBody.data.from,
         amount: parsedBody.data.amount,
-        token: parsedBody.data.token
+        token: parsedBody.data.token,
       });
       // Evict cached project state; balance will change after submission
       invalidateCache(`project:${parsedParams.data}`);
@@ -412,7 +407,7 @@ splitsRouter.patch("/:projectId/metadata", async (req, res, next) => {
     if (!parsedParams.success || !parsedBody.success) {
       return sendValidationError(res, requestId, "Invalid request payload.", {
         params: parsedParams.success ? null : parsedParams.error.flatten(),
-        body: parsedBody.success ? null : parsedBody.error.flatten()
+        body: parsedBody.success ? null : parsedBody.error.flatten(),
       });
     }
 
@@ -420,6 +415,10 @@ splitsRouter.patch("/:projectId/metadata", async (req, res, next) => {
       const result = await buildUpdateMetadataUnsignedXdr({
         projectId: parsedParams.data,
         owner: parsedBody.data.owner,
+        title: parsedBody.data.title,
+        projectType: parsedBody.data.projectType,
+      });
+      await recordProjectEdit(parsedParams.data, parsedBody.data.owner, "update_metadata", {
         title: parsedBody.data.title,
         projectType: parsedBody.data.projectType
       });
@@ -445,7 +444,7 @@ splitsRouter.put("/:projectId/collaborators", async (req, res, next) => {
     if (!parsedParams.success || !parsedBody.success) {
       return sendValidationError(res, requestId, "Invalid request payload.", {
         params: parsedParams.success ? null : parsedParams.error.flatten(),
-        body: parsedBody.success ? null : parsedBody.error.flatten()
+        body: parsedBody.success ? null : parsedBody.error.flatten(),
       });
     }
 
@@ -453,6 +452,9 @@ splitsRouter.put("/:projectId/collaborators", async (req, res, next) => {
       const result = await buildUpdateCollaboratorsUnsignedXdr({
         projectId: parsedParams.data,
         owner: parsedBody.data.owner,
+        collaborators: parsedBody.data.collaborators,
+      });
+      await recordProjectEdit(parsedParams.data, parsedBody.data.owner, "update_collaborators", {
         collaborators: parsedBody.data.collaborators
       });
       return res.status(200).json(result);
@@ -484,7 +486,12 @@ splitsRouter.post("/", idempotencyMiddleware(), async (req, res, next) => {
     const requestId = res.locals.requestId;
     const parsed = createSplitSchema.safeParse(req.body);
     if (!parsed.success) {
-      return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
+      return sendValidationError(
+        res,
+        requestId,
+        "Invalid request payload.",
+        parsed.error.flatten()
+      );
     }
 
     try {
@@ -503,192 +510,217 @@ splitsRouter.post("/", idempotencyMiddleware(), async (req, res, next) => {
   }
 });
 
-splitsRouter.post("/:projectId/distribute", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const parsedId = projectIdParamSchema.safeParse(req.params.projectId);
-    if (!parsedId.success) {
-      throw new AppError(
-        ErrorType.VALIDATION,
-        ErrorCode.VALIDATION_ERROR,
-        "Invalid projectId format.",
-        undefined,
-        parsedId.error.flatten()
-      );
-    }
-    const projectId = parsedId.data;
-
-    const parsedBody = distributeSchema.safeParse(req.body);
-    if (!parsedBody.success) {
-      throw new AppError(
-        ErrorType.VALIDATION,
-        ErrorCode.VALIDATION_ERROR,
-        "Invalid request payload.",
-        { message: "Check the distribution request body." },
-        parsedBody.error.flatten()
-      );
-    }
-
-    const config = loadStellarConfig();
-    const sourceAddress = parsedBody.data.sourceAddress || config.simulatorAccount;
-
+splitsRouter.post(
+  "/:projectId/distribute",
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const pausedRetval = await simulateReadOnlyContractCall("is_distributions_paused");
-      const isPaused = pausedRetval ? Boolean(scValToNative(pausedRetval)) : false;
-      if (isPaused) {
-        return res.status(409).json({
-          error: "distributions_paused",
-          message: "Distributions are paused by the contract admin. Please try again after unpause."
-        });
-      }
-
-      const result = await buildUnsignedContractCall({
-        sourceAddress,
-        sourceRoleLabel: "source",
-        operation: "distribute",
-        args: [nativeToScVal(projectId, { type: "symbol" })]
-      });
-
-      // Evict cached project data; distribution round and balance will change
-      invalidateCache(`project:${projectId}`);
-      invalidateCacheByPrefix("list_projects:");
-
-      return res.status(200).json(result);
-    } catch (error) {
-      if (error instanceof RequestValidationError) {
+      const parsedId = projectIdParamSchema.safeParse(req.params.projectId);
+      if (!parsedId.success) {
         throw new AppError(
-          ErrorType.ACCOUNT_STATE,
-          ErrorCode.ACCOUNT_NOT_FOUND,
-          error.message,
-          { message: "The account used to trigger distribution must exist and be funded.", action: "Check Source Wallet" }
+          ErrorType.VALIDATION,
+          ErrorCode.VALIDATION_ERROR,
+          "Invalid projectId format.",
+          undefined,
+          parsedId.error.flatten()
         );
       }
-      throw translateSorobanError(error);
-    }
-  } catch (error) {
-    return next(error);
-  }
-});
+      const projectId = parsedId.data;
 
-splitsRouter.get("/:projectId/claimable/:address", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const requestId = res.locals.requestId;
-    const parsedProjectId = projectIdParamSchema.safeParse(req.params.projectId);
-    const parsedAddress = stellarAddressSchema.safeParse(req.params.address);
-
-    if (!parsedProjectId.success || !parsedAddress.success) {
-      return sendValidationError(res, requestId, "Invalid request payload.", {
-        params: {
-          projectId: parsedProjectId.success ? null : parsedProjectId.error.flatten(),
-          address: parsedAddress.success ? null : parsedAddress.error.flatten()
-        }
-      });
-    }
-
-    const projectId = parsedProjectId.data;
-    const address = parsedAddress.data;
-    const config = loadStellarConfig();
-    const server = getStellarRpcServer();
-
-    let sourceAccount;
-    try {
-      sourceAccount = await executeWithRetry(() => server.getAccount(config.simulatorAccount), { operation: "getAccount" });
-    } catch {
-      return sendRpcError(res, requestId, "RPC operation failed.");
-    }
-
-    let simulated;
-    try {
-      const contract = new Contract(config.contractId);
-      const tx = new TransactionBuilder(sourceAccount, {
-        fee: BASE_FEE,
-        networkPassphrase: config.networkPassphrase
-      })
-        .addOperation(
-          contract.call(
-            "get_claimable",
-            nativeToScVal(projectId, { type: "symbol" }),
-            Address.fromString(address).toScVal()
-          )
-        )
-        .setTimeout(300)
-        .build();
-
-      simulated = await executeWithRetry(() => server.simulateTransaction(tx), { operation: "simulateTransaction" });
-    } catch (error) {
-      throw translateSorobanError(error);
-    }
-
-    const retval = "result" in simulated ? simulated.result?.retval : undefined;
-    if (!retval) {
-      return sendRpcError(res, requestId, "RPC operation failed.");
-    }
-
-    return res.status(200).json({
-      projectId,
-      address,
-      claimable: serializeBigInts(scValToNative(retval))
-    });
-  } catch (error) {
-    return next(error);
-  }
-});
-
-splitsRouter.post(
-  "/admin/allow-token",
-  withResponseValidation(AdminUnsignedXdrResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const requestId = res.locals.requestId;
-      const parsed = adminTokenSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
+      const parsedBody = distributeSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        throw new AppError(
+          ErrorType.VALIDATION,
+          ErrorCode.VALIDATION_ERROR,
+          "Invalid request payload.",
+          { message: "Check the distribution request body." },
+          parsedBody.error.flatten()
+        );
       }
 
+      const config = loadStellarConfig();
+      const sourceAddress = parsedBody.data.sourceAddress || config.simulatorAccount;
+
       try {
-        const result = await buildAllowTokenUnsignedXdr(parsed.data);
-        logPaymentsAdminAction(res, "allow_token", {
-          admin: parsed.data.admin,
-          token: parsed.data.token
+        const pausedRetval = await simulateReadOnlyContractCall("is_distributions_paused");
+        const isPaused = pausedRetval ? Boolean(scValToNative(pausedRetval)) : false;
+        if (isPaused) {
+          return res.status(409).json({
+            error: "distributions_paused",
+            message:
+              "Distributions are paused by the contract admin. Please try again after unpause.",
+          });
+        }
+
+        const result = await buildUnsignedContractCall({
+          sourceAddress,
+          sourceRoleLabel: "source",
+          operation: "distribute",
+          args: [nativeToScVal(projectId, { type: "symbol" })],
         });
+
+        // Evict cached project data; distribution round and balance will change
+        invalidateCache(`project:${projectId}`);
+        invalidateCacheByPrefix("list_projects:");
+
         return res.status(200).json(result);
       } catch (error) {
         if (error instanceof RequestValidationError) {
-          return sendValidationError(res, requestId, error.message);
+          throw new AppError(ErrorType.ACCOUNT_STATE, ErrorCode.ACCOUNT_NOT_FOUND, error.message, {
+            message: "The account used to trigger distribution must exist and be funded.",
+            action: "Check Source Wallet",
+          });
         }
-        throw error;
+        throw translateSorobanError(error);
       }
     } catch (error) {
       return next(error);
     }
-  })
+  }
+);
+
+splitsRouter.get(
+  "/:projectId/claimable/:address",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const requestId = res.locals.requestId;
+      const parsedProjectId = projectIdParamSchema.safeParse(req.params.projectId);
+      const parsedAddress = stellarAddressSchema.safeParse(req.params.address);
+
+      if (!parsedProjectId.success || !parsedAddress.success) {
+        return sendValidationError(res, requestId, "Invalid request payload.", {
+          params: {
+            projectId: parsedProjectId.success ? null : parsedProjectId.error.flatten(),
+            address: parsedAddress.success ? null : parsedAddress.error.flatten(),
+          },
+        });
+      }
+
+      const projectId = parsedProjectId.data;
+      const address = parsedAddress.data;
+      const config = loadStellarConfig();
+      const server = getStellarRpcServer();
+
+      let sourceAccount;
+      try {
+        sourceAccount = await executeWithRetry(() => server.getAccount(config.simulatorAccount), {
+          operation: "getAccount",
+        });
+      } catch {
+        return sendRpcError(res, requestId, "RPC operation failed.");
+      }
+
+      let simulated;
+      try {
+        const contract = new Contract(config.contractId);
+        const tx = new TransactionBuilder(sourceAccount, {
+          fee: BASE_FEE,
+          networkPassphrase: config.networkPassphrase,
+        })
+          .addOperation(
+            contract.call(
+              "get_claimable",
+              nativeToScVal(projectId, { type: "symbol" }),
+              Address.fromString(address).toScVal()
+            )
+          )
+          .setTimeout(300)
+          .build();
+
+        simulated = await executeWithRetry(() => server.simulateTransaction(tx), {
+          operation: "simulateTransaction",
+        });
+      } catch (error) {
+        throw translateSorobanError(error);
+      }
+
+      const retval = "result" in simulated ? simulated.result?.retval : undefined;
+      if (!retval) {
+        return sendRpcError(res, requestId, "RPC operation failed.");
+      }
+
+      return res.status(200).json({
+        projectId,
+        address,
+        claimable: serializeBigInts(scValToNative(retval)),
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
+
+splitsRouter.post(
+  "/admin/allow-token",
+  withResponseValidation(
+    AdminUnsignedXdrResponseSchema,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const requestId = res.locals.requestId;
+        const parsed = adminTokenSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return sendValidationError(
+            res,
+            requestId,
+            "Invalid request payload.",
+            parsed.error.flatten()
+          );
+        }
+
+        try {
+          const result = await buildAllowTokenUnsignedXdr(parsed.data);
+          logPaymentsAdminAction(res, "allow_token", {
+            admin: parsed.data.admin,
+            token: parsed.data.token,
+          });
+          return res.status(200).json(result);
+        } catch (error) {
+          if (error instanceof RequestValidationError) {
+            return sendValidationError(res, requestId, error.message);
+          }
+          throw error;
+        }
+      } catch (error) {
+        return next(error);
+      }
+    }
+  )
 );
 
 splitsRouter.post(
   "/admin/disallow-token",
-  withResponseValidation(AdminUnsignedXdrResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const requestId = res.locals.requestId;
-      const parsed = adminTokenSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
-      }
-
+  withResponseValidation(
+    AdminUnsignedXdrResponseSchema,
+    async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const result = await buildDisallowTokenUnsignedXdr(parsed.data);
-        logPaymentsAdminAction(res, "disallow_token", {
-          admin: parsed.data.admin,
-          token: parsed.data.token
-        });
-        return res.status(200).json(result);
-      } catch (error) {
-        if (error instanceof RequestValidationError) {
-          return sendValidationError(res, requestId, error.message);
+        const requestId = res.locals.requestId;
+        const parsed = adminTokenSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return sendValidationError(
+            res,
+            requestId,
+            "Invalid request payload.",
+            parsed.error.flatten()
+          );
         }
-        throw error;
+
+        try {
+          const result = await buildDisallowTokenUnsignedXdr(parsed.data);
+          logPaymentsAdminAction(res, "disallow_token", {
+            admin: parsed.data.admin,
+            token: parsed.data.token,
+          });
+          return res.status(200).json(result);
+        } catch (error) {
+          if (error instanceof RequestValidationError) {
+            return sendValidationError(res, requestId, error.message);
+          }
+          throw error;
+        }
+      } catch (error) {
+        return next(error);
       }
-    } catch (error) {
-      return next(error);
     }
-  })
+  )
 );
 
 /**
@@ -700,58 +732,74 @@ splitsRouter.post(
  */
 splitsRouter.post(
   "/admin/pause-distributions",
-  withResponseValidation(AdminUnsignedXdrResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const requestId = res.locals.requestId;
-      const parsed = pauseDistributionsSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
-      }
-
+  withResponseValidation(
+    AdminUnsignedXdrResponseSchema,
+    async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const result = await buildPauseDistributionsUnsignedXdr(parsed.data);
-        logPaymentsAdminAction(res, "pause_distributions", {
-          admin: parsed.data.admin
-        });
-        return res.status(200).json(result);
-      } catch (error) {
-        if (error instanceof RequestValidationError) {
-          return sendValidationError(res, requestId, error.message);
+        const requestId = res.locals.requestId;
+        const parsed = pauseDistributionsSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return sendValidationError(
+            res,
+            requestId,
+            "Invalid request payload.",
+            parsed.error.flatten()
+          );
         }
-        throw error;
+
+        try {
+          const result = await buildPauseDistributionsUnsignedXdr(parsed.data);
+          logPaymentsAdminAction(res, "pause_distributions", {
+            admin: parsed.data.admin,
+          });
+          return res.status(200).json(result);
+        } catch (error) {
+          if (error instanceof RequestValidationError) {
+            return sendValidationError(res, requestId, error.message);
+          }
+          throw error;
+        }
+      } catch (error) {
+        return next(error);
       }
-    } catch (error) {
-      return next(error);
     }
-  })
+  )
 );
 
 splitsRouter.post(
   "/admin/unpause-distributions",
-  withResponseValidation(AdminUnsignedXdrResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const requestId = res.locals.requestId;
-      const parsed = pauseDistributionsSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
-      }
-
+  withResponseValidation(
+    AdminUnsignedXdrResponseSchema,
+    async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const result = await buildUnpauseDistributionsUnsignedXdr(parsed.data);
-        logPaymentsAdminAction(res, "unpause_distributions", {
-          admin: parsed.data.admin
-        });
-        return res.status(200).json(result);
-      } catch (error) {
-        if (error instanceof RequestValidationError) {
-          return sendValidationError(res, requestId, error.message);
+        const requestId = res.locals.requestId;
+        const parsed = pauseDistributionsSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return sendValidationError(
+            res,
+            requestId,
+            "Invalid request payload.",
+            parsed.error.flatten()
+          );
         }
-        throw error;
+
+        try {
+          const result = await buildUnpauseDistributionsUnsignedXdr(parsed.data);
+          logPaymentsAdminAction(res, "unpause_distributions", {
+            admin: parsed.data.admin,
+          });
+          return res.status(200).json(result);
+        } catch (error) {
+          if (error instanceof RequestValidationError) {
+            return sendValidationError(res, requestId, error.message);
+          }
+          throw error;
+        }
+      } catch (error) {
+        return next(error);
       }
-    } catch (error) {
-      return next(error);
     }
-  })
+  )
 );
 
 splitsRouter.get("/:projectId/history", async (req: Request, res: Response, next: NextFunction) => {
@@ -784,29 +832,37 @@ splitsRouter.get("/:projectId/history", async (req: Request, res: Response, next
 
     const { topicProjectId, roundTopic, paymentTopic } = buildHistoryTopicFilters(projectId);
 
-    const roundEventResponse = await executeWithRetry(() => server.getEvents({
-      cursor,
-      filters: [
-        {
-          type: "contract",
-          contractIds: [config.contractId],
-          topics: [[roundTopic], [topicProjectId]]
-        }
-      ],
-      limit
-    }), { operation: "getEvents" });
+    const roundEventResponse = await executeWithRetry(
+      () =>
+        server.getEvents({
+          cursor,
+          filters: [
+            {
+              type: "contract",
+              contractIds: [config.contractId],
+              topics: [[roundTopic], [topicProjectId]],
+            },
+          ],
+          limit,
+        }),
+      { operation: "getEvents" }
+    );
 
-    const paymentEventResponse = await executeWithRetry(() => server.getEvents({
-      cursor,
-      filters: [
-        {
-          type: "contract",
-          contractIds: [config.contractId],
-          topics: [[paymentTopic], [topicProjectId]]
-        }
-      ],
-      limit
-    }), { operation: "getEvents" });
+    const paymentEventResponse = await executeWithRetry(
+      () =>
+        server.getEvents({
+          cursor,
+          filters: [
+            {
+              type: "contract",
+              contractIds: [config.contractId],
+              topics: [[paymentTopic], [topicProjectId]],
+            },
+          ],
+          limit,
+        }),
+      { operation: "getEvents" }
+    );
 
     const events = [
       ...roundEventResponse.events.map((e) => {
@@ -817,7 +873,7 @@ splitsRouter.get("/:projectId/history", async (req: Request, res: Response, next
           amount: decoded.amount,
           txHash: e.txHash,
           ledgerCloseTime: e.ledgerClosedAt,
-          id: e.id
+          id: e.id,
         };
       }),
       ...paymentEventResponse.events.map((e) => {
@@ -828,9 +884,9 @@ splitsRouter.get("/:projectId/history", async (req: Request, res: Response, next
           amount: decoded.amount,
           txHash: e.txHash,
           ledgerCloseTime: e.ledgerClosedAt,
-          id: e.id
+          id: e.id,
         };
-      })
+      }),
     ].sort((a, b) => b.ledgerCloseTime.localeCompare(a.ledgerCloseTime));
 
     // Prefer the server-provided pagination cursor when available
@@ -844,7 +900,7 @@ splitsRouter.get("/:projectId/history", async (req: Request, res: Response, next
 
     return res.status(200).json({
       items: serializeBigInts(events),
-      nextCursor
+      nextCursor,
     });
   } catch (error) {
     return next(error);
@@ -857,79 +913,99 @@ splitsRouter.get("/:projectId/history", async (req: Request, res: Response, next
 
 splitsRouter.get(
   "/admin/status",
-  withResponseValidation(AdminStatusResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const requestId = res.locals.requestId;
+  withResponseValidation(
+    AdminStatusResponseSchema,
+    async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const [adminRetval, pausedRetval] = await Promise.all([
-          simulateReadOnlyContractCall("get_admin"),
-          simulateReadOnlyContractCall("is_distributions_paused")
-        ]);
+        const requestId = res.locals.requestId;
+        try {
+          const [adminRetval, pausedRetval] = await Promise.all([
+            simulateReadOnlyContractCall("get_admin"),
+            simulateReadOnlyContractCall("is_distributions_paused"),
+          ]);
 
-        const admin = adminRetval ? String(scValToNative(adminRetval)) : null;
-        const isPaused = pausedRetval ? Boolean(scValToNative(pausedRetval)) : false;
+          const admin = adminRetval ? String(scValToNative(adminRetval)) : null;
+          const isPaused = pausedRetval ? Boolean(scValToNative(pausedRetval)) : false;
 
-        return res.status(200).json({ admin, isPaused });
-      } catch (error) {
-        if (error instanceof RequestValidationError) {
-          return res.status(400).json({ error: "validation_error", message: error.message, requestId, details: {} });
+          return res.status(200).json({ admin, isPaused });
+        } catch (error) {
+          if (error instanceof RequestValidationError) {
+            return res
+              .status(400)
+              .json({ error: "validation_error", message: error.message, requestId, details: {} });
+          }
+          throw error;
         }
-        throw error;
+      } catch (error) {
+        return next(error);
       }
-    } catch (error) {
-      return next(error);
     }
-  })
+  )
 );
 
 splitsRouter.get(
   "/admin/is-token-allowed",
-  withResponseValidation(AdminIsTokenAllowedResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const requestId = res.locals.requestId;
-      const parsed = isTokenAllowedQuerySchema.safeParse(req.query);
-      if (!parsed.success) {
-        return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
-      }
-      const { token } = parsed.data;
-
+  withResponseValidation(
+    AdminIsTokenAllowedResponseSchema,
+    async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const retval = await simulateReadOnlyContractCall("is_token_allowed", [
-          Address.fromString(token).toScVal()
-        ]);
-        const isAllowed = retval ? Boolean(scValToNative(retval)) : false;
-        return res.status(200).json({ token, isAllowed });
-      } catch (error) {
-        if (error instanceof RequestValidationError) {
-          return res.status(400).json({ error: "validation_error", message: error.message, requestId, details: {} });
+        const requestId = res.locals.requestId;
+        const parsed = isTokenAllowedQuerySchema.safeParse(req.query);
+        if (!parsed.success) {
+          return sendValidationError(
+            res,
+            requestId,
+            "Invalid request payload.",
+            parsed.error.flatten()
+          );
         }
-        throw error;
+        const { token } = parsed.data;
+
+        try {
+          const retval = await simulateReadOnlyContractCall("is_token_allowed", [
+            Address.fromString(token).toScVal(),
+          ]);
+          const isAllowed = retval ? Boolean(scValToNative(retval)) : false;
+          return res.status(200).json({ token, isAllowed });
+        } catch (error) {
+          if (error instanceof RequestValidationError) {
+            return res
+              .status(400)
+              .json({ error: "validation_error", message: error.message, requestId, details: {} });
+          }
+          throw error;
+        }
+      } catch (error) {
+        return next(error);
       }
-    } catch (error) {
-      return next(error);
     }
-  })
+  )
 );
 
 splitsRouter.get(
   "/admin/token-count",
-  withResponseValidation(AdminTokenCountResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const requestId = res.locals.requestId;
+  withResponseValidation(
+    AdminTokenCountResponseSchema,
+    async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const retval = await simulateReadOnlyContractCall("get_allowed_token_count");
-        const count = retval ? Number(scValToNative(retval)) : 0;
-        return res.status(200).json({ count });
-      } catch (error) {
-        if (error instanceof RequestValidationError) {
-          return res.status(400).json({ error: "validation_error", message: error.message, requestId, details: {} });
+        const requestId = res.locals.requestId;
+        try {
+          const retval = await simulateReadOnlyContractCall("get_allowed_token_count");
+          const count = retval ? Number(scValToNative(retval)) : 0;
+          return res.status(200).json({ count });
+        } catch (error) {
+          if (error instanceof RequestValidationError) {
+            return res
+              .status(400)
+              .json({ error: "validation_error", message: error.message, requestId, details: {} });
+          }
+          throw error;
         }
-        throw error;
+      } catch (error) {
+        return next(error);
       }
-    } catch (error) {
-      return next(error);
     }
-  })
+  )
 );
 
 // ============================================================
@@ -938,64 +1014,83 @@ splitsRouter.get(
 
 splitsRouter.get(
   "/admin/unallocated",
-  withResponseValidation(AdminUnallocatedResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const requestId = res.locals.requestId;
-      const parsed = unallocatedQuerySchema.safeParse(req.query);
-      if (!parsed.success) {
-        return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
-      }
-      const { token } = parsed.data;
-
+  withResponseValidation(
+    AdminUnallocatedResponseSchema,
+    async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const retval = await simulateReadOnlyContractCall("get_unallocated_balance", [
-          Address.fromString(token).toScVal()
-        ]);
-        const unallocated = retval ? String(scValToNative(retval)) : "0";
-        return res.status(200).json({ token, unallocated });
-      } catch (error) {
-        if (error instanceof RequestValidationError) {
-          return res.status(400).json({ error: "validation_error", message: error.message, requestId, details: {} });
+        const requestId = res.locals.requestId;
+        const parsed = unallocatedQuerySchema.safeParse(req.query);
+        if (!parsed.success) {
+          return sendValidationError(
+            res,
+            requestId,
+            "Invalid request payload.",
+            parsed.error.flatten()
+          );
         }
-        throw error;
+        const { token } = parsed.data;
+
+        try {
+          const retval = await simulateReadOnlyContractCall("get_unallocated_balance", [
+            Address.fromString(token).toScVal(),
+          ]);
+          const unallocated = retval ? String(scValToNative(retval)) : "0";
+          return res.status(200).json({ token, unallocated });
+        } catch (error) {
+          if (error instanceof RequestValidationError) {
+            return res
+              .status(400)
+              .json({ error: "validation_error", message: error.message, requestId, details: {} });
+          }
+          throw error;
+        }
+      } catch (error) {
+        return next(error);
       }
-    } catch (error) {
-      return next(error);
     }
-  })
+  )
 );
 
 splitsRouter.post(
   "/admin/withdraw-unallocated",
-  withResponseValidation(AdminUnsignedXdrResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const requestId = res.locals.requestId;
-      const parsed = withdrawUnallocatedSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return sendValidationError(res, requestId, "Invalid request payload.", parsed.error.flatten());
-      }
-
+  withResponseValidation(
+    AdminUnsignedXdrResponseSchema,
+    async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const result = await buildWithdrawUnallocatedUnsignedXdr(parsed.data);
-        logPaymentsAdminAction(res, "withdraw_unallocated", {
-          admin: parsed.data.admin,
-          token: parsed.data.token,
-          to: parsed.data.to,
-          amount: parsed.data.amount
-        });
-        return res.status(200).json(result);
-      } catch (error) {
-        if (error instanceof RequestValidationError) {
-          return res.status(400).json({ error: "validation_error", message: error.message, requestId, details: {} });
+        const requestId = res.locals.requestId;
+        const parsed = withdrawUnallocatedSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return sendValidationError(
+            res,
+            requestId,
+            "Invalid request payload.",
+            parsed.error.flatten()
+          );
         }
-        throw error;
-      }
-    } catch (error) {
-      return next(error);
-    }
-  })
-);
 
+        try {
+          const result = await buildWithdrawUnallocatedUnsignedXdr(parsed.data);
+          logPaymentsAdminAction(res, "withdraw_unallocated", {
+            admin: parsed.data.admin,
+            token: parsed.data.token,
+            to: parsed.data.to,
+            amount: parsed.data.amount,
+          });
+          return res.status(200).json(result);
+        } catch (error) {
+          if (error instanceof RequestValidationError) {
+            return res
+              .status(400)
+              .json({ error: "validation_error", message: error.message, requestId, details: {} });
+          }
+          throw error;
+        }
+      } catch (error) {
+        return next(error);
+      }
+    }
+  )
+);
 
 // ============================================================
 // Wave 5: self-service claim endpoint
@@ -1011,14 +1106,14 @@ splitsRouter.post("/:projectId/claim", async (req: Request, res: Response, next:
     if (!parsedParams.success || !parsedBody.success) {
       return sendValidationError(res, requestId, "Invalid request payload.", {
         params: parsedParams.success ? null : parsedParams.error.flatten(),
-        body: parsedBody.success ? null : parsedBody.error.flatten()
+        body: parsedBody.success ? null : parsedBody.error.flatten(),
       });
     }
 
     try {
       const result = await buildClaimUnsignedXdr({
         projectId: parsedParams.data,
-        claimer: parsedBody.data.claimer
+        claimer: parsedBody.data.claimer,
       });
       // Evict cached project state; balance will change after submission
       invalidateCache(`project:${parsedParams.data}`);

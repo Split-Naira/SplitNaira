@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  SPLIT_STATES,
+  assertActionAllowed,
   deriveParticipantStatuses,
   deriveSplitState,
+  isActionAllowed,
   isCancellable,
   isTerminal,
   summariseCompletion,
   type Collaborator,
   type PaymentRecord,
   type ProjectSnapshot,
+  type SplitAction,
 } from "../lib/split-lifecycle.js";
 
 function project(overrides: Partial<ProjectSnapshot> = {}): ProjectSnapshot {
@@ -273,5 +277,77 @@ describe("summariseCompletion", () => {
     const summary = summariseCompletion(project(), []);
     expect(summary.totalParticipants).toBe(0);
     expect(summary.allParticipantsPaid).toBe(false);
+  });
+});
+
+
+describe("isActionAllowed / assertActionAllowed (#1305)", () => {
+  const mutating: SplitAction[] = [
+    "deposit",
+    "update_metadata",
+    "update_collaborators",
+    "lock",
+    "distribute",
+    "cancel",
+  ];
+
+  it("permits every mutating action on a draft or active split", () => {
+    for (const action of mutating) {
+      expect(isActionAllowed("draft", action)).toBe(true);
+      expect(isActionAllowed("active", action)).toBe(true);
+    }
+  });
+
+  it("permits only distribution while a split is distributing", () => {
+    expect(isActionAllowed("distributing", "distribute")).toBe(true);
+    for (const action of mutating.filter((a) => a !== "distribute")) {
+      expect(isActionAllowed("distributing", action)).toBe(false);
+    }
+  });
+
+  it("permits no mutation once a split is settled", () => {
+    for (const action of mutating) {
+      expect(isActionAllowed("settled", action)).toBe(false);
+    }
+  });
+
+  it("permits no mutation once a split is cancelled", () => {
+    for (const action of mutating) {
+      expect(isActionAllowed("cancelled", action)).toBe(false);
+    }
+  });
+
+  it("always permits reading, in every state", () => {
+    for (const state of SPLIT_STATES) {
+      expect(isActionAllowed(state, "read")).toBe(true);
+    }
+  });
+
+  it("keeps cancellation consistent with isCancellable", () => {
+    for (const state of SPLIT_STATES) {
+      expect(isCancellable(state)).toBe(isActionAllowed(state, "cancel"));
+    }
+  });
+
+  it("throws a 409 naming the state and action", () => {
+    let thrown: { code?: string; status?: number; state?: string; action?: string } = {};
+    try {
+      assertActionAllowed("settled", "deposit");
+    } catch (err) {
+      thrown = err as typeof thrown;
+    }
+    expect(thrown.code).toBe("split_not_mutable");
+    expect(thrown.status).toBe(409);
+    expect(thrown.state).toBe("settled");
+    expect(thrown.action).toBe("deposit");
+  });
+
+  it("does not throw when the action is permitted", () => {
+    expect(() => assertActionAllowed("active", "distribute")).not.toThrow();
+    expect(() => assertActionAllowed("settled", "read")).not.toThrow();
+  });
+
+  it("refuses a second cancellation of a cancelled split", () => {
+    expect(() => assertActionAllowed("cancelled", "cancel")).toThrow(/split_not_mutable/);
   });
 });

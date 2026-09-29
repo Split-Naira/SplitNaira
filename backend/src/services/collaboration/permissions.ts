@@ -102,3 +102,80 @@ export function getPermissionsMatrix(): Array<{
     permissions: ROLE_PERMISSIONS[role],
   }));
 }
+
+/**
+ * A project's stored collaboration record — the authority for a requester's role.
+ *
+ * Roles are read from here, never from the request being authorized. A caller
+ * that can name its own role can grant itself one, which is exactly what this
+ * matrix exists to prevent.
+ */
+export interface ProjectRoleContext {
+  owner: string;
+  collaborators: Array<{ address: string; role?: CollaboratorRole }>;
+}
+
+/**
+ * Resolves the role a requester actually holds on a project.
+ *
+ * Returns `null` when the requester is not on the project, or when the record
+ * is unusable. Callers must treat `null` as "no access", never as "default".
+ *
+ * The owner address always resolves to `owner`, even if it also appears in the
+ * collaborator list with a lesser role — otherwise a stray entry could demote
+ * the owner and lock them out of their own project.
+ */
+export function resolveRequesterRole(
+  context: ProjectRoleContext | null,
+  requesterAddress: string,
+): CollaboratorRole | null {
+  if (
+    !context ||
+    typeof requesterAddress !== "string" ||
+    requesterAddress.trim() === ""
+  ) {
+    return null;
+  }
+
+  return resolveCollaboratorRole({
+    requesterAddress,
+    ownerAddress: context.owner,
+    collaborators: Array.isArray(context.collaborators)
+      ? context.collaborators
+      : [],
+  });
+}
+
+/**
+ * Enforces a permission server-side: resolve the requester's role from the
+ * project record, then assert the grant.
+ *
+ * Fails closed. An unknown requester, an unrecognised role, or an unavailable
+ * project record all deny. Throws the same `permission_denied` shape as
+ * `assertPermission`, plus a `reason`, so existing error handling is unchanged.
+ */
+export function assertProjectPermission(
+  context: ProjectRoleContext | null,
+  requesterAddress: string,
+  permission: ProjectPermission,
+): CollaboratorRole {
+  const role = resolveRequesterRole(context, requesterAddress);
+
+  if (!role) {
+    throw Object.assign(
+      new Error(
+        `permission_denied: requester is not on this project (${permission})`,
+      ),
+      {
+        code: "permission_denied",
+        status: 403,
+        role: null,
+        permission,
+        reason: "project_role_unknown",
+      },
+    );
+  }
+
+  assertPermission(role, permission);
+  return role;
+}

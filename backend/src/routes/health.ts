@@ -93,8 +93,24 @@ healthRouter.get("/ready", handleReadiness);
 // no natural degraded state (config is either valid or it isn't), so it
 // stays a simple `{ ok: boolean }`.
 
-/** Per-dependency 3-way health status, mirroring EventListenerService's ServiceStatus naming. */
-export type ComponentStatus = "up" | "degraded" | "down";
+/**
+ * Per-dependency health status.
+ *
+ * `up` / `degraded` / `down` describe a dependency that was actually probed,
+ * mirroring EventListenerService's ServiceStatus naming (`degraded` means it
+ * responded, but slower than its latency threshold).
+ *
+ * `unknown` means no probe ran for that dependency on this request — the
+ * shutdown/startup gates and an invalid env check all return before `db`/`rpc`/
+ * `contract` are touched, a `db` failure returns before the Soroban checks run,
+ * and a failed RPC check skips the contract simulation. Reporting those as
+ * `down` claimed a dependency *failure* that was never observed, which is the
+ * opposite of what an operator needs from a diagnostics endpoint.
+ */
+export type ComponentStatus = "up" | "degraded" | "down" | "unknown";
+
+/** Message used for a dependency that was not probed on this request. */
+const NOT_CHECKED = "not_checked: no probe ran on this request";
 
 export interface ComponentHealth {
   status: ComponentStatus;
@@ -205,9 +221,11 @@ async function handleReadiness(_req: unknown, res: Response, _next: NextFunction
     contract: ComponentHealth;
   } = {
     env: { ok: true },
-    db: { status: "down" },
-    rpc: { status: "down" },
-    contract: { status: "down" }
+    // "unknown" until a probe actually runs. Every early return below leaves
+    // whatever is still unprobed as "unknown" rather than asserting "down".
+    db: { status: "unknown", message: NOT_CHECKED },
+    rpc: { status: "unknown", message: NOT_CHECKED },
+    contract: { status: "unknown", message: NOT_CHECKED }
   };
 
   if (shuttingDown) {
@@ -356,7 +374,10 @@ async function handleReadiness(_req: unknown, res: Response, _next: NextFunction
       status: "down",
       message: redactSecrets(isTimeout ? `timeout: ${message}` : `rpc_check_failed: ${message}`)
     };
-    components.contract = { status: "down", message: "Skipped because Soroban RPC check failed" };
+    components.contract = {
+      status: "unknown",
+      message: "not_checked: the Soroban RPC check failed, so the contract simulation was skipped"
+    };
     res.status(503).json({
       status: "not_ready",
       error: "rpc_unavailable",
@@ -388,5 +409,10 @@ async function handleReadiness(_req: unknown, res: Response, _next: NextFunction
     status: anyDegraded ? "degraded" : "ready",
     version: SERVICE_VERSION,
     components: { ...components, eventListener },
+    // Issue #1281: every 503 body above carries a requestId, but the 200
+    // bodies did not — so a `degraded` response pasted into an incident
+    // thread had no correlation id to join it back to the logs. Both
+    // outcomes now carry one.
+    requestId
   });
 }

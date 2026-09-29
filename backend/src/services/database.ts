@@ -10,6 +10,7 @@ import { SplitCancellation } from "../entities/SplitCancellation.js";
 import { ProjectArchival } from "../entities/ProjectArchival.js";
 import { NotificationPreference } from "../entities/NotificationPreference.js";
 import { Notification } from "../entities/Notification.js";
+import { ProjectEditHistory } from "../entities/ProjectEditHistory.js";
 import { logger } from "./logger.js";
 
 let AppDataSource: DataSource | null = null;
@@ -48,7 +49,8 @@ export function createDataSource(): DataSource {
       SplitCancellation,
       ProjectArchival,
       NotificationPreference,
-    Notification
+    Notification,
+    ProjectEditHistory
     ],
     migrations: ["src/migrations/*.ts"],
     migrationsTableName: "migrations",

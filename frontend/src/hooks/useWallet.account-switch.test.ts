@@ -21,6 +21,25 @@ afterEach(() => {
 });
 
 describe("wallet account switch", () => {
+  it("reports failed connect actions to callers", async () => {
+    vi.mocked(walletLib.getWalletState).mockResolvedValue({
+      connected: false,
+      address: null,
+      network: null,
+    });
+    vi.mocked(walletLib.connectWallet).mockRejectedValue(new Error("Wallet unavailable"));
+
+    const { result } = renderHook(() => useWalletState());
+
+    let didConnect = true;
+    await act(async () => {
+      didConnect = await result.current.connect();
+    });
+
+    expect(didConnect).toBe(false);
+    expect(result.current.error).toBe("Wallet unavailable");
+  });
+
   it("resets and refreshes when poll detects a different address", async () => {
     vi.mocked(walletLib.getWalletState).mockResolvedValue({
       connected: true,

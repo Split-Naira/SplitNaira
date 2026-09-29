@@ -5,7 +5,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { splitsRouter } from "./splits.js";
 import { requestIdMiddleware } from "../middleware/request-id.js";
 import { errorHandler, notFoundHandler } from "../middleware/error.js";
-import { invalidateCacheByPrefix } from "../services/stellar.js";
+import { getCached, invalidateCacheByPrefix, setCached } from "../services/stellar.js";
 
 const getAccountMock = vi.fn();
 const prepareTransactionMock = vi.fn();
@@ -39,27 +39,33 @@ vi.mock("@stellar/stellar-sdk", () => {
       }),
     },
     BASE_FEE: 100,
-    Contract: vi.fn().mockImplementation(function () { return {
-      call: (method: string, ...args: unknown[]) => ({ method, args }),
-    }; }),
-    TransactionBuilder: vi.fn().mockImplementation(function () { return {
-      addOperation: function (op: unknown) {
-        this.op = op;
-        return this;
-      },
-      setTimeout: function () {
-        return this;
-      },
-      build: function () {
-        return { preparedOperation: this.op };
-      },
-    }; }),
+    Contract: vi.fn().mockImplementation(function () {
+      return {
+        call: (method: string, ...args: unknown[]) => ({ method, args }),
+      };
+    }),
+    TransactionBuilder: vi.fn().mockImplementation(function () {
+      return {
+        addOperation: function (op: unknown) {
+          this.op = op;
+          return this;
+        },
+        setTimeout: function () {
+          return this;
+        },
+        build: function () {
+          return { preparedOperation: this.op };
+        },
+      };
+    }),
     nativeToScVal: vi.fn((value: unknown) => ({
       toXDR: () => `MOCKED_XDR_${value}`,
     })),
     scValToNative: vi.fn((value: unknown) => value),
     rpc: {
-      Server: vi.fn().mockImplementation(function () { return serverMock; }),
+      Server: vi.fn().mockImplementation(function () {
+        return serverMock;
+      }),
     },
     xdr: {
       ScVal: {
@@ -118,10 +124,7 @@ describe("splits routes integration", () => {
       ],
     };
 
-    const response = await request(app)
-      .post("/splits")
-      .send(createPayload)
-      .expect(200);
+    const response = await request(app).post("/splits").send(createPayload).expect(200);
 
     expect(response.body).toMatchObject({
       xdr: "XDR_CREATE",
@@ -138,6 +141,8 @@ describe("splits routes integration", () => {
 
   it("locks a split project", async () => {
     mockOnChainProjectOwner("GOWNER");
+    setCached("project:project_1", { owner: "GOWNER", locked: false });
+    setCached("list_projects:0:10", [{ projectId: "project_1" }]);
     getAccountMock.mockResolvedValue({ accountId: "GOWNER" });
     prepareTransactionMock.mockResolvedValue({
       toXDR: () => "XDR_LOCK",
@@ -161,6 +166,8 @@ describe("splits routes integration", () => {
     });
 
     expect(getAccountMock).toHaveBeenCalledWith("GOWNER");
+    expect(getCached("project:project_1")).toBeUndefined();
+    expect(getCached("list_projects:0:10")).toBeUndefined();
   });
 
   it("builds distribute transaction", async () => {
@@ -203,9 +210,7 @@ describe("splits routes integration", () => {
 
     const app = createApp();
 
-    const response = await request(app)
-      .get("/splits?start=0&limit=10")
-      .expect(200);
+    const response = await request(app).get("/splits?start=0&limit=10").expect(200);
 
     expect(response.body).toMatchObject({
       projects: [{ projectId: "project_1" }, { projectId: "project_2" }],
@@ -230,9 +235,7 @@ describe("splits routes integration", () => {
     const app = createApp();
 
     const cursor = Buffer.from("2").toString("base64");
-    const response = await request(app)
-      .get(`/splits?cursor=${cursor}&limit=2`)
-      .expect(200);
+    const response = await request(app).get(`/splits?cursor=${cursor}&limit=2`).expect(200);
 
     expect(response.body).toMatchObject({
       projects: [{ projectId: "project_3" }, { projectId: "project_4" }],
@@ -256,9 +259,7 @@ describe("splits routes integration", () => {
     const app = createApp();
 
     const cursor = Buffer.from("9").toString("base64");
-    const response = await request(app)
-      .get(`/splits?cursor=${cursor}&limit=5`)
-      .expect(200);
+    const response = await request(app).get(`/splits?cursor=${cursor}&limit=5`).expect(200);
 
     expect(response.body.projects).toHaveLength(1);
     expect(response.body.nextCursor).toBeNull();
@@ -267,9 +268,7 @@ describe("splits routes integration", () => {
   it("rejects invalid cursor with 400", async () => {
     const app = createApp();
 
-    const response = await request(app)
-      .get("/splits?cursor=invalid!!")
-      .expect(400);
+    const response = await request(app).get("/splits?cursor=invalid!!").expect(400);
 
     expect(response.body.error).toBeTruthy();
   });
@@ -321,9 +320,7 @@ describe("splits routes integration", () => {
 
     const app = createApp();
 
-    const response = await request(app)
-      .get("/splits/admin/allowlist?start=0&limit=25")
-      .expect(200);
+    const response = await request(app).get("/splits/admin/allowlist?start=0&limit=25").expect(200);
 
     expect(response.body).toEqual({
       admin: "GADMIN",
@@ -514,9 +511,7 @@ describe("splits routes integration", () => {
 
     const app = createApp();
 
-    const response = await request(app)
-      .get("/splits/project_1/history")
-      .expect(200);
+    const response = await request(app).get("/splits/project_1/history").expect(200);
 
     expect(response.body).toEqual({
       items: [
@@ -592,10 +587,7 @@ describe("Issue #174: lock & update permissions and owner gating", () => {
 
   it("lock route rejects missing owner with 400 validation_error", async () => {
     const app = createApp();
-    const response = await request(app)
-      .post("/splits/proj_a/lock")
-      .send({})
-      .expect(400);
+    const response = await request(app).post("/splits/proj_a/lock").send({}).expect(400);
 
     expect(response.body.error).toBe("validation_error");
     expect(getAccountMock).not.toHaveBeenCalled();
@@ -711,9 +703,7 @@ describe("Issue #174: lock & update permissions and owner gating", () => {
       .put("/splits/proj_a/collaborators")
       .send({
         owner: VALID_OWNER,
-        collaborators: [
-          { address: VALID_COLLAB_A, alias: "A", basisPoints: 10000 },
-        ],
+        collaborators: [{ address: VALID_COLLAB_A, alias: "A", basisPoints: 10000 }],
       })
       .expect(400);
 
@@ -784,9 +774,7 @@ describe("Issue #174: lock & update permissions and owner gating", () => {
     expect(lockRes.body.metadata.sourceAccount).toBe(VALID_OWNER);
 
     // All 3 ops called getAccount with the same owner address
-    const ownerCalls = getAccountMock.mock.calls.filter(
-      (call) => call[0] === VALID_OWNER,
-    );
+    const ownerCalls = getAccountMock.mock.calls.filter((call) => call[0] === VALID_OWNER);
     expect(ownerCalls.length).toBe(3);
   });
 });
@@ -812,18 +800,26 @@ describe("Issue #1092: project ownership validation on owner-gated mutations", (
     {
       name: "PUT /:projectId/collaborators",
       send: (app: express.Express, owner: string) =>
-        request(app).put("/splits/proj_own/collaborators").send({ owner, collaborators: COLLABORATORS }),
+        request(app)
+          .put("/splits/proj_own/collaborators")
+          .send({ owner, collaborators: COLLABORATORS }),
     },
     {
       name: "PATCH /:projectId/metadata",
       send: (app: express.Express, owner: string) =>
-        request(app).patch("/splits/proj_own/metadata").send({ owner, title: "Renamed", projectType: "music" }),
+        request(app)
+          .patch("/splits/proj_own/metadata")
+          .send({ owner, title: "Renamed", projectType: "music" }),
     },
   ];
 
   beforeEach(() => {
     getAccountMock.mockImplementation(async (address: string) => ({ accountId: address }));
-    prepareTransactionMock.mockResolvedValue({ toXDR: () => "XDR_OWNER_OK", sequence: "1", fee: "100" });
+    prepareTransactionMock.mockResolvedValue({
+      toXDR: () => "XDR_OWNER_OK",
+      sequence: "1",
+      fee: "100",
+    });
     mockOnChainProjectOwner(OWNER);
   });
 
@@ -918,9 +914,7 @@ describe("admin contract-state read routes", () => {
 
     const app = createApp();
     const token = "CTOKEN00000000000000000000000000000000000000000000000001";
-    const res = await request(app)
-      .get(`/splits/admin/is-token-allowed?token=${token}`)
-      .expect(200);
+    const res = await request(app).get(`/splits/admin/is-token-allowed?token=${token}`).expect(200);
 
     expect(res.body).toMatchObject({ token });
     expect(res.body).toHaveProperty("isAllowed");
@@ -928,9 +922,7 @@ describe("admin contract-state read routes", () => {
 
   it("GET /splits/admin/is-token-allowed returns 400 for a missing token param", async () => {
     const app = createApp();
-    const res = await request(app)
-      .get("/splits/admin/is-token-allowed")
-      .expect(400);
+    const res = await request(app).get("/splits/admin/is-token-allowed").expect(400);
     expect(res.body.error).toBe("validation_error");
   });
 
@@ -952,10 +944,8 @@ describe("admin contract-state read routes", () => {
 // ============================================================
 
 describe("unallocated token recovery routes", () => {
-  const VALID_ADMIN =
-    "GADMIN00000000000000000000000000000000000000000000000001";
-  const VALID_TOKEN =
-    "CTOKEN00000000000000000000000000000000000000000000000001";
+  const VALID_ADMIN = "GADMIN00000000000000000000000000000000000000000000000001";
+  const VALID_TOKEN = "CTOKEN00000000000000000000000000000000000000000000000001";
   const VALID_TO = "GRECOVER0000000000000000000000000000000000000000000000001";
 
   it("GET /splits/admin/unallocated returns recoverable balance for a valid token", async () => {
@@ -1079,10 +1069,7 @@ describe("POST /splits/:projectId/claim", () => {
 
   it("returns 400 when claimer is missing", async () => {
     const app = createApp();
-    const res = await request(app)
-      .post("/splits/test_project/claim")
-      .send({})
-      .expect(400);
+    const res = await request(app).post("/splits/test_project/claim").send({}).expect(400);
 
     expect(res.body.error).toBe("validation_error");
   });

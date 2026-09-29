@@ -38,6 +38,14 @@ export function optionalCategories(): PreferenceCategory[] {
 
 @Entity("notification_preferences")
 @Index("IDX_notification_preferences_wallet", ["wallet"])
+// The service saves with `upsert(..., ["wallet", "category"])`, which compiles
+// to `ON CONFLICT ("wallet", "category")`. Postgres only accepts that target
+// when a unique index covers exactly those columns, so without this every
+// preference write fails — and it also makes a repeated save converge instead
+// of accumulating contradictory rows.
+@Index("UQ_notification_preferences_wallet_category", ["wallet", "category"], {
+  unique: true,
+})
 export class NotificationPreference {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -45,7 +53,14 @@ export class NotificationPreference {
   @Column({ type: "varchar", length: 128 })
   wallet!: string;
 
-  @Column({ type: "enum", enum: PREFERENCE_CATEGORIES })
+  // `enumName` pins the Postgres type the migration creates. Without it
+  // TypeORM derives the name from the table and column, so a later table rename
+  // would silently point the entity at a type that no longer exists.
+  @Column({
+    type: "enum",
+    enum: PREFERENCE_CATEGORIES,
+    enumName: "notification_preference_category_enum",
+  })
   category!: PreferenceCategory;
 
   /**

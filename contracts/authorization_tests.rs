@@ -1,66 +1,88 @@
 #![cfg(test)]
-//! Authorization boundary tests (issue #865).
-//!
-//! Table-style coverage of unauthorized-caller attempts across the contract's
-//! sensitive (state-mutating) entry points: project owner-gated operations,
-//! admin-gated operations, and the collaborator-gated `claim` payout. Each
-//! case asserts both the returned error code and that no contract state was
-//! mutated by the rejected call.
-//!
-//! Notes on scope, matching the authorization assumptions documented in
-//! `contracts/README.md`:
-//! - `distribute` / `batch_distribute` (the payout trigger) are intentionally
-//!   permissionless — anyone may call them, since the payout math itself is
-//!   trustless and funds only ever move to the recorded collaborators. This
-//!   file documents that with a passing-call test rather than an
-//!   unauthorized-caller test, since there is no caller to reject.
-//! - The contract has no reversible "unlock"; `lock_project` is a one-way
-//!   permanent lock. The closest lock/unlock-shaped admin pair is
-//!   `pause_distributions` / `unpause_distributions`, covered below.
 
-use crate::{errors::SplitError, Collaborator, SplitNairaContract, SplitNairaContractClient};
-use soroban_sdk::{testutils::Address as _, token, vec, Address, Env, String, Symbol, Vec};
+//! Authorization boundary tests for SplitNaira (issue #865).
+//!
+//! These tests verify that sensitive state-mutating entry points enforce their
+//! documented authorization boundaries and that rejected calls do not mutate
+//! contract state.
+//!
+//! ## Authorization model
+//!
+//! - Project owners control owner-gated project operations.
+//! - The configured administrator controls admin-gated operations.
+//! - Registered collaborators may claim their project payouts.
+//! - `distribute` and `batch_distribute` are intentionally permissionless.
+//!   Anyone may trigger distribution because funds are distributed according
+//!   to the project's recorded collaborator shares.
+//! - `lock_project` is permanent; there is no corresponding unlock operation.
+//! - `pause_distributions` / `unpause_distributions` provide the reversible
+//!   administrator-controlled state transition.
+//!
+//! These tests focus on authorization boundaries. Business-rule validation
+//! belongs in the reliability and functional test suites.
 
-// ─────────────────────────────────────────────────────────────────────────────
+use crate::{
+    errors::SplitError,
+    Collaborator,
+    SplitNairaContract,
+    SplitNairaContractClient,
+    SplitProject,
+};
+use soroban_sdk::{
+    testutils::Address as _,
+    token,
+    vec,
+    Address,
+    Env,
+    String,
+    Symbol,
+    Vec,
+};
+
+// -----------------------------------------------------------------------------
 // Shared helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
-/// Registers the contract and returns a ready-to-use client + contract address.
-fn make_client(env: &Env) -> (SplitNairaContractClient, Address) {
+/// Registers a SplitNaira contract and returns a ready-to-use client.
+fn make_client(env: &Env) -> SplitNairaContractClient {
     let contract_id = env.register_contract(None, SplitNairaContract);
-    let client = SplitNairaContractClient::new(env, &contract_id);
-    (client, contract_id)
+    SplitNairaContractClient::new(env, &contract_id)
 }
 
-/// Returns a Vec of two collaborators splitting 50/50.
+/// Returns two collaborators with an even 50/50 split.
 fn two_collabs(env: &Env) -> Vec<Collaborator> {
-    let a = Address::generate(env);
-    let b = Address::generate(env);
+    let alice = Address::generate(env);
+    let bob = Address::generate(env);
+
     vec![
         env,
         Collaborator {
-            address: a,
-            alias: String::from_str(env, "A"),
+            address: alice,
+            alias: String::from_str(env, "Alice"),
             basis_points: 5000,
         },
         Collaborator {
-            address: b,
-            alias: String::from_str(env, "B"),
+            address: bob,
+            alias: String::from_str(env, "Bob"),
             basis_points: 5000,
         },
     ]
 }
 
-/// Creates a project with a registered token and returns (client, owner, token).
+/// Creates a project with a registered Stellar asset token.
+///
+/// Returns `(client, owner, token)`.
 fn setup_project<'a>(
     env: &'a Env,
     project_id: &'a Symbol,
 ) -> (SplitNairaContractClient<'a>, Address, Address) {
-    let (client, _) = make_client(env);
+    let client = make_client(env);
+
     let token_admin = Address::generate(env);
     let token = env.register_stellar_asset_contract(token_admin);
+
     let owner = Address::generate(env);
-    let collabs = two_collabs(env);
+    let collaborators = two_collabs(env);
 
     client.create_project(
         &owner,
@@ -68,12 +90,13 @@ fn setup_project<'a>(
         &String::from_str(env, "Test Project"),
         &String::from_str(env, "music"),
         &token,
-        &collabs,
+        &collaborators,
     );
+
     (client, owner, token)
 }
 
-/// Mints `amount` of `token` to `from` and deposits it into `project_id`.
+/// Mints tokens to `from` and deposits them into the project.
 fn deposit_to_project(
     env: &Env,
     client: &SplitNairaContractClient,
@@ -83,13 +106,16 @@ fn deposit_to_project(
     amount: i128,
 ) {
     let token_client = token::StellarAssetClient::new(env, token);
+
     token_client.mint(from, &amount);
     client.deposit(project_id, from, &amount);
 }
 
-/// Asserts that every observable field of `before` and `after` is identical,
-/// i.e. a rejected call caused no state mutation. `SplitProject`/`Collaborator`
-/// don't derive `PartialEq`, so fields are compared individually.
+/// Verifies that a rejected operation did not modify any observable project
+/// state.
+///
+/// `SplitProject` and `Collaborator` do not implement `PartialEq`, so fields
+/// are compared explicitly.
 fn assert_project_unchanged(before: &SplitProject, after: &SplitProject) {
     assert_eq!(before.owner, after.owner);
     assert_eq!(before.title, after.title);
@@ -98,35 +124,53 @@ fn assert_project_unchanged(before: &SplitProject, after: &SplitProject) {
     assert_eq!(before.locked, after.locked);
     assert_eq!(before.total_distributed, after.total_distributed);
     assert_eq!(before.distribution_round, after.distribution_round);
+
     assert_eq!(before.collaborators.len(), after.collaborators.len());
-    for i in 0..before.collaborators.len() {
-        let b = before.collaborators.get(i).unwrap();
-        let a = after.collaborators.get(i).unwrap();
-        assert_eq!(b.address, a.address);
-        assert_eq!(b.basis_points, a.basis_points);
+
+    for index in 0..before.collaborators.len() {
+        let before_collaborator = before.collaborators.get(index).unwrap();
+        let after_collaborator = after.collaborators.get(index).unwrap();
+
+        assert_eq!(
+            before_collaborator.address,
+            after_collaborator.address
+        );
+        assert_eq!(
+            before_collaborator.basis_points,
+            after_collaborator.basis_points
+        );
+        assert_eq!(
+            before_collaborator.alias,
+            after_collaborator.alias
+        );
     }
 }
 
-use crate::SplitProject;
+// -----------------------------------------------------------------------------
+// 1. Owner-gated operations
+// -----------------------------------------------------------------------------
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 1. Owner-gated operations vs. a non-owner caller (existing project)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Table of owner-gated mutations: a non-owner attacker must be rejected with
-/// `Unauthorized` and the project must be left exactly as it was.
+/// A caller who is not the project owner must not be able to modify
+/// owner-controlled project state.
+///
+/// Every rejected operation must return `Unauthorized` and leave the project
+/// unchanged.
 #[test]
-fn test_owner_gated_operations_reject_non_owner_and_preserve_state() {
+fn test_owner_gated_operations_reject_non_owner() {
+    let env = Env::default();
+    env.mock_all_auths();
+
     // update_collaborators
     {
-        let env = Env::default();
-        env.mock_all_auths();
-        let project_id = Symbol::new(&env, "auth_uc");
+        let project_id = Symbol::new(&env, "auth_update");
         let (client, _owner, _token) = setup_project(&env, &project_id);
         let attacker = Address::generate(&env);
+
         let before = client.get_project(&project_id).unwrap();
 
-        let result = client.try_update_collaborators(&project_id, &attacker, &two_collabs(&env));
+        let result =
+            client.try_update_collaborators(&project_id, &attacker, &two_collabs(&env));
+
         assert_eq!(result, Err(Ok(SplitError::Unauthorized)));
 
         let after = client.get_project(&project_id).unwrap();
@@ -135,28 +179,28 @@ fn test_owner_gated_operations_reject_non_owner_and_preserve_state() {
 
     // lock_project
     {
-        let env = Env::default();
-        env.mock_all_auths();
         let project_id = Symbol::new(&env, "auth_lock");
         let (client, _owner, _token) = setup_project(&env, &project_id);
         let attacker = Address::generate(&env);
+
         let before = client.get_project(&project_id).unwrap();
 
         let result = client.try_lock_project(&project_id, &attacker);
+
         assert_eq!(result, Err(Ok(SplitError::Unauthorized)));
 
         let after = client.get_project(&project_id).unwrap();
+
         assert_project_unchanged(&before, &after);
         assert!(!after.locked);
     }
 
     // update_project_metadata
     {
-        let env = Env::default();
-        env.mock_all_auths();
-        let project_id = Symbol::new(&env, "auth_meta");
+        let project_id = Symbol::new(&env, "auth_metadata");
         let (client, _owner, _token) = setup_project(&env, &project_id);
         let attacker = Address::generate(&env);
+
         let before = client.get_project(&project_id).unwrap();
 
         let result = client.try_update_project_metadata(
@@ -165,6 +209,7 @@ fn test_owner_gated_operations_reject_non_owner_and_preserve_state() {
             &String::from_str(&env, "Hijacked Title"),
             &String::from_str(&env, "film"),
         );
+
         assert_eq!(result, Err(Ok(SplitError::Unauthorized)));
 
         let after = client.get_project(&project_id).unwrap();
@@ -173,16 +218,20 @@ fn test_owner_gated_operations_reject_non_owner_and_preserve_state() {
 
     // transfer_project_ownership
     {
-        let env = Env::default();
-        env.mock_all_auths();
-        let project_id = Symbol::new(&env, "auth_xfer");
+        let project_id = Symbol::new(&env, "auth_transfer");
         let (client, _owner, _token) = setup_project(&env, &project_id);
         let attacker = Address::generate(&env);
         let attacker_target = Address::generate(&env);
+
         let before = client.get_project(&project_id).unwrap();
 
         let result =
-            client.try_transfer_project_ownership(&project_id, &attacker, &attacker_target);
+            client.try_transfer_project_ownership(
+                &project_id,
+                &attacker,
+                &attacker_target,
+            );
+
         assert_eq!(result, Err(Ok(SplitError::Unauthorized)));
 
         let after = client.get_project(&project_id).unwrap();
@@ -190,297 +239,377 @@ fn test_owner_gated_operations_reject_non_owner_and_preserve_state() {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 2. Owner-gated operations vs. a nonexistent project ID
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// 2. Owner-gated operations against nonexistent projects
+// -----------------------------------------------------------------------------
 
-/// The existence guard runs before the ownership check on every owner-gated
-/// method, so a nonexistent project always returns `NotFound` first — even
-/// when the caller also happens not to be (and could never be) the owner.
+/// A nonexistent project must fail the existence check before authorization.
+///
+/// This verifies that owner-gated operations consistently return `NotFound`
+/// when the requested project does not exist.
 #[test]
 fn test_owner_gated_operations_on_nonexistent_project_return_not_found() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, _) = make_client(&env);
-    let ghost = Symbol::new(&env, "ghost_auth");
+
+    let client = make_client(&env);
+    let project_id = Symbol::new(&env, "missing_project");
     let caller = Address::generate(&env);
-    let other = Address::generate(&env);
+    let new_owner = Address::generate(&env);
 
     assert_eq!(
-        client.try_update_collaborators(&ghost, &caller, &two_collabs(&env)),
+        client.try_update_collaborators(
+            &project_id,
+            &caller,
+            &two_collabs(&env),
+        ),
         Err(Ok(SplitError::NotFound))
     );
+
     assert_eq!(
-        client.try_lock_project(&ghost, &caller),
+        client.try_lock_project(&project_id, &caller),
         Err(Ok(SplitError::NotFound))
     );
+
     assert_eq!(
         client.try_update_project_metadata(
-            &ghost,
+            &project_id,
             &caller,
             &String::from_str(&env, "Title"),
             &String::from_str(&env, "music"),
         ),
         Err(Ok(SplitError::NotFound))
     );
+
     assert_eq!(
-        client.try_transfer_project_ownership(&ghost, &caller, &other),
+        client.try_transfer_project_ownership(
+            &project_id,
+            &caller,
+            &new_owner,
+        ),
         Err(Ok(SplitError::NotFound))
     );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 3. Admin-gated operations vs. a non-admin caller
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// 3. Administrator-gated operations
+// -----------------------------------------------------------------------------
 
-/// Table of admin-gated mutations: both the "no admin configured yet" and the
-/// "wrong caller once an admin is configured" cases must be rejected with the
-/// documented error, and any prior admin-controlled state must be preserved.
+/// Unauthorized callers must not be able to modify administrator-controlled
+/// contract state.
+///
+/// This covers both:
+/// - operations attempted before an administrator is configured; and
+/// - operations attempted by a caller other than the configured administrator.
 #[test]
-fn test_admin_gated_operations_reject_non_admin_and_preserve_state() {
-    // pause_distributions: configured admin rejects a different caller.
+fn test_admin_gated_operations_reject_unauthorized_callers() {
+    // pause_distributions: configured admin rejects attacker.
     {
         let env = Env::default();
         env.mock_all_auths();
-        let (client, _) = make_client(&env);
+
+        let client = make_client(&env);
         let admin = Address::generate(&env);
         let attacker = Address::generate(&env);
+
         client.set_admin(&admin);
 
         let result = client.try_pause_distributions(&attacker);
+
         assert_eq!(result, Err(Ok(SplitError::Unauthorized)));
         assert!(!client.is_distributions_paused());
     }
 
-    // unpause_distributions: no admin configured yet.
+    // unpause_distributions: no admin configured.
     {
         let env = Env::default();
         env.mock_all_auths();
-        let (client, _) = make_client(&env);
-        let stranger = Address::generate(&env);
 
-        let result = client.try_unpause_distributions(&stranger);
+        let client = make_client(&env);
+        let caller = Address::generate(&env);
+
+        let result = client.try_unpause_distributions(&caller);
+
         assert_eq!(result, Err(Ok(SplitError::AdminNotSet)));
     }
 
-    // unpause_distributions: configured admin rejects a different caller,
-    // and the paused flag must remain untouched by the rejected call.
+    // unpause_distributions: configured admin rejects attacker.
     {
         let env = Env::default();
         env.mock_all_auths();
-        let (client, _) = make_client(&env);
+
+        let client = make_client(&env);
         let admin = Address::generate(&env);
         let attacker = Address::generate(&env);
+
         client.set_admin(&admin);
         client.pause_distributions(&admin);
 
         let result = client.try_unpause_distributions(&attacker);
+
         assert_eq!(result, Err(Ok(SplitError::Unauthorized)));
         assert!(client.is_distributions_paused());
     }
 
-    // disallow_token: no admin configured yet.
+    // disallow_token: no admin configured.
     {
         let env = Env::default();
         env.mock_all_auths();
-        let (client, _) = make_client(&env);
+
+        let client = make_client(&env);
+        let caller = Address::generate(&env);
         let token_admin = Address::generate(&env);
         let token = env.register_stellar_asset_contract(token_admin);
-        let stranger = Address::generate(&env);
 
-        let result = client.try_disallow_token(&stranger, &token);
+        let result = client.try_disallow_token(&caller, &token);
+
         assert_eq!(result, Err(Ok(SplitError::AdminNotSet)));
     }
 
-    // disallow_token: configured admin rejects a different caller, and the
-    // allowlist entry must remain untouched by the rejected call.
+    // disallow_token: configured admin rejects attacker.
     {
         let env = Env::default();
         env.mock_all_auths();
-        let (client, _) = make_client(&env);
+
+        let client = make_client(&env);
         let admin = Address::generate(&env);
         let attacker = Address::generate(&env);
         let token_admin = Address::generate(&env);
         let token = env.register_stellar_asset_contract(token_admin);
+
         client.set_admin(&admin);
         client.allow_token(&admin, &token);
 
         let result = client.try_disallow_token(&attacker, &token);
+
         assert_eq!(result, Err(Ok(SplitError::Unauthorized)));
         assert!(client.is_token_allowed(&token));
     }
 
-    // migrate_flat_to_buckets: no admin configured yet.
+    // migrate_flat_to_buckets: no admin configured.
     {
         let env = Env::default();
         env.mock_all_auths();
-        let (client, _) = make_client(&env);
-        let stranger = Address::generate(&env);
 
-        let result = client.try_migrate_flat_to_buckets(&stranger);
+        let client = make_client(&env);
+        let caller = Address::generate(&env);
+
+        let result = client.try_migrate_flat_to_buckets(&caller);
+
         assert_eq!(result, Err(Ok(SplitError::AdminNotSet)));
     }
 
-    // migrate_flat_to_buckets: configured admin rejects a different caller.
+    // migrate_flat_to_buckets: configured admin rejects attacker.
     {
         let env = Env::default();
         env.mock_all_auths();
-        let (client, _) = make_client(&env);
+
+        let client = make_client(&env);
         let admin = Address::generate(&env);
         let attacker = Address::generate(&env);
+
         client.set_admin(&admin);
 
         let result = client.try_migrate_flat_to_buckets(&attacker);
+
         assert_eq!(result, Err(Ok(SplitError::Unauthorized)));
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 4. Payout (`claim`) vs. a non-collaborator caller
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// 4. Collaborator-gated claim
+// -----------------------------------------------------------------------------
 
-/// A caller who is not a registered collaborator on the project cannot claim
-/// a payout, and the rejected attempt must not move funds or mutate ledgers.
+/// A caller who is not a registered collaborator must not be able to claim
+/// project funds.
+///
+/// The rejected claim must not modify either the project's balance or the
+/// caller's claimed amount.
 #[test]
-fn test_claim_rejects_non_collaborator_and_preserves_balances() {
+fn test_claim_rejects_non_collaborator_and_preserves_state() {
     let env = Env::default();
     env.mock_all_auths();
+
     let project_id = Symbol::new(&env, "auth_claim");
     let (client, owner, token) = setup_project(&env, &project_id);
     let outsider = Address::generate(&env);
 
-    deposit_to_project(&env, &client, &token, &project_id, &owner, 1_000_0000000i128);
+    deposit_to_project(
+        &env,
+        &client,
+        &token,
+        &project_id,
+        &owner,
+        1_000_0000000i128,
+    );
 
     let before_balance = client.get_balance(&project_id);
     let before_claimed = client.get_claimed(&project_id, &outsider);
 
     let result = client.try_claim(&project_id, &outsider);
+
     assert_eq!(result, Err(Ok(SplitError::NotACollaborator)));
 
-    assert_eq!(client.get_balance(&project_id), before_balance);
-    assert_eq!(client.get_claimed(&project_id, &outsider), before_claimed);
+    assert_eq!(
+        client.get_balance(&project_id),
+        before_balance,
+        "rejected claim must not change project balance"
+    );
+
+    assert_eq!(
+        client.get_claimed(&project_id, &outsider),
+        before_claimed,
+        "rejected claim must not create or modify claim state"
+    );
 }
 
-/// Claiming against a nonexistent project returns `NotFound`, not
-/// `NotACollaborator` — the existence guard runs first.
+/// A claim against a nonexistent project must return `NotFound` before the
+/// collaborator authorization check is evaluated.
 #[test]
 fn test_claim_on_nonexistent_project_returns_not_found() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, _) = make_client(&env);
-    let outsider = Address::generate(&env);
 
-    let result = client.try_claim(&Symbol::new(&env, "ghost_claim"), &outsider);
+    let client = make_client(&env);
+    let project_id = Symbol::new(&env, "missing_claim");
+    let caller = Address::generate(&env);
+
+    let result = client.try_claim(&project_id, &caller);
+
     assert_eq!(result, Err(Ok(SplitError::NotFound)));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 5. `distribute` is intentionally permissionless — documents the assumption
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// 5. Permissionless distribution
+// -----------------------------------------------------------------------------
 
-/// `distribute` has no `require_auth` gate by design: the payout math is
-/// trustless and funds only ever move to the recorded collaborators. Proof:
-/// the call still succeeds even with zero authorization entries supplied
-/// (`env.set_auths(&[])`), which would make any `require_auth`-gated method
-/// fail. See the "Authorization Assumptions" section in `contracts/README.md`.
+/// `distribute` is intentionally permissionless.
+///
+/// No caller authorization is required because the operation distributes
+/// project funds according to the collaborators already stored on-chain.
+/// This test ensures that the endpoint does not accidentally acquire an
+/// owner/admin authorization requirement.
 #[test]
-fn test_distribute_is_permissionless_by_design() {
+fn test_distribute_is_permissionless() {
     let env = Env::default();
     env.mock_all_auths();
-    let project_id = Symbol::new(&env, "auth_dist");
+
+    let project_id = Symbol::new(&env, "permissionless_dist");
     let (client, owner, token) = setup_project(&env, &project_id);
 
-    deposit_to_project(&env, &client, &token, &project_id, &owner, 1_000_0000000i128);
+    deposit_to_project(
+        &env,
+        &client,
+        &token,
+        &project_id,
+        &owner,
+        1_000_0000000i128,
+    );
 
-    // Zero authorization entries: no address, including the owner, has
-    // signed this invocation. A `require_auth`-gated call would panic here.
+    // Remove all explicit authorization entries. A require_auth-gated
+    // operation would fail at the host authorization layer.
     env.set_auths(&[]);
+
     let result = client.try_distribute(&project_id);
-    assert!(result.is_ok());
+
+    assert!(
+        result.is_ok(),
+        "distribute must remain permissionless"
+    );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 6. Admin key rotation authorization (issue #941)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// 6. Administrator rotation
+// -----------------------------------------------------------------------------
 
-/// An unauthorized caller cannot rotate the contract admin.
+/// A caller without authorization from the current administrator cannot
+/// rotate the contract administrator.
 ///
-/// `set_admin` requires the *currently stored* admin to authorize the call.
-/// Clearing all auth entries before the call removes that authorization so the
-/// host-level auth check fires, and the stored admin address must remain the
-/// original one (verified by confirming the original admin can still perform
-/// admin-gated operations while the attacker cannot).
+/// `set_admin` performs authorization at the host level, so this test checks
+/// for a failed invocation rather than expecting a `SplitError`.
 #[test]
-fn test_set_admin_rejects_unauthorized_rotation_and_preserves_state() {
+fn test_set_admin_rejects_unauthorized_rotation() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, _) = make_client(&env);
+
+    let client = make_client(&env);
 
     let original_admin = Address::generate(&env);
     let attacker = Address::generate(&env);
+
+    client.set_admin(&original_admin);
+
+    // Remove all authorization entries. The stored admin has not authorized
+    // the attempted rotation.
+    env.set_auths(&[]);
+
+    let result = client.try_set_admin(&attacker);
+
+    assert!(
+        result.is_err(),
+        "admin rotation must require authorization"
+    );
+
+    // Restore mocked authorization so we can verify the contract state.
+    env.mock_all_auths();
+
+    // The original administrator must retain control.
     let token_admin = Address::generate(&env);
     let token = env.register_stellar_asset_contract(token_admin);
 
-    // Install the initial admin.
-    client.set_admin(&original_admin);
-
-    // Drain all authorization entries — the stored admin has not signed.
-    // `set_admin` calls `current_admin.require_auth()`, so without that
-    // signature the host rejects the invocation.
-    env.set_auths(&[]);
-    let result = client.try_set_admin(&attacker);
-    assert!(result.is_err(), "unauthorized rotation must be rejected");
-
-    // Restore full auth mocking to probe the post-attempt state.
-    env.mock_all_auths();
-
-    // The original admin must still control the contract.
-    let allow_result = client.try_allow_token(&original_admin, &token);
     assert!(
-        allow_result.is_ok(),
-        "original admin must retain control after a failed rotation attempt"
+        client.try_allow_token(&original_admin, &token).is_ok(),
+        "original admin must retain control after failed rotation"
     );
+
     assert!(client.is_token_allowed(&token));
 
-    // The attacker must not have gained admin rights.
-    let attacker_result = client.try_allow_token(&attacker, &token);
+    // The attacker must not have acquired administrator privileges.
     assert_eq!(
-        attacker_result,
-        Err(Ok(SplitError::Unauthorized)),
-        "attacker must not acquire admin privileges"
+        client.try_allow_token(&attacker, &token),
+        Err(Ok(SplitError::Unauthorized))
     );
 }
 
-/// The current admin can successfully rotate the contract admin to a new address.
+/// The current administrator can successfully transfer administrator
+/// privileges to a new address.
 ///
-/// After rotation the new admin must be able to perform admin-gated operations
-/// and the previous admin must lose those privileges.
+/// After rotation:
+/// - the new administrator can perform admin-gated operations; and
+/// - the previous administrator can no longer do so.
 #[test]
 fn test_set_admin_successful_rotation_transfers_control() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, _) = make_client(&env);
+
+    let client = make_client(&env);
 
     let original_admin = Address::generate(&env);
     let new_admin = Address::generate(&env);
+
     let token_admin = Address::generate(&env);
     let token = env.register_stellar_asset_contract(token_admin);
 
-    // Bootstrap with an initial admin then rotate.
     client.set_admin(&original_admin);
-    let rotation_result = client.try_set_admin(&new_admin);
-    assert!(rotation_result.is_ok(), "admin rotation by current admin must succeed");
 
-    // New admin can now perform admin-gated operations.
-    let allow_result = client.try_allow_token(&new_admin, &token);
-    assert!(allow_result.is_ok(), "new admin must be able to allow tokens");
+    let rotation_result = client.try_set_admin(&new_admin);
+
+    assert!(
+        rotation_result.is_ok(),
+        "current admin must be able to rotate administrator"
+    );
+
+    // The new administrator has control.
+    assert!(
+        client.try_allow_token(&new_admin, &token).is_ok(),
+        "new admin must be able to perform admin-gated operations"
+    );
+
     assert!(client.is_token_allowed(&token));
 
-    // Former admin no longer has privileges.
-    let old_admin_result = client.try_allow_token(&original_admin, &token);
+    // The former administrator no longer has control.
     assert_eq!(
-        old_admin_result,
-        Err(Ok(SplitError::Unauthorized)),
-        "former admin must lose privileges after rotation"
+        client.try_allow_token(&original_admin, &token),
+        Err(Ok(SplitError::Unauthorized))
     );
 }

@@ -3,7 +3,12 @@ import {
   Notification,
   type NotificationCategory,
 } from "../entities/Notification.js";
+import type { PreferenceCategory } from "../entities/NotificationPreference.js";
 import { getDataSource } from "./database.js";
+import {
+  preferenceCategoryForNotification,
+  shouldDeliver,
+} from "./notification-preferences.service.js";
 
 /** Postgres unique-violation SQLSTATE. */
 const UNIQUE_VIOLATION = "23505";
@@ -135,6 +140,38 @@ function isUniqueViolation(error: unknown): boolean {
     error !== null &&
     (error as { code?: string }).code === UNIQUE_VIOLATION
   );
+}
+
+/** Result of a preference-aware delivery attempt. */
+export type NotificationDeliveryResult =
+  | { delivered: true; notification: Notification; created: boolean }
+  | { delivered: false; reason: "opted_out"; preferenceCategory: PreferenceCategory };
+
+/**
+ * The delivery entry point every producer should call (#1327).
+ *
+ * `createNotification` writes the row; this decides whether the row should be
+ * written at all. Keeping the two apart means the deduplicating store stays
+ * usable when a caller genuinely must record something regardless of
+ * preference, while the everyday path honours opt-outs.
+ *
+ * Mandatory categories (`security`, `payment`) short-circuit inside
+ * `shouldDeliver` without touching the preferences table, so a stale row can
+ * never silence a financial or account-safety notice.
+ */
+export async function enqueueNotification(
+  input: CreateNotificationInput,
+): Promise<NotificationDeliveryResult> {
+  const recipient = input.recipient?.trim();
+  if (!recipient) throw new Error("recipient is required");
+
+  const preferenceCategory = preferenceCategoryForNotification(input.category);
+  if (preferenceCategory && !(await shouldDeliver(recipient, preferenceCategory))) {
+    return { delivered: false, reason: "opted_out", preferenceCategory };
+  }
+
+  const result = await createNotification({ ...input, recipient });
+  return { delivered: true, notification: result.notification, created: result.created };
 }
 
 /** Encodes a keyset cursor. */

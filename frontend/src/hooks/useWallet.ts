@@ -21,8 +21,8 @@ export interface WalletContextValue {
   wallet: WalletState;
   loading: boolean;
   error: string | null;
-  connect: () => Promise<void>;
-  refresh: () => Promise<void>;
+  connect: () => Promise<boolean>;
+  refresh: () => Promise<boolean>;
 }
 
 // ─── State machine ────────────────────────────────────────────────────────────
@@ -93,6 +93,7 @@ export function useWalletState() {
       const walletState = await getWalletState();
       if (mountedRef.current)
         dispatch({ type: "SUCCESS", payload: walletState });
+      return true;
     } catch (err) {
       if (err instanceof Error) {
         Sentry.captureException(err, {
@@ -107,6 +108,7 @@ export function useWalletState() {
           type: "ERROR",
           payload: err instanceof Error ? err.message : "Unknown error",
         });
+      return false;
     }
   }, []);
 
@@ -116,6 +118,7 @@ export function useWalletState() {
       const walletState = await connectWallet();
       if (mountedRef.current)
         dispatch({ type: "SUCCESS", payload: walletState });
+      return true;
     } catch (err) {
       if (err instanceof Error) {
         Sentry.captureException(err, {
@@ -130,6 +133,7 @@ export function useWalletState() {
           type: "ERROR",
           payload: err instanceof Error ? err.message : "Failed to connect",
         });
+      return false;
     }
   }, []);
 

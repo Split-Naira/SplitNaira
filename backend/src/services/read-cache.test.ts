@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ReadCache, configureReadCache, getReadCache, resetReadCacheForTests } from "./read-cache.js";
+import {
+  ReadCache,
+  configureReadCache,
+  getReadCache,
+  resetReadCacheForTests,
+} from "./read-cache.js";
 
 describe("ReadCache", () => {
   beforeEach(() => {
@@ -53,6 +58,32 @@ describe("ReadCache", () => {
     expect(cache.get("list_projects:0:10")).toBeUndefined();
     expect(cache.get("project:xyz")).toEqual({});
   });
+
+  it.each(["key", "prefix"] as const)(
+    "does not let an in-flight read invalidated by %s overwrite a newer value",
+    async (invalidation) => {
+      const cache = new ReadCache();
+      let resolveStale!: (value: string) => void;
+      const staleRead = cache.getOrFetch(
+        "project:abc",
+        () =>
+          new Promise((resolve) => {
+            resolveStale = resolve;
+          })
+      );
+
+      if (invalidation === "key") {
+        cache.delete("project:abc");
+      } else {
+        cache.deleteByPrefix("project:");
+      }
+      await expect(cache.getOrFetch("project:abc", async () => "fresh")).resolves.toBe("fresh");
+
+      resolveStale("stale");
+      await expect(staleRead).resolves.toBe("stale");
+      expect(cache.get("project:abc")).toBe("fresh");
+    }
+  );
 
   it("reports size after purging expired keys", () => {
     const cache = new ReadCache({ defaultTtlMs: 500 });

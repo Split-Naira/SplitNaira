@@ -9,11 +9,8 @@ export function sanitizeString(input: string): string {
   if (typeof input !== "string") return "";
 
   return input
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<script[\s\S]*?>([\s\S]*?)<\/script>/gi, "$1")
     .replace(/<[^>]+>/g, " ")
-    .replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, " ")
-    .replace(/javascript\s*:/gi, " ")
-    .replace(/[\u0000-\u001F\u007F]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }

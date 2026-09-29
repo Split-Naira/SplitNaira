@@ -45,6 +45,7 @@ import {
 } from "@/lib/stellar";
 import { useWallet } from "@/hooks/useWallet";
 import { notify } from "@/lib/notification";
+import { WalletError } from "./WalletError";
 import { trackSplitLifecycle } from "@/lib/telemetry";
 import { SummaryCardSkeleton } from "./Skeleton";
 import { TokenSelector } from "./TypeSelector";
@@ -124,7 +125,7 @@ export function SplitApp({
    */
   isWriteDisabled?: boolean;
 } = {}) {
-  const { wallet, connect, refresh } = useWallet();
+  const { wallet, connect, refresh, loading: isWalletLoading, error: walletError } = useWallet();
   const tWizardValidation = useTranslations("SplitApp.wizard.validation");
 
   const {
@@ -338,19 +339,17 @@ export function SplitApp({
   }, []);
 
   async function onConnectWallet() {
-    try {
-      await connect();
+    if (await connect()) {
       notify.success("Wallet connected.");
-    } catch (error) {
+    } else {
       notify.error("Wallet connection failed.");
     }
   }
 
   async function onReconnectWallet() {
-    try {
-      await refresh();
+    if (await refresh()) {
       notify.info(wallet.connected ? "Wallet reconnected." : "Wallet not authorized.");
-    } catch (error) {
+    } else {
       notify.error("Wallet refresh failed.");
     }
   }
@@ -1073,6 +1072,9 @@ export function SplitApp({
                 <button
                   type="button"
                   onClick={onConnectWallet}
+                  aria-label="Connect a wallet"
+                  aria-busy={isWalletLoading}
+                  disabled={isWalletLoading}
                   className="premium-button rounded-full bg-greenMid px-8 py-3 text-sm font-bold text-white shadow-lg"
                 >
                   Connect Wallet
@@ -1082,6 +1084,9 @@ export function SplitApp({
                   <button
                     type="button"
                     onClick={onConnectWallet}
+                    aria-label="Switch to a different wallet"
+                    aria-busy={isWalletLoading}
+                    disabled={isWalletLoading}
                     className="premium-button rounded-full border bg-white/5 px-6 py-3 text-sm"
                   >
                     Switch Wallet
@@ -1089,6 +1094,9 @@ export function SplitApp({
                   <button
                     type="button"
                     onClick={onReconnectWallet}
+                    aria-label="Refresh wallet connection"
+                    aria-busy={isWalletLoading}
+                    disabled={isWalletLoading}
                     className="premium-button rounded-full border bg-white/5 px-6 py-3 text-sm"
                   >
                     Sync
@@ -1096,6 +1104,7 @@ export function SplitApp({
                   <button
                     type="button"
                     onClick={onDisconnectWallet}
+                    aria-label="Disconnect wallet using the wallet extension or app"
                     className="premium-button rounded-full border bg-white/5 px-6 py-3 text-sm hover:text-red-400"
                   >
                     Disconnect
@@ -1104,11 +1113,19 @@ export function SplitApp({
               )}
             </div>
           </div>
+          <WalletError error={walletError} />
+          <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+            {isWalletLoading
+              ? wallet.connected
+                ? "Refreshing wallet connection."
+                : "Connecting to wallet."
+              : ""}
+          </p>
           {wallet.connected && (
             <div className="mt-8 flex flex-wrap gap-8 border-t border-white/5 pt-8 text-[11px] font-bold uppercase tracking-[0.2em] text-muted">
               <div className="flex items-center gap-3">
                 <span className="h-2 w-2 rounded-full bg-greenBright animate-pulse" />
-                <span>Status: Connected</span>
+                <span role="status" aria-live="polite">Status: Connected</span>
               </div>
               <div className="flex items-center gap-3">
                 <span className="opacity-40">Wallet</span>

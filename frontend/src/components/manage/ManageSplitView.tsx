@@ -9,6 +9,7 @@ import type { WalletState } from "@/lib/wallet";
 import { Input } from "../Input";
 import { ListSkeleton, ProjectDetailSkeleton } from "../Skeleton";
 import { TransactionReceiptView, type TransactionReceipt } from "../TransactionReceiptView";
+import { ExplorerLink } from "../ExplorerLink";
 
 interface CollaboratorInput {
   id: string;
@@ -44,6 +45,8 @@ interface ManageSplitViewProps {
   setShowDistributeModal: (val: boolean) => void;
   adminStatus: AdminStatusState | null;
   receipt: TransactionReceipt | null;
+  // Null for an unsupported network (#1114); the history row falls back to an
+  // explicit message instead of rendering an anchor without an href.
   getExplorerUrl: (hash: string, network: string | null) => string | null;
 }
 
@@ -220,7 +223,10 @@ export function ManageSplitView({
                 {isLoadingHistory ? (
                   <ListSkeleton rows={4} />
                 ) : history.length > 0 ? (
-                  history.map((item) => (
+                  history.map((item) => {
+                    const explorerUrl = getExplorerUrl(item.txHash, wallet.network);
+                    const explorerLabel = getExplorerLabel(wallet.network);
+                    return (
                     <div key={item.id} className="relative pl-10 group">
                       <div
                         className={clsx(
@@ -247,14 +253,13 @@ export function ManageSplitView({
                         <p className="text-[10px] text-muted">
                           <span className="text-ink">{Number(item.amount).toLocaleString()}</span> Stroops
                         </p>
-                        <a
-                          href={getExplorerUrl(item.txHash, wallet.network) ?? undefined}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <ExplorerLink
+                          url={explorerUrl}
+                          label={explorerLabel}
+                          action="Verify"
+                          testId="manage-history-explorer-link"
                           className="text-[9px] font-bold text-greenBright/40 hover:text-greenBright uppercase"
-                        >
-                          Verify →
-                        </a>
+                        />
                         {item.type === "payment" && /^[a-fA-F0-9]{64}$/.test(item.txHash) && (
                           <a
                             href={`/receipts/${item.txHash}`}
@@ -265,7 +270,8 @@ export function ManageSplitView({
                         )}
                       </div>
                     </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="pl-10 text-[10px] font-bold uppercase tracking-widest text-muted opacity-40 italic">
                     {historyError ? "History unavailable. Retry to refresh." : "No verified history found for this project"}
@@ -336,8 +342,8 @@ export function ManageSplitView({
                 <TransactionReceiptView
                   receipt={receipt}
                   network={wallet.network ?? null}
-                  explorerUrl={getExplorerUrl(receipt.hash, wallet.network ?? null) ?? undefined}
-                  explorerLabel={getExplorerLabel(wallet.network ?? null) ?? undefined}
+                  explorerUrl={getExplorerUrl(receipt.hash, wallet.network ?? null)}
+                  explorerLabel={getExplorerLabel(wallet.network ?? null)}
                 />
               )}
             </div>

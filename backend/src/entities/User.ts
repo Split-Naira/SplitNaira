@@ -3,7 +3,8 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
-  UpdateDateColumn
+  UpdateDateColumn,
+  Index
 } from "typeorm";
 import { DEFAULT_USER_ROLE } from "../lib/user-roles.js";
 import type { UserRole } from "../lib/user-roles.js";
@@ -16,6 +17,7 @@ export class User {
   @Column({ unique: true, type: "varchar", length: 128 })
   walletAddress!: string;
 
+  @Index("IDX_users_email")
   @Column({ type: "varchar", length: 128, nullable: true })
   email?: string;
 

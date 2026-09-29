@@ -33,12 +33,23 @@ Each of `components.db`, `components.rpc`, and `components.contract` in the
 response body now has the shape:
 
 ```json
-{ "status": "up" | "degraded" | "down", "latencyMs": 123, "message": "query_ok" }
+{ "status": "up" | "degraded" | "down" | "unknown", "latencyMs": 123, "message": "query_ok" }
 ```
 
 - **`up`**: responded successfully within its latency threshold.
 - **`degraded`**: responded successfully, but slower than its threshold.
 - **`down`**: errored or timed out outright (this is what drives `not_ready`/`503` — a dependency degrading to `"degraded"` never does).
+- **`unknown`**: no probe ran for this dependency on this request, so no verdict
+  is available. Startup/shutdown gates and an invalid `env` check all return
+  before `db`/`rpc`/`contract` are touched, a `db` failure returns before the
+  Soroban checks run, and an RPC check that throws skips the contract
+  simulation. `message` carries a `not_checked:` reason. **`unknown` is not
+  `down`** — it means "not asked", and an orchestrator or dashboard must not
+  treat it as a dependency failure.
+
+Every response body — `ready`, `degraded` and `not_ready` alike — carries a
+`requestId`. Use it to join a probe response to the corresponding log lines;
+the same value is echoed in the `x-request-id` / `x-correlation-id` headers.
 
 `components.env` stays a simple `{ ok: boolean }` — there's no natural
 "degraded" config state. `components.eventListener` keeps its existing

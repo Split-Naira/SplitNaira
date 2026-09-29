@@ -18,6 +18,7 @@ import {
   getIdempotencyReplaysTotal,
   getRequestPayloadRejectedSnapshots,
   getRequestPayloadSizeSnapshots,
+  getSplitLifecycleOperationSnapshots,
   PAYLOAD_SIZE_BUCKETS_BYTES,
 } from "../services/metrics.js";
 import { getLedgerLag } from "../services/EventListenerService.js";
@@ -103,6 +104,14 @@ function formatPrometheusMetrics(): string {
   lines.push("# HELP splitnaira_http_requests_inflight Number of in-flight HTTP requests.");
   lines.push("# TYPE splitnaira_http_requests_inflight gauge");
   lines.push(`splitnaira_http_requests_inflight ${getInflightRequestCount()}`);
+  lines.push("# HELP splitnaira_split_lifecycle_operations_total Split lifecycle API operations by outcome; success means unsigned transaction preparation succeeded, not on-chain confirmation.");
+  lines.push("# TYPE splitnaira_split_lifecycle_operations_total counter");
+  for (const { operation, outcome, count } of getSplitLifecycleOperationSnapshots()) {
+    lines.push(
+      `splitnaira_split_lifecycle_operations_total{operation=${quoteLabelValue(operation)},outcome=${quoteLabelValue(outcome)}} ${count}`,
+    );
+  }
+
   lines.push("# HELP projects_created_total Total projects created.");
 lines.push("# TYPE projects_created_total counter");
 lines.push(`projects_created_total ${getProjectsCreatedTotal()}`);
