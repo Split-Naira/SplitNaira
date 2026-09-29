@@ -192,3 +192,5 @@ No deployment to staging or production proceeds if:
 - `docs/deployment.md`
 - `docs/backend-deploy.md`
 - `docs/runbooks/cicd-security.md`
+- `docs/runbooks/secret-rotation-procedure.md`
+- `runbooks/production-secret-rotation.md`
