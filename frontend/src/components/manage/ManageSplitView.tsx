@@ -44,7 +44,7 @@ interface ManageSplitViewProps {
   setShowDistributeModal: (val: boolean) => void;
   adminStatus: AdminStatusState | null;
   receipt: TransactionReceipt | null;
-  getExplorerUrl: (hash: string, network: string | null) => string;
+  getExplorerUrl: (hash: string, network: string | null) => string | null;
 }
 
 export function ManageSplitView({
@@ -248,7 +248,7 @@ export function ManageSplitView({
                           <span className="text-ink">{Number(item.amount).toLocaleString()}</span> Stroops
                         </p>
                         <a
-                          href={getExplorerUrl(item.txHash, wallet.network)}
+                          href={getExplorerUrl(item.txHash, wallet.network) ?? undefined}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-[9px] font-bold text-greenBright/40 hover:text-greenBright uppercase"
@@ -336,8 +336,8 @@ export function ManageSplitView({
                 <TransactionReceiptView
                   receipt={receipt}
                   network={wallet.network ?? null}
-                  explorerUrl={getExplorerUrl(receipt.hash, wallet.network ?? null)}
-                  explorerLabel={getExplorerLabel(wallet.network ?? null)}
+                  explorerUrl={getExplorerUrl(receipt.hash, wallet.network ?? null) ?? undefined}
+                  explorerLabel={getExplorerLabel(wallet.network ?? null) ?? undefined}
                 />
               )}
             </div>

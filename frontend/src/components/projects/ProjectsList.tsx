@@ -32,7 +32,7 @@ interface ProjectsListProps {
   adminStatus: AdminStatusState | null;
   receipt: TransactionReceipt | null;
   sorobanSplitFlowBusy: boolean;
-  getExplorerUrl: (hash: string, network: string | null) => string;
+  getExplorerUrl: (hash: string, network: string | null) => string | null;
   getExplorerLabel: (network: string | null) => string;
 }
 
@@ -323,7 +323,7 @@ export function ProjectsList({
                             )}
                           </div>
                           <a
-                            href={getExplorerUrl(item.txHash, wallet.network)}
+                            href={getExplorerUrl(item.txHash, wallet.network) ?? undefined}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-[9px] font-bold text-greenBright/40 hover:text-greenBright transition-colors uppercase tracking-widest mt-1"
@@ -412,7 +412,7 @@ export function ProjectsList({
                   <TransactionReceiptView
                     receipt={receipt}
                     network={wallet.network ?? null}
-                    explorerUrl={getExplorerUrl(receipt.hash, wallet.network ?? null)}
+                    explorerUrl={getExplorerUrl(receipt.hash, wallet.network ?? null) ?? undefined}
                     explorerLabel={getExplorerLabel(wallet.network ?? null)}
                   />
                 )}

@@ -65,6 +65,13 @@ interface DashboardViewProps {
   setActiveTab: (tab: "dashboard" | "create" | "manage" | "projects") => void;
   setSearchProjectId: (val: string) => void;
   setFetchedProject: (p: SplitProject | null) => void;
+  /**
+   * Builds a network-correct Stellar explorer link for a transaction hash.
+   * Always the centralized `lib/explorer.ts` helper (via `lib/stellar.ts`)
+   * — never a hardcoded domain — so a mainnet tx doesn't render a testnet
+   * link (#1331).
+   */
+  getExplorerUrl: (hash: string, network: string | null) => string | null;
 }
 
 export function DashboardView({
@@ -108,6 +115,7 @@ export function DashboardView({
   isSubmittingRecovery,
   onConfirmRecovery,
   lastRecoveryTxHash,
+  getExplorerUrl,
 }: DashboardViewProps) {
   // ── Idempotency stats polling ────────────────────────────────────────────
   const [idempotencyStats, setIdempotencyStats] =
@@ -296,7 +304,7 @@ export function DashboardView({
                         Tx: {lastAllowlistTx.txHash}
                       </p>
                       <a
-                        href={`https://stellar.expert/explorer/testnet/tx/${lastAllowlistTx.txHash}`}
+                        href={getExplorerUrl(lastAllowlistTx.txHash, wallet.network) ?? undefined}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-block pt-1 text-[10px] font-bold text-greenBright underline underline-offset-4 hover:text-white"
@@ -483,7 +491,7 @@ export function DashboardView({
                 <p className="text-[10px] font-bold uppercase tracking-widest text-greenBright mb-2">Recovery Submitted</p>
                 <p className="font-mono text-[11px] text-muted break-all">Tx: {lastRecoveryTxHash}</p>
                 <a
-                  href={`https://stellar.expert/explorer/testnet/tx/${lastRecoveryTxHash}`}
+                  href={getExplorerUrl(lastRecoveryTxHash, wallet.network) ?? undefined}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-2 inline-block text-[10px] font-bold text-greenBright underline underline-offset-4 hover:text-white"
@@ -572,7 +580,7 @@ export function DashboardView({
               <p className="text-[10px] font-bold uppercase tracking-widest text-greenBright mb-2">Transaction Submitted</p>
               <p className="font-mono text-[11px] text-muted break-all">Tx: {lastPauseTxHash}</p>
               <a
-                href={`https://stellar.expert/explorer/testnet/tx/${lastPauseTxHash}`}
+                href={getExplorerUrl(lastPauseTxHash, wallet.network) ?? undefined}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mt-2 inline-block text-[10px] font-bold text-greenBright underline underline-offset-4 hover:text-white"

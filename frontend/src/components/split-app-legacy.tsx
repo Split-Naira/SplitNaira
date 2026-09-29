@@ -1188,6 +1188,7 @@ export function SplitApp({
             setActiveTab={setActiveTab}
             setSearchProjectId={setSearchProjectId}
             setFetchedProject={setFetchedProject}
+            getExplorerUrl={getExplorerUrl}
           />
         ) : activeTab === "create" ? (
           <CreateSplitWizard

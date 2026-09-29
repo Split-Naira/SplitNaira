@@ -37,6 +37,7 @@ import {
 } from "./schemas/user.schemas.js";
 import {
   transactionHistoryQuerySchema,
+  transactionExportQuerySchema,
   transactionRecordSchema,
   transactionReceiptSchema,
   transactionHistoryResponseSchema,
@@ -1103,6 +1104,30 @@ registry.registerPath({
 });
 
 registry.registerPath({
+  method: "delete",
+  path: "/users/me",
+  summary: "Soft-delete the authenticated user's account",
+  description:
+    "Marks the account deleted rather than removing the row; financial/audit records are untouched. See lib/soft-delete.ts for the retention policy.",
+  tags: ["Users"],
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Account soft-deleted",
+      content: {
+        "application/json": {
+          schema: z.object({
+            walletAddress: z.string(),
+            deletedAt: z.iso.datetime(),
+          }),
+        },
+      },
+    },
+    ...standardErrorResponses({ unauthorized: true, notFound: true, serverError: true }),
+  },
+});
+
+registry.registerPath({
   method: "get",
   path: "/users/{walletAddress}",
   summary: "Get user by wallet address",
@@ -1121,6 +1146,27 @@ registry.registerPath({
 });
 
 // ─── Transaction Endpoints ────────────────────────────────────────────────────
+
+registry.registerPath({
+  method: "get",
+  path: "/transactions/export",
+  summary: "Export the authenticated wallet's own transaction history",
+  description:
+    "Always scoped to the authenticated wallet from the bearer token, never a request parameter. format=csv (default) streams an injection-safe CSV of the full matching result set, capped at 50,000 rows. format=json returns one limit/offset page.",
+  tags: ["Transactions"],
+  security: [{ bearerAuth: [] }],
+  request: { query: transactionExportQuerySchema },
+  responses: {
+    200: {
+      description: "CSV file (format=csv) or a paginated JSON page (format=json)",
+      content: {
+        "application/json": { schema: transactionHistoryResponseSchema },
+        "text/csv": { schema: z.string() },
+      },
+    },
+    ...standardErrorResponses({ badRequest: true, unauthorized: true, serverError: true }),
+  },
+});
 
 registry.registerPath({
   method: "get",

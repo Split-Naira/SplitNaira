@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
+import { IsNull } from "typeorm";
 import { getDataSource, withTransaction } from "../services/database.js";
 import { User } from "../entities/User.js";
 import {
@@ -93,7 +94,7 @@ usersRouter.post("/login", async (req: Request, res: Response, next: NextFunctio
     const userRepository = dataSource.getRepository(User);
 
     const user = await userRepository.findOne({
-      where: { walletAddress }
+      where: { walletAddress, deletedAt: IsNull() }
     });
 
     if (!user) {
@@ -136,7 +137,7 @@ usersRouter.get("/me", authJwtMiddleware, async (req: Request, res: Response, ne
   try {
     const { walletAddress } = req.user!;
     const userRepository = getDataSource().getRepository(User);
-    const user = await userRepository.findOne({ where: { walletAddress } });
+    const user = await userRepository.findOne({ where: { walletAddress, deletedAt: IsNull() } });
     if (!user) {
       throw new AppError(ErrorType.RPC, ErrorCode.NOT_FOUND, "User not found.");
     }
@@ -173,7 +174,7 @@ usersRouter.patch("/me", authJwtMiddleware, async (req: Request, res: Response, 
     const updates = updateSchema.parse(req.body);
     const savedUser = await withTransaction(async (queryRunner) => {
       const userRepository = queryRunner.manager.getRepository(User);
-      const user = await userRepository.findOne({ where: { walletAddress } });
+      const user = await userRepository.findOne({ where: { walletAddress, deletedAt: IsNull() } });
       if (!user) {
         throw new AppError(ErrorType.RPC, ErrorCode.NOT_FOUND, "User not found.");
       }
@@ -201,6 +202,45 @@ usersRouter.patch("/me", authJwtMiddleware, async (req: Request, res: Response, 
 
 /**
  * @openapi
+ * DELETE /users/me
+ * summary: Soft-delete the authenticated user's account
+ * description: >
+ *   Marks the account deleted rather than removing the row. The account
+ *   stops appearing in lookups and login immediately. Financial/audit
+ *   records (transactions, audit log) are untouched — soft delete never
+ *   reaches those tables. See `lib/soft-delete.ts` for the retention
+ *   policy governing eventual hard purge.
+ * tags: [Users]
+ */
+usersRouter.delete("/me", authJwtMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { walletAddress } = req.user!;
+
+    const deletedAt = await withTransaction(async (queryRunner) => {
+      const userRepository = queryRunner.manager.getRepository(User);
+      const user = await userRepository.findOne({ where: { walletAddress, deletedAt: IsNull() } });
+      if (!user) {
+        throw new AppError(ErrorType.RPC, ErrorCode.NOT_FOUND, "User not found.");
+      }
+
+      user.deletedAt = new Date();
+      const saved = await userRepository.save(user);
+      return saved.deletedAt as Date;
+    });
+
+    logger.info("User soft-deleted", { walletAddress, deletedAt: deletedAt.toISOString() });
+
+    return res.status(200).json({
+      walletAddress,
+      deletedAt: deletedAt.toISOString(),
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * @openapi
  * GET /users/{walletAddress}
  * summary: Get user by wallet address
  * description: Looks up a public user profile by Stellar wallet address.
@@ -214,7 +254,7 @@ usersRouter.get("/:walletAddress", async (req: Request, res: Response, next: Nex
     const userRepository = dataSource.getRepository(User);
 
     const user = await userRepository.findOne({
-      where: { walletAddress: userRegistrationSchema.shape.walletAddress.parse(walletAddress) }
+      where: { walletAddress: userRegistrationSchema.shape.walletAddress.parse(walletAddress), deletedAt: IsNull() }
     });
 
     if (!user) {

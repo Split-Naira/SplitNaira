@@ -26,6 +26,20 @@ export interface PayoutHistoryIndex {
   getPayoutsByRound(roundId: string): Promise<PayoutRecord[]>;
   getPayoutsByRecipient(recipient: string): Promise<PayoutRecord[]>;
   searchPayouts(query: string): Promise<PayoutRecord[]>;
+  /**
+   * Walks all payouts matching `filters` in fixed-size batches, for export
+   * flows that must not hold an unbounded result set in memory (#1332).
+   *
+   * Uses the same skip/take pagination as `getPayouts`, so it inherits the
+   * usual caveat of offset pagination under concurrent writes (a row
+   * inserted or removed mid-walk can shift later pages). That tradeoff is
+   * already accepted elsewhere in this service; a keyset cursor would avoid
+   * it but is a larger change than this iterator is meant to be.
+   */
+  iteratePayouts(
+    filters?: PayoutFilters,
+    batchSize?: number,
+  ): AsyncGenerator<PayoutRecord[], void, void>;
   reindex(): Promise<void>;
   backfill(fromRound?: number): Promise<void>;
   /** Release in-memory resources. Call on graceful shutdown. */
@@ -157,6 +171,51 @@ export function createPayoutHistoryService(_config?: Partial<PayoutIndexConfig>)
       } catch (error) {
         logger.error("Error searching payouts", { query, error });
         return [];
+      }
+    },
+
+    async *iteratePayouts(filters, batchSize = 500) {
+      const startOffset = filters?.offset ?? 0;
+      let offset = startOffset;
+
+      while (true) {
+        try {
+          const repo = getDataSource().getRepository(TransactionRecord);
+          const query = repo.createQueryBuilder("transaction");
+
+          if (filters?.recipient) {
+            query.andWhere("transaction.recipient = :recipient", { recipient: filters.recipient });
+          }
+          if (filters?.status) {
+            query.andWhere("transaction.status = :status", { status: filters.status });
+          }
+          if (filters?.startDate !== undefined) {
+            query.andWhere("transaction.timestamp >= :startDate", { startDate: filters.startDate });
+          }
+          if (filters?.endDate !== undefined) {
+            query.andWhere("transaction.timestamp <= :endDate", { endDate: filters.endDate });
+          }
+
+          // Secondary sort by id: timestamps can collide across records, and
+          // an unstable order between batches can duplicate or skip rows.
+          query.orderBy("transaction.timestamp", "DESC").addOrderBy("transaction.id", "ASC");
+          query.skip(offset).take(batchSize);
+
+          const batch = (await query.getMany()) as PayoutRecord[];
+          if (batch.length === 0) {
+            return;
+          }
+
+          yield batch;
+
+          if (batch.length < batchSize) {
+            return;
+          }
+          offset += batch.length;
+        } catch (error) {
+          logger.error("Error iterating payouts", { offset, error });
+          return;
+        }
       }
     },
 
