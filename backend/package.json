@@ -22,7 +22,8 @@
     "migration:revert": "npm run typeorm -- migration:revert -d src/data-source.ts",
     "validate:deploy-config": "tsx src/utils/deploy-config.ts validate",
     "migration:dry-run": "node scripts/run-migration-dry-run.mjs",
-    "audit:db-consistency": "tsx src/scripts/audit-database-consistency.ts"
+    "audit:db-consistency": "tsx src/scripts/audit-database-consistency.ts",
+    "seed:dev": "tsx src/scripts/seed-development.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.5.0",

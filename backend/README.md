@@ -14,6 +14,29 @@ This fix addresses GitHub Issue #292 (Security: Cross-Site Scripting (XSS) in Sp
 - `npm run test`
 - `npm run deps:check`
 - `npm run generate:openapi` - Regenerates the OpenAPI specification
+- `npm run seed:dev` - Loads deterministic development seed data (see below)
+
+## Development seed data
+
+`npm run seed:dev` loads a small, fixed data set so a fresh local database has something to look at. From the repository root:
+
+```bash
+npm run migration:run -w backend
+npm run seed:dev -w backend
+```
+
+The data is deterministic and safe: wallet addresses are valid Stellar keys with no secret key behind them, emails use `example.com`, and every id is derived from a fixed label. Running the command again inserts nothing new, and it never updates or deletes rows.
+
+| Table                                                                                      | Seeded rows                                                                                     |
+| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `users`                                                                                    | 5 (one company, four customers, one of them inactive)                                           |
+| `transactions`                                                                             | 8 across 3 projects: 4 `completed`, 1 `pending`, 3 `failed`                                     |
+| `ledger_blocks`                                                                            | 4 settlement records, one per completed transaction                                             |
+| `notifications`, `notification_preferences`, `split_cancellations`, `project_edit_history` | Read and unread notifications, mandatory preferences left on, one cancelled split, edit history |
+
+Projects and participants live on chain, so there is no projects table. The three seeded projects are ids that the rows above refer to: `dev_seed_album_split` (fully paid out), `dev_seed_film_split` (payouts in flight) and `dev_seed_cancelled` (cancelled). One recipient wallet is deliberately not a registered user.
+
+Guards: the command refuses to run when `NODE_ENV=production`, and refuses any database host other than `localhost`, `127.0.0.1`, `postgres` or `db` unless `SEED_ALLOW_REMOTE_DB=true` is set. If the `ledger_blocks` table is missing it is skipped with a warning. The result passes `npm run audit:db-consistency`.
 
 ## OpenAPI
 
