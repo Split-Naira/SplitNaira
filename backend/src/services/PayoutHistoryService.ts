@@ -135,7 +135,7 @@ export function createPayoutHistoryService(_config?: Partial<PayoutIndexConfig>)
         return records as PayoutRecord[];
       } catch (error) {
         logger.error("Error fetching payouts by round", { roundId, error });
-        return [];
+        throw error;
       }
     },
 

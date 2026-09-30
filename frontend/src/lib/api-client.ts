@@ -1,7 +1,12 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
-import type { SplitProject, Collaborator } from "./stellar";
+import type {
+  SplitProject,
+  Collaborator,
+  ParticipantPaymentState,
+  ParticipantPaymentStatus,
+} from "./stellar";
 import { getEnv } from "./env";
 import { withRetry } from "./retry";
 
@@ -638,5 +643,32 @@ function mapProjectToCamelCase(p: Record<string, unknown>): SplitProject {
       alias: stringFrom(c.alias),
       basisPoints: numberFrom(c.basisPoints ?? c.basis_points),
     })),
+    participantPaymentStatuses: Array.isArray(p.participantPaymentStatuses)
+      ? (p.participantPaymentStatuses as Record<string, unknown>[]).flatMap((status) => {
+          const state = status.status;
+          if (
+            state !== "paid" &&
+            state !== "pending" &&
+            state !== "failed" &&
+            state !== "unpaid"
+          ) {
+            return [];
+          }
+          const item: ParticipantPaymentStatus = {
+            address: stringFrom(status.address),
+            alias: typeof status.alias === "string" ? status.alias : null,
+            basisPoints: numberFrom(status.basisPoints),
+            status: state as ParticipantPaymentState,
+            roundId: typeof status.roundId === "string" ? status.roundId : null,
+            lastUpdated: numberFrom(status.lastUpdated, NaN),
+          };
+          return [{
+            ...item,
+            lastUpdated: Number.isFinite(item.lastUpdated) ? item.lastUpdated : null,
+          }];
+        })
+      : p.participantPaymentStatuses === null
+        ? null
+        : undefined,
   };
 }

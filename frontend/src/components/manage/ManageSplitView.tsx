@@ -202,10 +202,35 @@ export function ManageSplitView({
               </div>
               <div className="space-y-3">
                 {fetchedProject.collaborators.map((collab, idx) => (
-                  <div key={idx} className="flex justify-between items-center rounded-2xl bg-white/2 p-4 text-sm border border-white/5">
-                    <div className="space-y-0.5">
+                  <div key={idx} className="flex flex-wrap justify-between items-center gap-3 rounded-2xl bg-white/2 p-4 text-sm border border-white/5">
+                    <div className="space-y-1">
                       <p className="font-bold">{sanitizeText(collab.alias)}</p>
                       <p className="font-mono text-[10px] text-muted opacity-60 truncate max-w-[150px]">{collab.address}</p>
+                      {(() => {
+                        const payment = fetchedProject.participantPaymentStatuses?.find(
+                          (item) => item.address.toUpperCase() === collab.address.toUpperCase(),
+                        );
+                        const status = payment?.status ?? "unavailable";
+                        const label = {
+                          paid: "Paid",
+                          pending: "Pending",
+                          failed: "Failed",
+                          unpaid: "Unpaid",
+                          unavailable: "Status unavailable",
+                        }[status];
+                        const color = {
+                          paid: "text-greenBright",
+                          pending: "text-amber-300",
+                          failed: "text-red-300",
+                          unpaid: "text-muted",
+                          unavailable: "text-muted",
+                        }[status];
+                        return (
+                          <p className={clsx("text-[10px] font-bold uppercase", color)}>
+                            Payment: {label}
+                          </p>
+                        );
+                      })()}
                     </div>
                     <span className="font-mono font-bold text-greenBright/80">
                       {(collab.basisPoints / 100).toFixed(2)}%
