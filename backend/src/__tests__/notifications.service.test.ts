@@ -46,9 +46,24 @@ vi.mock("../services/database.js", () => ({
   }),
 }));
 
+const shouldDeliverMock = vi.fn().mockResolvedValue(true);
+vi.mock("../services/notification-preferences.service.js", () => ({
+  shouldDeliver: (...args: unknown[]) => shouldDeliverMock(...args),
+}));
+
 const {
   buildEventKey,
+  buildSplitEventKey,
+  buildPaymentEventKey,
+  buildParticipantEventKey,
+  NOTIFICATION_EVENT_TYPES,
+  isNotificationEventType,
   createNotification,
+  createNotifications,
+  hasNotificationForEvent,
+  getNotificationByEventKey,
+  toPreferenceCategory,
+  deliverNotification,
   listNotifications,
   markRead,
   markAllRead,
@@ -298,5 +313,192 @@ describe("markAllRead", () => {
   it("reports zero when everything was already read", async () => {
     executeMock.mockResolvedValue({ affected: 0 });
     expect(await markAllRead("GABC")).toBe(0);
+  });
+});
+
+describe("NOTIFICATION_EVENT_TYPES and typed builders (#1329)", () => {
+  it("defines standard event types", () => {
+    expect(NOTIFICATION_EVENT_TYPES).toContain("payment.settled");
+    expect(NOTIFICATION_EVENT_TYPES).toContain("payment.failed");
+    expect(NOTIFICATION_EVENT_TYPES).toContain("payment.claimed");
+    expect(NOTIFICATION_EVENT_TYPES).toContain("split.created");
+    expect(NOTIFICATION_EVENT_TYPES).toContain("split.funded");
+    expect(NOTIFICATION_EVENT_TYPES).toContain("split.locked");
+    expect(NOTIFICATION_EVENT_TYPES).toContain("split.updated");
+    expect(NOTIFICATION_EVENT_TYPES).toContain("split.cancelled");
+    expect(NOTIFICATION_EVENT_TYPES).toContain("split.completed");
+    expect(NOTIFICATION_EVENT_TYPES).toContain("participant.invited");
+    expect(NOTIFICATION_EVENT_TYPES).toContain("participant.joined");
+    expect(NOTIFICATION_EVENT_TYPES).toContain("participant.removed");
+    expect(NOTIFICATION_EVENT_TYPES).toContain("security.alert");
+    expect(NOTIFICATION_EVENT_TYPES).toContain("security.preference_updated");
+    expect(NOTIFICATION_EVENT_TYPES).toContain("system.announcement");
+  });
+
+  it("checks event type validity with isNotificationEventType", () => {
+    expect(isNotificationEventType("payment.settled")).toBe(true);
+    expect(isNotificationEventType("invalid.event")).toBe(false);
+  });
+
+  it("builds consistent split event keys", () => {
+    const key = buildSplitEventKey("split.funded", "project-123", "tx-999");
+    expect(key).toBe("split.funded:split:project-123:tx-999");
+
+    const keyWithoutDisc = buildSplitEventKey("split.created", "project-123");
+    expect(keyWithoutDisc).toBe("split.created:split:project-123:-");
+  });
+
+  it("builds consistent payment event keys", () => {
+    const key = buildPaymentEventKey("payment.settled", "tx-hash-1", "user-gabc");
+    expect(key).toBe("payment.settled:payment:tx-hash-1:user-gabc");
+  });
+
+  it("builds consistent participant event keys", () => {
+    const key = buildParticipantEventKey("participant.joined", "project-123", "user-xyz");
+    expect(key).toBe("participant.joined:participant:project-123:user-xyz");
+  });
+});
+
+describe("createNotifications batch deduplication (#1329)", () => {
+  it("creates notifications and deduplicates duplicates in a batch", async () => {
+    const original = row({ id: "n-existing", eventKey: "k-dup" });
+
+    // First call saves new, second call hits duplicate and finds existing
+    saveMock
+      .mockResolvedValueOnce(row({ id: "n-new", eventKey: "k-new" }))
+      .mockRejectedValueOnce(uniqueViolation());
+    findOneMock.mockResolvedValue(original);
+
+    const inputs = [
+      {
+        recipient: "GABC",
+        category: "payment" as const,
+        title: "New Payment",
+        body: "You received funds",
+        eventKey: "k-new",
+        source: "ledger",
+      },
+      {
+        recipient: "GABC",
+        category: "payment" as const,
+        title: "Repeated Payment",
+        body: "Retry of payment",
+        eventKey: "k-dup",
+        source: "retry",
+      },
+    ];
+
+    const results = await createNotifications(inputs);
+
+    expect(results).toHaveLength(2);
+    expect(results[0]?.created).toBe(true);
+    expect(results[0]?.notification.id).toBe("n-new");
+    expect(results[1]?.created).toBe(false);
+    expect(results[1]?.notification.id).toBe("n-existing");
+  });
+});
+
+describe("deduplication query helpers (#1329)", () => {
+  it("hasNotificationForEvent returns true when event notification exists", async () => {
+    countMock.mockResolvedValue(1);
+    const exists = await hasNotificationForEvent("GABC", "k-event");
+    expect(exists).toBe(true);
+    expect(countMock).toHaveBeenCalledWith({
+      where: { recipient: "GABC", eventKey: "k-event" },
+    });
+  });
+
+  it("hasNotificationForEvent returns false when event notification does not exist", async () => {
+    countMock.mockResolvedValue(0);
+    const exists = await hasNotificationForEvent("GABC", "k-none");
+    expect(exists).toBe(false);
+  });
+
+  it("hasNotificationForEvent handles blank inputs safely", async () => {
+    expect(await hasNotificationForEvent("", "k")).toBe(false);
+    expect(await hasNotificationForEvent("GABC", "  ")).toBe(false);
+  });
+
+  it("getNotificationByEventKey returns row when found", async () => {
+    const existing = row({ eventKey: "k-event" });
+    findOneMock.mockResolvedValue(existing);
+
+    const found = await getNotificationByEventKey("GABC", "k-event");
+    expect(found).toEqual(existing);
+    expect(findOneMock).toHaveBeenCalledWith({
+      where: { recipient: "GABC", eventKey: "k-event" },
+    });
+  });
+
+  it("getNotificationByEventKey returns null when not found or blank inputs", async () => {
+    findOneMock.mockResolvedValue(null);
+    expect(await getNotificationByEventKey("GABC", "k-missing")).toBeNull();
+    expect(await getNotificationByEventKey(" ", "k")).toBeNull();
+  });
+});
+
+describe("toPreferenceCategory and deliverNotification (#1329)", () => {
+  it("maps notification categories to preference categories", () => {
+    expect(toPreferenceCategory("project")).toBe("project_activity");
+    expect(toPreferenceCategory("participant")).toBe("participant_activity");
+    expect(toPreferenceCategory("system")).toBe("marketing");
+    expect(toPreferenceCategory("security")).toBe("security");
+    expect(toPreferenceCategory("payment")).toBe("payment");
+  });
+
+  it("delivers notification when preference is enabled", async () => {
+    shouldDeliverMock.mockResolvedValue(true);
+    saveMock.mockResolvedValue(row());
+
+    const result = await deliverNotification({
+      recipient: "GABC",
+      category: "project",
+      title: "Title",
+      body: "Body",
+      eventKey: "split.created:split:1:-",
+      source: "api",
+    });
+
+    expect(result.suppressed).toBe(false);
+    expect(result.created).toBe(true);
+    expect(result.notification).toBeTruthy();
+  });
+
+  it("suppresses notification when user opted out", async () => {
+    shouldDeliverMock.mockResolvedValue(false);
+
+    const result = await deliverNotification({
+      recipient: "GABC",
+      category: "project",
+      title: "Title",
+      body: "Body",
+      eventKey: "split.created:split:1:-",
+      source: "api",
+    });
+
+    expect(result.suppressed).toBe(true);
+    expect(result.created).toBe(false);
+    expect(result.notification).toBeNull();
+    expect(saveMock).not.toHaveBeenCalled();
+  });
+
+  it("deduplicates repeated event when delivering to user who has preference enabled", async () => {
+    shouldDeliverMock.mockResolvedValue(true);
+    const original = row({ eventKey: "split.funded:split:1:-" });
+    saveMock.mockRejectedValue(uniqueViolation());
+    findOneMock.mockResolvedValue(original);
+
+    const result = await deliverNotification({
+      recipient: "GABC",
+      category: "payment",
+      title: "Title",
+      body: "Body",
+      eventKey: "split.funded:split:1:-",
+      source: "ledger-retry",
+    });
+
+    expect(result.suppressed).toBe(false);
+    expect(result.created).toBe(false);
+    expect(result.notification).toEqual(original);
   });
 });

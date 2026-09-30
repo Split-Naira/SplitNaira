@@ -84,6 +84,77 @@ export function buildEventKey(parts: {
 }
 
 /**
+ * Standard notification event types across the system (#1329).
+ */
+export const NOTIFICATION_EVENT_TYPES = [
+  "payment.settled",
+  "payment.failed",
+  "payment.claimed",
+  "split.created",
+  "split.funded",
+  "split.locked",
+  "split.updated",
+  "split.cancelled",
+  "split.completed",
+  "participant.invited",
+  "participant.joined",
+  "participant.removed",
+  "security.alert",
+  "security.preference_updated",
+  "system.announcement",
+] as const;
+
+export type NotificationEventType = (typeof NOTIFICATION_EVENT_TYPES)[number];
+
+export function isNotificationEventType(
+  eventType: string,
+): eventType is NotificationEventType {
+  return (NOTIFICATION_EVENT_TYPES as readonly string[]).includes(eventType);
+}
+
+/** Builds an event key for split lifecycle events (#1329). */
+export function buildSplitEventKey(
+  eventType: NotificationEventType | string,
+  projectId: string,
+  discriminator?: string | null,
+): string {
+  return buildEventKey({
+    eventType,
+    resourceType: "split",
+    resourceId: projectId,
+    discriminator,
+  });
+}
+
+/** Builds an event key for payment and payout events (#1329). */
+export function buildPaymentEventKey(
+  eventType: NotificationEventType | string,
+  txHash: string,
+  discriminator?: string | null,
+): string {
+  return buildEventKey({
+    eventType,
+    resourceType: "payment",
+    resourceId: txHash,
+    discriminator,
+  });
+}
+
+/** Builds an event key for participant or collaborator events (#1329). */
+export function buildParticipantEventKey(
+  eventType: NotificationEventType | string,
+  resourceId: string,
+  discriminator?: string | null,
+): string {
+  return buildEventKey({
+    eventType,
+    resourceType: "participant",
+    resourceId,
+    discriminator,
+  });
+}
+
+/**
  * Creates a notification, or returns the existing one for the same event.
  *
  * Deduplication relies on the unique index rather than a prior lookup: a
@@ -132,6 +203,103 @@ export async function createNotification(
     }
     return { notification: existing, created: false };
   }
+}
+
+/**
+ * Creates multiple notifications with independent deduplication (#1329).
+ *
+ * Each notification is processed independently so that a duplicate or failure
+ * on one recipient does not abort the others, ensuring reliable event delivery
+ * during multi-recipient event fanouts or retries.
+ */
+export async function createNotifications(
+  inputs: CreateNotificationInput[],
+): Promise<CreateNotificationResult[]> {
+  const results: CreateNotificationResult[] = [];
+  for (const input of inputs) {
+    results.push(await createNotification(input));
+  }
+  return results;
+}
+
+/**
+ * Checks whether an event notification has already been recorded for a recipient (#1329).
+ */
+export async function hasNotificationForEvent(
+  recipient: string,
+  eventKey: string,
+): Promise<boolean> {
+  const normalisedRecipient = recipient?.trim();
+  const normalisedKey = eventKey?.trim();
+  if (!normalisedRecipient || !normalisedKey) return false;
+
+  const count = await repo().count({
+    where: { recipient: normalisedRecipient, eventKey: normalisedKey },
+  });
+  return count > 0;
+}
+
+/**
+ * Retrieves the recorded notification for a specific event key, or null if none exists (#1329).
+ */
+export async function getNotificationByEventKey(
+  recipient: string,
+  eventKey: string,
+): Promise<Notification | null> {
+  const normalisedRecipient = recipient?.trim();
+  const normalisedKey = eventKey?.trim();
+  if (!normalisedRecipient || !normalisedKey) return null;
+
+  return repo().findOne({
+    where: { recipient: normalisedRecipient, eventKey: normalisedKey },
+  });
+}
+
+/**
+ * Translates a NotificationCategory to its corresponding PreferenceCategory (#1307, #1329).
+ */
+export function toPreferenceCategory(
+  category: NotificationCategory,
+): "security" | "payment" | "project_activity" | "participant_activity" | "marketing" {
+  switch (category) {
+    case "project":
+      return "project_activity";
+    case "participant":
+      return "participant_activity";
+    case "system":
+      return "marketing";
+    case "security":
+    case "payment":
+    default:
+      return category;
+  }
+}
+
+export interface DeliverNotificationResult {
+  notification: Notification | null;
+  created: boolean;
+  suppressed: boolean;
+}
+
+/**
+ * Delivers a notification respecting recipient preferences (#1307) and
+ * deduplicating retried or repeated events (#1309, #1329).
+ */
+export async function deliverNotification(
+  input: CreateNotificationInput,
+): Promise<DeliverNotificationResult> {
+  const prefCategory = toPreferenceCategory(input.category);
+  const allowed = await shouldDeliver(input.recipient, prefCategory);
+  if (!allowed) {
+    return { notification: null, created: false, suppressed: true };
+  }
+
+  const result = await createNotification(input);
+  return {
+    notification: result.notification,
+    created: result.created,
+    suppressed: false,
+  };
 }
 
 function isUniqueViolation(error: unknown): boolean {
