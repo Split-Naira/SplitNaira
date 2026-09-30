@@ -28,6 +28,7 @@ export async function buildCreateSplitXdr(payload: {
   projectType: string;
   token: string;
   collaborators: Array<Collaborator>;
+  expiresAt?: string;
 }): Promise<{ xdr: string; metadata: { networkPassphrase: string; contractId: string; operation?: string } }> {
   return client.buildCreateSplitXdr(payload);
 }

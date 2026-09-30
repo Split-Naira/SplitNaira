@@ -40,6 +40,7 @@ import {
   unallocatedQuerySchema,
   withdrawUnallocatedSchema,
   claimSchema,
+  updateExpirationSchema,
 } from "../schemas/splits.js";
 
 import {
@@ -76,10 +77,16 @@ import {
   buildWithdrawUnallocatedUnsignedXdr,
   buildClaimUnsignedXdr,
   buildUnsignedContractCall,
+  assertProjectOwner,
 } from "../services/splits.service.js";
 import { logger } from "../services/logger.js";
 import { idempotencyMiddleware } from "../middleware/idempotency.js";
 import { recordProjectEdit } from "../services/project-history.js";
+import {
+  assertProjectNotExpired,
+  configureProjectExpiration,
+  recordSplitCreated,
+} from "../services/project-expiration.js";
 
 // Re-export all schemas, contract helpers, and services for backwards compatibility
 export {
@@ -187,6 +194,33 @@ splitsRouter.get("/:projectId", ctrl.getProject.bind(ctrl));
  */
 splitsRouter.post("/:projectId/lock", ctrl.lockProject.bind(ctrl));
 splitsRouter.post("/:projectId/deposit", ctrl.deposit.bind(ctrl));
+
+splitsRouter.patch("/:projectId/expiration", async (req, res, next) => {
+  try {
+    const parsedId = projectIdParamSchema.safeParse(req.params.projectId);
+    const parsedBody = updateExpirationSchema.safeParse(req.body);
+    if (!parsedId.success || !parsedBody.success) {
+      return sendValidationError(res, res.locals.requestId, "Invalid request payload.", {
+        params: parsedId.success ? null : parsedId.error.flatten(),
+        body: parsedBody.success ? null : parsedBody.error.flatten(),
+      });
+    }
+
+    const projectId = parsedId.data;
+    await assertProjectOwner(projectId, parsedBody.data.owner);
+    await assertProjectNotExpired(projectId);
+    const expiration = await configureProjectExpiration(
+      projectId,
+      parsedBody.data.owner,
+      parsedBody.data.expiresAt,
+    );
+    invalidateCache(`project:${projectId}`);
+    invalidateCacheByPrefix("list_projects:");
+    return res.status(200).json(expiration);
+  } catch (error) {
+    return next(error);
+  }
+});
 
 function logPaymentsAdminAction(res: Response, action: string, details: Record<string, unknown>) {
   logger.info("Payments admin action prepared", {
@@ -496,6 +530,7 @@ splitsRouter.post("/", idempotencyMiddleware(), async (req, res, next) => {
 
     try {
       const result = await buildCreateProjectUnsignedXdr(parsed.data);
+      await recordSplitCreated(parsed.data.projectId, parsed.data.owner, parsed.data.expiresAt);
       // Invalidate list cache so newly created project appears immediately
       invalidateCacheByPrefix("list_projects:");
       return res.status(200).json(result);
@@ -525,6 +560,7 @@ splitsRouter.post(
         );
       }
       const projectId = parsedId.data;
+      await assertProjectNotExpired(projectId);
 
       const parsedBody = distributeSchema.safeParse(req.body);
       if (!parsedBody.success) {

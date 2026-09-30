@@ -81,6 +81,7 @@ interface CreateSplitFormValues {
   projectType: string;
   token: string;
   collaborators: CreateCollaboratorInput[];
+  expiresAt?: string;
 }
 
 interface AllowlistActionResult {
@@ -102,6 +103,7 @@ const getInitialCreateFormValues = (): CreateSplitFormValues => ({
   projectType: "music",
   token: "",
   collaborators: getInitialCreateCollaborators(),
+  expiresAt: "",
 });
 
 // Seeded project IDs for Phase 3 Projects list view
@@ -591,6 +593,7 @@ export function SplitApp({
         projectType: data.projectType.trim(),
         token: data.token.trim(),
         collaborators: collaboratorPayload,
+        expiresAt: data.expiresAt ? new Date(data.expiresAt).toISOString() : undefined,
       });
       const signedTxXdr = await signWithWallet(
         buildResponse.xdr,

@@ -168,7 +168,7 @@ export type SplitAction = (typeof SPLIT_ACTIONS)[number];
  */
 export function isActionAllowed(state: SplitState, action: SplitAction): boolean {
   if (action === "read") return true;
-  if (state === "cancelled" || state === "settled") return false;
+  if (state === "cancelled" || state === "settled" || state === "expired") return false;
   if (state === "distributing") return action === "distribute";
   return true; // draft / active
 }
