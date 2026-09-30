@@ -21,6 +21,7 @@ interface CreateSplitFormValues {
   projectType: string;
   token: string;
   collaborators: CreateCollaboratorInput[];
+  expiresAt?: string;
 }
 
 interface CreateSplitWizardProps {
@@ -163,6 +164,28 @@ export function CreateSplitWizard({
           {createFormErrors.projectType && (
             <p className="px-1 text-[10px] font-bold text-red-400 uppercase tracking-tighter">
               {createFormErrors.projectType.message}
+            </p>
+          )}
+        </div>
+        <div className="space-y-2">
+          <label
+            htmlFor="expiresAt"
+            className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted px-1"
+          >
+            Expiration (Optional)
+          </label>
+          <input
+            id="expiresAt"
+            type="datetime-local"
+            className="glass-input w-full rounded-2xl px-5 py-4 text-sm"
+            {...register("expiresAt", {
+              validate: (value) =>
+                !value || new Date(value).getTime() > Date.now() || "Expiration must be in the future",
+            })}
+          />
+          {createFormErrors.expiresAt && (
+            <p className="px-1 text-[10px] font-bold text-red-400 uppercase tracking-tighter">
+              {createFormErrors.expiresAt.message}
             </p>
           )}
         </div>

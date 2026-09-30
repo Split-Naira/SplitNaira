@@ -19,6 +19,7 @@ import {
   invalidateCache,
   type UnsignedTxResponse
 } from "./stellar.js";
+import { assertProjectNotExpired, getProjectExpiration } from "./project-expiration.js";
 
 import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
 
@@ -262,7 +263,7 @@ export async function listProjects(
 
 export async function fetchProjectById(projectId: string) {
   const cacheKey = `project:${projectId}`;
-  return getCachedOrFetch<unknown>(cacheKey, async () => {
+  const project = await getCachedOrFetch<unknown>(cacheKey, async () => {
     const config = loadStellarConfig();
     const server = getStellarRpcServer();
 
@@ -301,6 +302,9 @@ export async function fetchProjectById(projectId: string) {
         }
       : null;
   });
+  if (project === null || project === undefined || typeof project !== "object") return project;
+  const expiration = await getProjectExpiration(projectId);
+  return { ...(project as Record<string, unknown>), expiresAt: expiration?.expiresAt ?? null };
 }
 
 /**
@@ -350,6 +354,7 @@ export async function assertProjectOwner(projectId: string, owner: string): Prom
 }
 
 export async function buildLockProjectUnsignedXdr(input: LockProjectRequest) {
+  await assertProjectNotExpired(input.projectId);
   await assertProjectOwner(input.projectId, input.owner);
 
   const config = loadStellarConfig();
@@ -395,6 +400,7 @@ export async function buildLockProjectUnsignedXdr(input: LockProjectRequest) {
 }
 
 export async function buildDepositUnsignedXdr(input: DepositRequest) {
+  await assertProjectNotExpired(input.projectId);
   const project = await fetchProjectById(input.projectId);
   if (!project) {
     throw new RequestValidationError("Project not found");
@@ -449,6 +455,7 @@ export async function buildDepositUnsignedXdr(input: DepositRequest) {
 export async function buildUpdateCollaboratorsUnsignedXdr(
   input: UpdateCollaboratorsRequest
 ) {
+  await assertProjectNotExpired(input.projectId);
   await assertProjectOwner(input.projectId, input.owner);
 
   const config = loadStellarConfig();
@@ -499,6 +506,7 @@ export async function buildUpdateMetadataUnsignedXdr(input: {
   title: string;
   projectType: string;
 }) {
+  await assertProjectNotExpired(input.projectId);
   await assertProjectOwner(input.projectId, input.owner);
 
   const config = loadStellarConfig();
@@ -730,6 +738,7 @@ export interface ClaimRequest {
  * current project balance at their own cadence.
  */
 export async function buildClaimUnsignedXdr(input: ClaimRequest) {
+  await assertProjectNotExpired(input.projectId);
   const { parseStellarAddress } = await import("./contract-helpers.js");
   parseStellarAddress(input.claimer, "claimer address");
 

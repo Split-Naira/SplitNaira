@@ -54,6 +54,7 @@ export interface CreateSplitPayload {
   projectType: string;
   token: string;
   collaborators: Array<Collaborator>;
+  expiresAt?: string;
 }
 
 export interface ProjectHistoryItem {

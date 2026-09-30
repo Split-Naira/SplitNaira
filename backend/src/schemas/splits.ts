@@ -71,9 +71,18 @@ export const createSplitSchema = z
     title: titleField,
     projectType: projectTypeField,
     token: stellarAddressSchema.describe("token"),
-    collaborators: z.array(collaboratorSchema).min(2, "at least 2 collaborators are required")
+    collaborators: z.array(collaboratorSchema).min(2, "at least 2 collaborators are required"),
+    expiresAt: z.string().datetime().optional()
   })
   .superRefine((payload, ctx) => {
+    if (payload.expiresAt && new Date(payload.expiresAt).getTime() <= Date.now()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["expiresAt"],
+        message: "expiresAt must be in the future",
+      });
+    }
+
     const totalBasisPoints = payload.collaborators.reduce(
       (sum, collaborator) => sum + collaborator.basisPoints,
       0
@@ -108,6 +117,11 @@ export const projectIdParamSchema = z
 
 export const lockProjectSchema = z.object({
   owner: stellarAddressSchema.describe("owner")
+});
+
+export const updateExpirationSchema = z.object({
+  owner: stellarAddressSchema.describe("owner"),
+  expiresAt: z.string().datetime().nullable()
 });
 
 export const depositSchema = z.object({

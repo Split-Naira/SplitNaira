@@ -23,6 +23,7 @@ interface CreateSplitFormValues {
   projectType: string;
   token: string;
   collaborators: CreateCollaboratorInput[];
+  expiresAt?: string;
 }
 
 function Harness({
