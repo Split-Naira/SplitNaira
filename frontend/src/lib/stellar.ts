@@ -6,6 +6,17 @@ export interface Collaborator {
   basisPoints: number;
 }
 
+export type ParticipantPaymentState = "paid" | "pending" | "failed" | "unpaid";
+
+export interface ParticipantPaymentStatus {
+  address: string;
+  alias: string | null;
+  basisPoints: number;
+  status: ParticipantPaymentState;
+  roundId: string | null;
+  lastUpdated: number | null;
+}
+
 export interface SplitProject {
   projectId: string;
   title: string;
@@ -17,6 +28,7 @@ export interface SplitProject {
   totalDistributed: string;
   distributionRound: number;
   balance: string;
+  participantPaymentStatuses?: ParticipantPaymentStatus[] | null;
 }
 
 // Extended type for frontend backward compatibility

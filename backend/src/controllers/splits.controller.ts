@@ -9,6 +9,9 @@ import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
 import { serializeBigInts, listProjects, fetchProjectById, buildLockProjectUnsignedXdr, buildDepositUnsignedXdr, encodeCursor, decodeCursor, simulateReadOnlyContractCall } from "../services/splits.service.js";
 import { recordProjectEdit } from "../services/project-history.js";
 import { scValToNative } from "@stellar/stellar-sdk";
+import { deriveParticipantStatuses } from "../lib/split-lifecycle.js";
+import { createPayoutHistoryService } from "../services/PayoutHistoryService.js";
+import { logger } from "../services/logger.js";
 
 import {
   depositSchema,
@@ -31,6 +34,8 @@ import {
 import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
 
 export class SplitsController {
+  private readonly payoutHistoryService = createPayoutHistoryService();
+
   /**
    * List projects with pagination, search and type filtering.
    */
@@ -113,7 +118,18 @@ export class SplitsController {
       const project = await fetchProjectById(projectId);
       if (!project)
         throw new AppError(ErrorType.RPC, ErrorCode.NOT_FOUND, `Project ${projectId} not found.`);
-      return res.status(200).json(serializeBigInts(project));
+
+      let participantPaymentStatuses = null;
+      try {
+        const payments = await this.payoutHistoryService.getPayoutsByRound(projectId);
+        participantPaymentStatuses = deriveParticipantStatuses(project.collaborators, payments);
+      } catch (error) {
+        logger.warn("Participant payment statuses unavailable", { projectId, error });
+      }
+
+      return res.status(200).json(
+        serializeBigInts({ ...project, participantPaymentStatuses }),
+      );
     } catch (error) {
       return next(error);
     }
