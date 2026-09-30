@@ -7,6 +7,7 @@ import { ServiceState } from "../entities/ServiceState.js";
 import { AuditLog } from "../entities/AuditLog.js";
 import { LedgerBlock } from "../entities/LedgerBlock.js";
 import { SplitCancellation } from "../entities/SplitCancellation.js";
+import { ProjectArchival } from "../entities/ProjectArchival.js";
 import { NotificationPreference } from "../entities/NotificationPreference.js";
 import { Notification } from "../entities/Notification.js";
 import { ProjectEditHistory } from "../entities/ProjectEditHistory.js";
@@ -46,6 +47,7 @@ export function createDataSource(): DataSource {
       AuditLog,
       LedgerBlock,
       SplitCancellation,
+      ProjectArchival,
       NotificationPreference,
     Notification,
     ProjectEditHistory

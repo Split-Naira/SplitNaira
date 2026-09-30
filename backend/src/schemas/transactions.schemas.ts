@@ -12,6 +12,23 @@ export const transactionHistoryQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
+// Transaction export query schema (#1332).
+//
+// No `walletAddress` field: export is always scoped to the authenticated
+// caller (see the /transactions/export route), so accepting one here would
+// invite it being silently ignored — or worse, misread as "export someone
+// else's transactions."
+export const transactionExportQuerySchema = z.object({
+  format: z.enum(["csv", "json"]).default("csv"),
+  startDate: z.coerce.number().int().positive().optional(),
+  endDate: z.coerce.number().int().positive().optional(),
+  status: z.enum(["pending", "completed", "failed"]).optional(),
+  // Only meaningful for format=json, which returns one page rather than
+  // streaming the full result set.
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
 // Transaction record schema
 export const transactionRecordSchema = z.object({
   id: z.string(),
@@ -44,5 +61,6 @@ export const transactionHistoryResponseSchema = z.object({
 });
 
 export type TransactionHistoryQuery = z.infer<typeof transactionHistoryQuerySchema>;
+export type TransactionExportQuery = z.infer<typeof transactionExportQuerySchema>;
 export type TransactionRecord = z.infer<typeof transactionRecordSchema>;
 export type TransactionHistoryResponse = z.infer<typeof transactionHistoryResponseSchema>;

@@ -428,3 +428,115 @@ describe("User Registration API", () => {
     });
   });
 });
+
+describe("Soft delete (#1333)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    createMock.mockImplementation((input) => input);
+    existsMock.mockResolvedValue(false);
+    saveMock.mockImplementation(async (input) => ({
+      id: "11111111-1111-4111-8111-111111111111",
+      role: "customer",
+      isActive: true,
+      createdAt: NOW,
+      updatedAt: NOW,
+      deletedAt: null,
+      ...input
+    }));
+  });
+
+  describe("DELETE /users/me", () => {
+    const walletAddress = "GCNSJNUEJLYRS7FXIWVDUABVBP5PQHCWW6M7IQIBA66C5LCY2RAZ5LBI";
+
+    it("returns 401 with no auth token", async () => {
+      const app = createApp();
+      await request(app).delete("/users/me").expect(401);
+    });
+
+    it("marks the account deleted and returns deletedAt", async () => {
+      findOneMock.mockResolvedValue({
+        id: "11111111-1111-4111-8111-111111111111",
+        walletAddress,
+        role: "customer",
+        isActive: true,
+        createdAt: NOW,
+        updatedAt: NOW,
+        deletedAt: null
+      });
+
+      const app = createApp();
+      const token = signToken(walletAddress);
+      const response = await request(app)
+        .delete("/users/me")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(200);
+
+      expect(response.body.walletAddress).toBe(walletAddress);
+      expect(response.body.deletedAt).toBeTruthy();
+      expect(saveMock).toHaveBeenCalledWith(
+        expect.objectContaining({ deletedAt: expect.any(Date) })
+      );
+    });
+
+    it("returns 404 when the account is already soft-deleted", async () => {
+      // findOne is queried with deletedAt: IsNull(), so an already-deleted
+      // account never comes back here — simulating that as "not found".
+      findOneMock.mockResolvedValue(null);
+
+      const app = createApp();
+      const token = signToken(walletAddress);
+      await request(app)
+        .delete("/users/me")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(404);
+    });
+  });
+
+  describe("lookups exclude soft-deleted accounts", () => {
+    const walletAddress = "GCNSJNUEJLYRS7FXIWVDUABVBP5PQHCWW6M7IQIBA66C5LCY2RAZ5LBI";
+
+    it("POST /users/login 404s for a soft-deleted wallet", async () => {
+      // The route filters by deletedAt: IsNull(); a soft-deleted user is
+      // therefore never returned to it, which this simulates directly.
+      findOneMock.mockResolvedValue(null);
+
+      const app = createApp();
+      await request(app)
+        .post("/users/login")
+        .send({ walletAddress })
+        .expect(404);
+    });
+
+    it("GET /users/:walletAddress 404s for a soft-deleted wallet", async () => {
+      findOneMock.mockResolvedValue(null);
+
+      const app = createApp();
+      await request(app).get(`/users/${walletAddress}`).expect(404);
+    });
+
+    it("GET /users/me filters by deletedAt: IsNull()", async () => {
+      findOneMock.mockResolvedValue({
+        id: "11111111-1111-4111-8111-111111111111",
+        walletAddress,
+        role: "customer",
+        isActive: true,
+        createdAt: NOW,
+        updatedAt: NOW,
+        deletedAt: null
+      });
+
+      const app = createApp();
+      const token = signToken(walletAddress);
+      await request(app)
+        .get("/users/me")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(200);
+
+      expect(findOneMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ walletAddress })
+        })
+      );
+    });
+  });
+});

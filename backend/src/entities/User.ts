@@ -30,6 +30,16 @@ export class User {
   @Column({ type: "boolean", default: true })
   isActive!: boolean;
 
+  /**
+   * Soft-delete marker (#1333). Null means active. Set by `DELETE /users/me`.
+   * Deliberately NOT applied to `TransactionRecord` or `AuditLog` — those
+   * are financial/audit history and must survive a user deleting their
+   * account, so this column exists only on user-owned, non-financial
+   * records. See `lib/soft-delete.ts` for the retention policy.
+   */
+  @Column({ type: "timestamptz", nullable: true })
+  deletedAt!: Date | null;
+
   @CreateDateColumn({ type: "timestamp" })
   createdAt!: Date;
 
