@@ -107,6 +107,19 @@ export async function buildUnsignedContractCall(input: {
 export async function buildCreateProjectUnsignedXdr(
   input: z.infer<typeof createSplitSchema>
 ) {
+  const existingProject = await simulateReadOnlyContractCall(
+    "project_exists",
+    [nativeToScVal(input.projectId, { type: "symbol" })],
+  );
+  if (existingProject && scValToNative(existingProject) === true) {
+    throw new AppError(
+      ErrorType.CONFLICT,
+      ErrorCode.PROJECT_EXISTS,
+      `Project ID "${input.projectId}" already exists on-chain. Choose a unique project ID and try again.`,
+      { message: "Choose a unique project ID and retry.", action: "Change Project ID" },
+    );
+  }
+
   const config = loadStellarConfig();
   const server = getStellarRpcServer();
 

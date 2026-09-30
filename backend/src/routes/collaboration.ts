@@ -11,17 +11,14 @@ import {
   requestProjectDeletion,
   type ProjectFinancialSnapshot,
 } from "../services/collaboration/project-deletion.js";
-import { getPermissionsMatrix } from "../services/collaboration/permissions.js";
 import {
   getPermissionsMatrix,
-  resolveCollaboratorRole,
-  assertPermission,
-  type CollaboratorRole,
 } from "../services/collaboration/permissions.js";
 import {
   reinvite,
   acceptInvitationByTokenJti,
   cancelInvitation,
+  getInvitationById,
 } from "../services/collaboration/invitation-registry.js";
 import {
   setProjectOwner,
@@ -29,6 +26,12 @@ import {
   isCurrentOwner,
   listOwnershipAudit,
 } from "../services/splits/ownership-transfer.js";
+import { requireStellarAddress } from "../middleware/project-access.js";
+import {
+  createProjectPermissionMiddleware,
+  type ProjectRoleContextResolver,
+} from "../middleware/project-permission.js";
+import { stellarAddressSchema } from "../schemas/splits.js";
 
 export const collaborationRouter = Router();
 
@@ -52,23 +55,26 @@ const resolveRoleContext: ProjectRoleContextResolver = (projectId) =>
     ? resolveProjectRoleContext(projectId)
     : Promise.resolve(null);
 
+type ProjectDeletionSnapshotResolver = (
+  projectId: string,
+) => Promise<ProjectFinancialSnapshot | null>;
+
+let resolveProjectDeletionSnapshot: ProjectDeletionSnapshotResolver | null = null;
+
+export function setProjectDeletionSnapshotResolver(
+  resolver: ProjectDeletionSnapshotResolver | null,
+): void {
+  resolveProjectDeletionSnapshot = resolver;
+}
+
 
 collaborationRouter.get("/permissions/matrix", (_req, res) => {
   res.status(200).json({ roles: getPermissionsMatrix() });
 });
 
 const deleteBodySchema = z.object({
-  actor: z.string().min(1),
   confirmed: z.boolean(),
   confirmationText: z.string().optional(),
-  financial: z.object({
-    projectId: z.string().min(1),
-    hasDeposits: z.boolean(),
-    hasDistributions: z.boolean(),
-    hasClaims: z.boolean(),
-    transactionCount: z.number().int().nonnegative(),
-    totalVolumeStroops: z.string().optional(),
-  }),
 });
 
 
@@ -82,22 +88,21 @@ collaborationRouter.post(
     try {
       const body = deleteBodySchema.parse(req.body);
       const projectId = req.params.projectId as string;
-
-      if (body.financial.projectId !== projectId) {
-        return res.status(400).json({ error: "project_id_mismatch" });
+      if (!resolveProjectDeletionSnapshot) {
+        return res.status(503).json({
+          error: "deletion_state_unavailable",
+          message: "Project financial history could not be verified. Deletion is disabled until authoritative history is available.",
+        });
       }
 
-      const role: CollaboratorRole = body.role ?? "owner";
-      try {
-        assertPermission(role, "project:delete");
-      } catch {
-        return res.status(403).json({ error: "permission_denied" });
+      const snapshot = await resolveProjectDeletionSnapshot(projectId);
+      if (!snapshot || snapshot.projectId !== projectId) {
+        return res.status(404).json({ error: "project_not_found" });
       }
 
-      const snapshot: ProjectFinancialSnapshot = body.financial;
       const decision = requestProjectDeletion({
         snapshot,
-        actor: body.actor,
+        actor: res.locals.requesterAddress,
         confirmed: body.confirmed,
         confirmationText: body.confirmationText,
       });
@@ -124,13 +129,14 @@ collaborationRouter.post(
 const inviteBodySchema = z.object({
   email: z.string().email(),
   tokenJti: z.string().min(1),
-  inviterWalletAddress: z.string().min(1),
   ttlMs: z.number().int().positive().optional(),
   expiresAt: z.string().datetime().optional(),
 });
 
 collaborationRouter.post(
   "/projects/:projectId/invitations",
+  requireStellarAddress,
+  createProjectPermissionMiddleware("project:invite", resolveRoleContext),
   (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = inviteBodySchema.parse(req.body);
@@ -139,7 +145,7 @@ collaborationRouter.post(
         email: body.email,
         tokenJti: body.tokenJti,
         projectId,
-        inviterWalletAddress: body.inviterWalletAddress,
+        inviterWalletAddress: res.locals.requesterAddress,
         ttlMs: body.ttlMs,
         expiresAt: body.expiresAt,
       });
@@ -171,14 +177,21 @@ collaborationRouter.post(
 
 collaborationRouter.post(
   "/invitations/:invitationId/cancel",
-  (req: Request, res: Response, next: NextFunction) => {
+  requireStellarAddress,
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const body = z
-        .object({ actorWalletAddress: z.string().min(1) })
-        .parse(req.body);
+      const invitationId = req.params.invitationId as string;
+      const invitation = getInvitationById(invitationId);
+      if (!invitation) {
+        return res.status(404).json({ error: "invitation_not_found" });
+      }
+      const projectContext = invitation.projectId
+        ? await resolveRoleContext(invitation.projectId)
+        : null;
       const record = cancelInvitation({
-        invitationId: req.params.invitationId as string,
-        actorWalletAddress: body.actorWalletAddress,
+        invitationId,
+        actorWalletAddress: res.locals.requesterAddress,
+        projectOwnerAddress: projectContext?.owner,
       });
       return res.status(200).json({ invitation: record });
     } catch (error) {
@@ -194,24 +207,25 @@ collaborationRouter.post(
 );
 
 const transferBodySchema = z.object({
-  actor: z.string().min(1),
-  newOwner: z.string().min(1),
-  /** Seeds current owner when not yet synced from chain. */
-  currentOwner: z.string().min(1).optional(),
+  newOwner: stellarAddressSchema,
 });
 
 collaborationRouter.post(
   "/projects/:projectId/transfer-ownership",
-  (req: Request, res: Response, next: NextFunction) => {
+  requireStellarAddress,
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = transferBodySchema.parse(req.body);
       const projectId = req.params.projectId as string;
-      if (body.currentOwner) {
-        setProjectOwner(projectId, body.currentOwner);
+      const requesterAddress = res.locals.requesterAddress as string;
+      const projectContext = await resolveRoleContext(projectId);
+      if (!projectContext) {
+        return res.status(404).json({ error: "project_owner_unknown" });
       }
+      setProjectOwner(projectId, projectContext.owner);
       const record = transferOwnership({
         projectId,
-        actor: body.actor,
+        actor: requesterAddress,
         newOwner: body.newOwner,
       });
       return res.status(200).json({
@@ -231,4 +245,3 @@ collaborationRouter.post(
   },
 );
 
-export { resolveCollaboratorRole };

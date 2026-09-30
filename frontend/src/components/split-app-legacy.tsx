@@ -632,10 +632,7 @@ export function SplitApp({
       telemetry.failed(error);
       const message =
         error instanceof Error ? error.message : "Failed to create split project.";
-      const isRetryable = /offline|network|fetch|timeout|temporar/i.test(message);
-      setCreateRetryError(
-        isRetryable ? message : "Submission failed. Verify your connection and retry.",
-      );
+      setCreateRetryError(message);
       setReceipt((prev) =>
         prev?.lifecycle === "confirming" && prev.action === "create"
           ? { ...prev, lifecycle: "failed", failureReason: message }

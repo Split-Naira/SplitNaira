@@ -179,6 +179,19 @@ function InteractiveHarness({
 }
 
 describe("CreateSplitWizard duplicate collaborator validation", () => {
+  it("shows actionable server errors instead of generic submission copy", () => {
+    render(
+      <Harness
+        collaborators={[]}
+        createRetryError={'Project ID "project_alpha" already exists. Choose a unique project ID and try again.'}
+      />,
+    );
+
+    expect(screen.getByText("Project ID already in use.")).toBeInTheDocument();
+    expect(screen.getByText(/Choose a unique project ID and try again\./)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /retry submission/i })).not.toBeInTheDocument();
+  });
+
   it("shows no duplicate errors when addresses are distinct", () => {
     render(
       <Harness

@@ -102,7 +102,47 @@ beforeEach(() => {
 });
 
 describe("splits routes integration", () => {
+  it("rejects missing required create fields with field-level validation details", async () => {
+    const response = await request(createApp())
+      .post("/splits")
+      .send({ projectId: "project_1" })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      error: "validation_error",
+      message: "Invalid request payload.",
+    });
+    expect(response.body.details.fieldErrors).toHaveProperty("owner");
+    expect(getAccountMock).not.toHaveBeenCalled();
+  });
+
+  it("returns an actionable conflict when the project ID already exists", async () => {
+    simulateTransactionMock.mockResolvedValueOnce({ result: { retval: true } });
+    const response = await request(createApp())
+      .post("/splits")
+      .send({
+        owner: "GOWNER",
+        projectId: "project_1",
+        title: "Project 1",
+        projectType: "token",
+        token: "GTOKENADDRESS",
+        collaborators: [
+          { address: "GCOLLAB1", alias: "A", basisPoints: 5000 },
+          { address: "GCOLLAB2", alias: "B", basisPoints: 5000 },
+        ],
+      })
+      .expect(409);
+
+    expect(response.body).toMatchObject({
+      code: "PROJECT_EXISTS",
+      message: expect.stringContaining("Choose a unique project ID"),
+      details: { remediation: { action: "Change Project ID" } },
+    });
+    expect(getAccountMock).toHaveBeenCalledWith("GTESTSIMULATOR");
+  });
+
   it("creates a split project", async () => {
+    simulateTransactionMock.mockResolvedValueOnce({ result: { retval: false } });
     getAccountMock.mockResolvedValue({ accountId: "GOWNER" });
     prepareTransactionMock.mockResolvedValue({
       toXDR: () => "XDR_CREATE",

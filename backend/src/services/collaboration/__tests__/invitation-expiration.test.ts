@@ -74,6 +74,34 @@ describe("invitation expiration (#1298)", () => {
     );
   });
 
+  it("cancels a pending invitation before issuing its replacement", () => {
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const original = registerInvitation({
+      email: "a@example.com",
+      tokenJti: "jti-pending-old",
+      projectId: "proj1",
+      inviterWalletAddress: "GINVITER",
+      now,
+    });
+
+    const replacement = reinvite({
+      email: "a@example.com",
+      tokenJti: "jti-pending-new",
+      projectId: "proj1",
+      inviterWalletAddress: "GINVITER",
+      now: new Date(now.getTime() + 1000),
+    });
+
+    expect(original.status).toBe("cancelled");
+    expect(replacement.status).toBe("pending");
+    expect(() => acceptInvitationByTokenJti("jti-pending-old")).toThrow(
+      /invitation_cancelled/,
+    );
+    expect(acceptInvitationByTokenJti("jti-pending-new").status).toBe(
+      "accepted",
+    );
+  });
+
   it("excludes expired invites from pending list", () => {
     const created = new Date("2026-01-01T00:00:00.000Z");
     registerInvitation({
