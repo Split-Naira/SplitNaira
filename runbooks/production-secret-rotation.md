@@ -1,6 +1,6 @@
-# Production Secret Rotation Procedure
+# Production Secret Rotation Runbook
 
-This runbook details standard operating procedures for rotating security-sensitive credentials and cryptographic keys in SplitNaira's production environment. Follow the documented sequences to guarantee zero downtime, prevent service disruption, and maintain audit compliance.
+This runbook establishes standard operating procedures for rotating security-sensitive credentials and cryptographic keys in SplitNaira's production environment. Follow the documented sequences to guarantee zero downtime, prevent service disruption, and maintain audit compliance.
 
 ---
 
@@ -347,11 +347,10 @@ curl -s https://api.splitnaira.com/health | jq .
 
 ## 🔗 Related Runbooks & Documentation
 
-- [Rollback Guide](../../runbooks/rollback-guide.md) — Infrastructure and smart contract rollback runbook
-- [Production Readiness Checklist](../../runbooks/production-readiness.md) — Pre-launch checklist including payment admin auth
-- [Failed Payout Incident Checklist](../../runbooks/failed-payout-incident-checklist.md) — Triage steps for payment anomalies
-- [Payout Failure Severity Matrix](../../runbooks/payout-failure-severity-matrix.md) — Severity classification and escalation channels
-- [Secrets & Rotation Guide](../secrets.md) — Full secret store inventory and scanning policies
-- [Backend Environment Variables](../backend-env-vars.md) — Complete environment variable specification
-- [Soroban Contract Admin Key Rotation](../admin_key_rotation_runbook.md) — Dedicated smart contract admin key guide
-- [Production Secret Rotation Runbook](../../runbooks/production-secret-rotation.md) — Root runbooks directory copy
+- [Rollback Guide](./rollback-guide.md) — Infrastructure and smart contract rollback runbook
+- [Production Readiness Checklist](./production-readiness.md) — Pre-launch checklist including payment admin auth
+- [Failed Payout Incident Checklist](./failed-payout-incident-checklist.md) — Triage steps for payment anomalies
+- [Payout Failure Severity Matrix](./payout-failure-severity-matrix.md) — Severity classification and escalation channels
+- [Secrets & Rotation Guide](../docs/secrets.md) — Full secret store inventory and scanning policies
+- [Backend Environment Variables](../docs/backend-env-vars.md) — Complete environment variable specification
+- [Soroban Contract Admin Key Rotation](../docs/admin_key_rotation_runbook.md) — Dedicated smart contract admin key guide
