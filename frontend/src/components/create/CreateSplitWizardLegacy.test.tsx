@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 // Since #1267 an invalid form keeps its submit button focusable and marks it
 // aria-disabled instead (pressing it reveals the error summary).
-import { useFieldArray, useForm } from "react-hook-form";
+import { useFieldArray, useForm, useWatch } from "react-hook-form";
 
 import { CreateSplitWizard } from "./CreateSplitWizardLegacy";
 import { findDuplicateCollaboratorAddressIds } from "@/lib/address";
@@ -101,7 +101,6 @@ function InteractiveHarness({
     control,
     register,
     handleSubmit,
-    watch,
     formState: { errors: createFormErrors, isValid: isFormValid },
   } = useForm<CreateSplitFormValues>({
     defaultValues: {
@@ -126,7 +125,7 @@ function InteractiveHarness({
     mode: "onChange",
   });
   const { fields, append, remove } = useFieldArray({ control, name: "collaborators" });
-  const watchedCollaborators = watch("collaborators") || [];
+  const watchedCollaborators = useWatch({ control, name: "collaborators" }) || [];
 
   const totalBasisPoints = watchedCollaborators.reduce((sum, col) => {
     if (!col?.basisPoints) return sum;
