@@ -2,6 +2,10 @@ import "reflect-metadata";
 import { randomUUID } from "node:crypto";
 import { DataSource, type QueryRunner } from "typeorm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  MIGRATION_ADVISORY_LOCK_KEY,
+  withMigrationLock,
+} from "../../scripts/migrate.js";
 
 /**
  * Migration timing and locking benchmarks (#measure-migration-timing).
@@ -39,11 +43,8 @@ const BUDGET_MS = {
   concurrentAdvisoryLockWait: 200,
 };
 
-// TypeORM migration:run uses pg_try_advisory_lock with a fixed key derived
-// from the database OID and the string "typeorm_migration_run". We probe with
-// the same approach: acquire an exclusive advisory lock and check that a
-// second connection cannot get it.
-const TYPEORM_ADVISORY_LOCK_KEY = 1_000_000_007n; // arbitrary safe key for testing
+// This is the application migration runner's stable database-scoped lock key.
+const TYPEORM_ADVISORY_LOCK_KEY = MIGRATION_ADVISORY_LOCK_KEY;
 
 // ---------------------------------------------------------------------------
 // Database connectivity helpers
@@ -619,48 +620,52 @@ describe("Financial invariant: amount check constraint (CHK_transactions_amount_
 // ---------------------------------------------------------------------------
 describe("Concurrent migration lock simulation", () => {
   /**
-   * Simulates what happens when two migration processes start simultaneously.
-   * We use pg_try_advisory_lock (non-blocking) to represent the "second runner
-   * checks and backs off" pattern. The first runner holds the lock; the second
-   * must detect contention and fail fast, not stall.
+   * Exercises the same lock helper used by migration:run and migration:revert.
+   * A contending runner must fail before invoking its migration callback, and
+   * a lock must be released after both successful and failed callbacks.
    */
 
-  it("second concurrent runner fails fast and within time budget", async (ctx) => {
+  it("second concurrent migration runner fails fast without running migrations", async (ctx) => {
     if (!runner || !secondDs) return ctx.skip();
 
-    // First runner acquires its lock (session-level so it persists over savepoints)
-    await db().query(`SELECT pg_advisory_lock($1)`, [
-      TYPEORM_ADVISORY_LOCK_KEY + 1n,
-    ]);
-
-    const secondRunner = secondDs.createQueryRunner();
-    await secondRunner.connect();
-    let acquired = false;
-    let waitMs = 0;
+    await db().query(`SELECT pg_advisory_lock($1)`, [TYPEORM_ADVISORY_LOCK_KEY]);
+    let operationCalled = false;
     try {
-      const { result, ms } = await measured(async () => {
-        const rows = (await secondRunner.query(
-          `SELECT pg_try_advisory_lock($1) AS "acquired"`,
-          [TYPEORM_ADVISORY_LOCK_KEY + 1n],
-        )) as Array<{ acquired: boolean }>;
-        return rows[0]?.acquired ?? true;
-      });
-      acquired = result;
-      waitMs = ms;
+      const { ms } = await measured(() =>
+        expect(
+          withMigrationLock(secondDs!.createQueryRunner(), async () => {
+            operationCalled = true;
+          }),
+        ).rejects.toThrow("Another migration process holds the database migration lock"),
+      );
+      expect(operationCalled).toBe(false);
+      expect(ms).toBeLessThan(BUDGET_MS.concurrentAdvisoryLockWait);
     } finally {
-      await secondRunner.release();
+      await db().query(`SELECT pg_advisory_unlock($1)`, [TYPEORM_ADVISORY_LOCK_KEY]);
     }
+  });
 
-    // Release lock before assertion so teardown succeeds regardless
-    await db().query(`SELECT pg_advisory_unlock($1)`, [
-      TYPEORM_ADVISORY_LOCK_KEY + 1n,
-    ]);
+  it("releases the migration lock after a failed migration callback", async (ctx) => {
+    if (!runner || !secondDs) return ctx.skip();
 
-    expect(acquired, "second runner must not acquire a held lock").toBe(false);
-    expect(
-      waitMs,
-      `concurrent lock check took ${waitMs.toFixed(1)}ms, must be < ${BUDGET_MS.concurrentAdvisoryLockWait}ms`,
-    ).toBeLessThan(BUDGET_MS.concurrentAdvisoryLockWait);
+    await expect(
+      withMigrationLock(secondDs.createQueryRunner(), async () => {
+        throw new Error("migration failed");
+      }),
+    ).rejects.toThrow("migration failed");
+
+    const probe = secondDs.createQueryRunner();
+    await probe.connect();
+    try {
+      const rows = (await probe.query(
+        `SELECT pg_try_advisory_lock($1) AS "acquired"`,
+        [TYPEORM_ADVISORY_LOCK_KEY],
+      )) as Array<{ acquired: boolean }>;
+      expect(rows[0]?.acquired).toBe(true);
+      await probe.query(`SELECT pg_advisory_unlock($1)`, [TYPEORM_ADVISORY_LOCK_KEY]);
+    } finally {
+      await probe.release();
+    }
   });
 });
 

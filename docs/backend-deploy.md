@@ -70,6 +70,18 @@ npm run migration:run
 
 The command reads `DATABASE_URL` plus the same Stellar environment variables used by the backend. CI validates that migrations apply on a clean PostgreSQL database before deployment.
 
+Both `migration:run` and `migration:revert` acquire the same PostgreSQL
+session advisory lock before touching migration history. A second process
+fails immediately without running migrations while the lock is held; the lock
+is released after success or failure.
+
+Some schema rollbacks discard user data. In particular, reverting the
+soft-delete migration is refused after any user has a `deletedAt` value, and
+reverting the session/email-verification migration is refused after session
+versions have changed or an address has been verified. Treat those changes as
+forward-only once populated: recover by deploying a corrective forward
+migration, not by deleting data or manually editing migration history.
+
 ## Wallet & Payments Admin Controls
 
 `/splits/admin/*` now supports an environment-backed operator control plane for wallet and payout operations.

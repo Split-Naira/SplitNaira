@@ -23,6 +23,16 @@ export class AddUserSoftDelete1760000000007 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`LOCK TABLE "users" IN ACCESS EXCLUSIVE MODE`);
+    const rows = (await queryRunner.query(
+      `SELECT EXISTS (SELECT 1 FROM "users" WHERE "deletedAt" IS NOT NULL) AS "hasDeletedUsers"`,
+    )) as Array<{ hasDeletedUsers: boolean }>;
+    if (rows[0]?.hasDeletedUsers) {
+      throw new Error(
+        `Cannot revert this migration: "users"."deletedAt" contains data. Use a forward migration to change soft-delete behavior.`,
+      );
+    }
+
     await queryRunner.query(`DROP INDEX "IDX_users_deleted_at"`);
     await queryRunner.query(`ALTER TABLE "users" DROP COLUMN "deletedAt"`);
   }
