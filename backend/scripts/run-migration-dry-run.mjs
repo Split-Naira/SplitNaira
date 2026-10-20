@@ -156,7 +156,7 @@ export function runMigrationsWithTiming(opts = {}) {
   const { ms } = measureMigrationTiming("migration:run", () => {
     const result = spawnSync(
       process.platform === "win32" ? "npm.cmd" : "npm",
-      ["run", "typeorm", "--", "migration:run", "-d", "src/data-source.ts"],
+      ["run", "migration:run"],
       {
         cwd: backendRoot,
         stdio: "inherit",

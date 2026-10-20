@@ -24,6 +24,19 @@ export class AddUserSessionVersionAndEmailVerification1760000000012 implements M
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`LOCK TABLE "users" IN ACCESS EXCLUSIVE MODE`);
+    const rows = (await queryRunner.query(
+      `SELECT EXISTS (
+         SELECT 1 FROM "users"
+         WHERE "sessionVersion" <> 0 OR "emailVerifiedAt" IS NOT NULL
+       ) AS "hasUserSecurityData"`,
+    )) as Array<{ hasUserSecurityData: boolean }>;
+    if (rows[0]?.hasUserSecurityData) {
+      throw new Error(
+        `Cannot revert this migration: "users" contains session or email-verification data. Use a forward migration to change these fields.`,
+      );
+    }
+
     await queryRunner.query(`ALTER TABLE "users" DROP COLUMN "emailVerifiedAt"`);
     await queryRunner.query(`ALTER TABLE "users" DROP COLUMN "sessionVersion"`);
   }
