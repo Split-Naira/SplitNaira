@@ -51,25 +51,58 @@ function formatMessage(msg: string, values?: Record<string, unknown>): string {
   return formatted;
 }
 
-vi.mock("next-intl", () => ({
-  useTranslations: (namespace?: string) => {
-    return (key: string, values?: Record<string, unknown>) => {
-      const fullKey = namespace ? `${namespace}.${key}` : key;
-      const resolved =
-        getNestedValue(enMessages, fullKey) ??
-        getNestedValue(enMessages, key) ??
-        messages[fullKey] ??
-        messages[key];
+vi.mock("next-intl", () => {
+  // Defaults to English so tests that never mount a provider keep the
+  // previous behaviour. NextIntlClientProvider overrides this per render.
+  let activeMessages: unknown = enMessages;
 
-      if (typeof resolved === "string") {
-        return formatMessage(resolved, values);
+  const reset = () => {
+    activeMessages = enMessages;
+  };
+
+  return {
+    useTranslations: (namespace?: string) => {
+      return (key: string, values?: Record<string, unknown>) => {
+        const fullKey = namespace ? `${namespace}.${key}` : key;
+        const resolved =
+          getNestedValue(activeMessages, fullKey) ??
+          getNestedValue(activeMessages, key) ??
+          getNestedValue(enMessages, fullKey) ??
+          getNestedValue(enMessages, key) ??
+          messages[fullKey] ??
+          messages[key];
+
+        if (typeof resolved === "string") {
+          return formatMessage(resolved, values);
+        }
+        return key;
+      };
+    },
+    NextIntlClientProvider: ({
+      children,
+      messages: providerMessages,
+    }: {
+      children: ReactNode;
+      locale?: string;
+      messages?: unknown;
+    }) => {
+      if (providerMessages) {
+        activeMessages = providerMessages;
       }
-      return key;
-    };
-  },
-  NextIntlClientProvider: ({ children }: { children: ReactNode }) => children,
-}));
+      return children;
+    },
+    __resetIntlMock: reset,
+  };
+});
+
+import * as nextIntlMock from "next-intl";
+
+function resetIntlMock(): void {
+  const mock = nextIntlMock as unknown as { __resetIntlMock?: () => void };
+  mock.__resetIntlMock?.();
+}
 
 afterEach(() => {
   cleanup();
+  resetIntlMock();
 });
