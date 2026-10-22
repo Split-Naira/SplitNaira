@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const frontendDir = path.resolve(__dirname, "..");
+const frontendDir = path.resolve(__dirname, "../..");
 const configPath = path.resolve(frontendDir, "bundle-budget.config.json");
 
 describe("frontend bundle budget", () => {

@@ -3,7 +3,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { useFieldArray, useForm } from "react-hook-form";
+import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { NextIntlClientProvider } from "next-intl";
 
 import { CreateSplitWizard } from "./CreateSplitWizardLegacy";
@@ -41,7 +41,6 @@ function LocalizedHarness({
     control,
     register,
     handleSubmit,
-    watch,
     formState: { errors: createFormErrors, isValid: isFormValid },
   } = useForm<CreateSplitFormValues>({
     defaultValues: {
@@ -66,7 +65,7 @@ function LocalizedHarness({
     mode: "onChange",
   });
   const { fields, append, remove } = useFieldArray({ control, name: "collaborators" });
-  const watchedCollaborators = watch("collaborators") || [];
+  const watchedCollaborators = useWatch({ control, name: "collaborators" }) || [];
 
   const totalBasisPoints = watchedCollaborators.reduce((sum, col) => {
     if (!col?.basisPoints) return sum;
