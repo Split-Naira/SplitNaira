@@ -145,24 +145,43 @@ describe("validateEnv()", () => {
     warnSpy.mockRestore();
   });
 
-  it("throws when CONTRACT_ID is absent during a production build", async () => {
+  // A missing contract ID used to throw in production, which crashed every page
+  // in the browser (including the landing page). It must only warn.
+  it("warns but does not throw when CONTRACT_ID is absent in production", async () => {
     vi.resetModules();
     const savedNodeEnv = process.env.NODE_ENV;
     const savedNextPhase = process.env.NEXT_PHASE;
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const { NEXT_PUBLIC_CONTRACT_ID: _omit, ...rest } = VALID_ENV;
     Object.assign(process.env, rest, { NODE_ENV: "production", NEXT_PHASE: "phase-production-build" });
     delete process.env.NEXT_PUBLIC_CONTRACT_ID;
 
     try {
       const mod = await import("./env");
-      expect(() => mod.validateEnv()).toThrowError(/NEXT_PUBLIC_CONTRACT_ID/);
+      expect(mod.validateEnv().NEXT_PUBLIC_CONTRACT_ID).toBe("");
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("NEXT_PUBLIC_CONTRACT_ID"));
     } finally {
+      warnSpy.mockRestore();
       vi.resetModules();
       if (savedNodeEnv === undefined) delete process.env.NODE_ENV;
       else process.env.NODE_ENV = savedNodeEnv;
       if (savedNextPhase === undefined) delete process.env.NEXT_PHASE;
       else process.env.NEXT_PHASE = savedNextPhase;
     }
+  });
+
+  it("treats an empty CONTRACT_ID (as in .env.example) as unset", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    Object.assign(process.env, { ...VALID_ENV, NEXT_PUBLIC_CONTRACT_ID: "" });
+
+    expect(validateEnv().NEXT_PUBLIC_CONTRACT_ID).toBe("");
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("NEXT_PUBLIC_CONTRACT_ID"));
+    warnSpy.mockRestore();
+  });
+
+  it("throws when CONTRACT_ID is set but malformed", () => {
+    Object.assign(process.env, { ...VALID_ENV, NEXT_PUBLIC_CONTRACT_ID: "not-a-contract" });
+    expect(() => validateEnv()).toThrowError(/NEXT_PUBLIC_CONTRACT_ID/);
   });
 
   it("does not warn when CONTRACT_ID is provided", () => {

@@ -40,8 +40,5 @@
   "engines": {
     "node": ">=18",
     "npm": ">=8"
-  },
-  "optionalDependencies": {
-    "lightningcss-win32-x64-msvc": "^1.33.0"
   }
 }

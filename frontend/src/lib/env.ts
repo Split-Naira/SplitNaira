@@ -1,18 +1,22 @@
 import { z } from "zod";
 
-const isProductionBuild =
-  process.env.NODE_ENV === "production" || process.env.NEXT_PHASE === "phase-production-build";
-
-const contractIdSchema = isProductionBuild
-  ? z
-      .string()
-      .min(1, "NEXT_PUBLIC_CONTRACT_ID is required for production builds")
-      .regex(/^C[A-Z2-7]{55}$/, "NEXT_PUBLIC_CONTRACT_ID must be a valid Stellar contract address")
-  : z
-      .string()
-      .regex(/^C[A-Z2-7]{55}$/, "NEXT_PUBLIC_CONTRACT_ID must be a valid Stellar contract address")
-      .optional()
-      .default("");
+/**
+ * A missing contract ID is a warning, never a hard failure. This check runs in
+ * the browser when the bundle loads (NODE_ENV is "production" there), so
+ * throwing took down every page, including the public landing page, even
+ * though no frontend code path signs against this value: transactions are
+ * built by the backend from its own CONTRACT_ID. A malformed value still
+ * throws, because a typo should be loud. An empty string (as in .env.example)
+ * counts as unset.
+ */
+const contractIdSchema = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z
+    .string()
+    .regex(/^C[A-Z2-7]{55}$/, "NEXT_PUBLIC_CONTRACT_ID must be a valid Stellar contract address")
+    .optional()
+    .default("")
+);
 
 /**
  * Schema for all NEXT_PUBLIC_* environment variables consumed by the frontend.
