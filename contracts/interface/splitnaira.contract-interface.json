@@ -2,7 +2,7 @@
   "schema": "https://splitnaira.dev/schemas/contract-interface.v1.json",
   "schemaVersion": 1,
   "generatedBy": "contracts/scripts/generate-interface.mjs",
-  "sourceHash": "bcc44f4dd98dbea997b07599a9e5ae9ca1ff7ee27d37bb147c0b83ce0bc36b2d",
+  "sourceHash": "798124ca8bcf6684cbfee5a87df4b8a0a31628a79a8d5f644c80a10eab7e0211",
   "sources": [
     "contracts/Cargo.toml",
     "contracts/lib.rs",
@@ -1223,6 +1223,21 @@
           "name": "MaxCollaborators",
           "fields": [],
           "doc": "Admin-configurable per-project collaborator cap. When unset, the contract falls back to `DEFAULT_MAX_COLLABORATORS`."
+        },
+        {
+          "name": "ClaimEpoch",
+          "fields": [
+            "Symbol"
+          ],
+          "doc": "Monotonic per-project \"claim epoch\" counter. Bumped whenever new funds become claimable (a `deposit`) or the pending balance is settled by a push `distribute`. Used to enforce one claim per collaborator per epoch."
+        },
+        {
+          "name": "LastClaimEpoch",
+          "fields": [
+            "Symbol",
+            "Address"
+          ],
+          "doc": "The `ClaimEpoch` value a collaborator last successfully claimed at. Presence indicates the collaborator has claimed within the current epoch."
         }
       ]
     }
@@ -1241,7 +1256,7 @@
     {
       "name": "AlreadyLocked",
       "code": 8,
-      "doc": "The project is permanently locked."
+      "doc": "The project has already been permanently locked."
     },
     {
       "name": "ProjectLocked",
@@ -1251,12 +1266,12 @@
     {
       "name": "Unauthorized",
       "code": 3,
-      "doc": "Caller is not authorized to perform this action."
+      "doc": "The caller is not authorized to perform the requested action."
     },
     {
       "name": "NotACollaborator",
       "code": 18,
-      "doc": "Address is not a registered collaborator."
+      "doc": "The address is not a registered collaborator on the project."
     },
     {
       "name": "InvalidSplit",
@@ -1271,67 +1286,72 @@
     {
       "name": "ZeroShare",
       "code": 6,
-      "doc": "Collaborator share cannot be zero."
+      "doc": "A collaborator cannot have a zero share."
     },
     {
       "name": "DuplicateCollaborator",
       "code": 10,
-      "doc": "Duplicate collaborator address detected."
+      "doc": "A duplicate collaborator address was provided."
     },
     {
       "name": "InvalidAmount",
       "code": 11,
-      "doc": "Deposit or transfer amount is invalid."
+      "doc": "The specified deposit or transfer amount is invalid."
     },
     {
       "name": "InvalidRecipient",
       "code": 17,
-      "doc": "Recipient address is invalid.  Prevents sending funds to the contract itself."
+      "doc": "The recipient address is invalid.  This prevents funds from being sent to the contract itself."
     },
     {
       "name": "TooManyCollaborators",
       "code": 19,
-      "doc": "Maximum collaborator limit exceeded."
+      "doc": "The maximum number of collaborators has been exceeded."
     },
     {
       "name": "NoBalance",
       "code": 7,
-      "doc": "Project has no balance available for distribution."
+      "doc": "The project has no balance available for distribution."
     },
     {
       "name": "TokenNotAllowed",
       "code": 12,
-      "doc": "Token is not included in the configured allowlist."
+      "doc": "The token is not included in the configured allowlist."
     },
     {
       "name": "InsufficientUnallocated",
       "code": 15,
-      "doc": "Requested withdrawal exceeds available unallocated funds."
+      "doc": "The requested withdrawal exceeds the available unallocated funds."
     },
     {
       "name": "AdminNotSet",
       "code": 13,
-      "doc": "Contract administrator has not been configured."
+      "doc": "The contract administrator has not been configured."
     },
     {
       "name": "DistributionsPaused",
       "code": 16,
-      "doc": "Distributions have been paused by the administrator."
+      "doc": "Distribution operations are currently paused by the administrator."
     },
     {
       "name": "AccountingDiscrepancy",
       "code": 20,
-      "doc": "Cached accounted balance exceeds the contract's actual token balance"
+      "doc": "The cached accounted balance exceeds the contract's actual token balance."
     },
     {
       "name": "InvalidMaxCollaborators",
       "code": 21,
-      "doc": "Admin-supplied capacity limit is outside the permitted range."
+      "doc": "The administrator-supplied collaborator capacity is outside the permitted range."
     },
     {
       "name": "ArithmeticOverflow",
       "code": 14,
-      "doc": "An arithmetic operation overflowed.  Code `14` matches the value already published in the README error-code table; the variant was referenced in `lib.rs` but had never been declared."
+      "doc": "An arithmetic operation overflowed.  Error code `14` is intentionally preserved because it is already part of the contract's public error-code interface."
+    },
+    {
+      "name": "AlreadyClaimed",
+      "code": 22,
+      "doc": "The claimer has already claimed their entitlement for the current claim epoch (the period since the last deposit or push distribution).  This prevents a participant from draining a project balance by repeatedly claiming against the same entitlement. A new claim becomes available once new funds are deposited or a distribution round settles the current balance."
     }
   ]
 }
