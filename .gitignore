@@ -12,9 +12,6 @@
 contracts/test_snapshots/
 
 # Env files
-.env
-.env.local
-.env.*
 !.env.example
 !.env.compose.example
 
@@ -28,3 +25,4 @@ yarn.lock
 
 # Issue #835: drift check writes a temp dir; ignore it.
 .tmp-openapi-drift/
+config.bat

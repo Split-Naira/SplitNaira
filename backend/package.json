@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.build.json",
-    "start": "node dist/index.js",
+    "dev": "node init && tsx watch src/index.ts",
+    "build": "node init && tsc -p tsconfig.build.json",
+    "start": "node init && node dist/index.js",
     "lint": "eslint .",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
