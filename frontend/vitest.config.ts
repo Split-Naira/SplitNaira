@@ -9,7 +9,6 @@ export default defineConfig({
     exclude: [
       "**/node_modules/**",
       "**/.next/**",
-      "src/common/**",
       "src/features/data-integrity/**"
     ]
   },
