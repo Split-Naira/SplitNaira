@@ -8,8 +8,7 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     exclude: [
       "**/node_modules/**",
-      "**/.next/**",
-      "src/features/data-integrity/**"
+      "**/.next/**"
     ]
   },
   resolve: {
