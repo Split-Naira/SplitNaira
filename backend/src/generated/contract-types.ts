@@ -350,6 +350,7 @@ export const ContractErrors = {
   AccountingDiscrepancy: 20,
   InvalidMaxCollaborators: 21,
   ArithmeticOverflow: 14,
+  AlreadyClaimed: 22,
 } as const;
 
 export type ContractErrorCode = typeof ContractErrors[keyof typeof ContractErrors];
