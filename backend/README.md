@@ -99,7 +99,9 @@ Every Soroban RPC response is schema-validated before use (issue #1494). `getSte
 ## Release operations & production readiness
 
 - **Database transaction safety** — user registration runs inside `withTransaction()` with automatic rollback
-- **Structured logging** — critical paths use Winston with `requestId`
+- **Structured logging** — critical paths use Winston with `requestId`;
+  signatures, signed XDR, bearer credentials, and private payload fields are
+  redacted recursively from structured logs and audit payloads
 - **Analytics & insights** — Prometheus metrics for HTTP request volumes, latency, inflight request gauges, and validation failures
 - **Input validation** — `validateRequest` middleware returns consistent 400 payloads
 - **Error handling** — centralized `AppError` mapping and RPC retry policy

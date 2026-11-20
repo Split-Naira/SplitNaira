@@ -56,8 +56,18 @@ function sanitizeRpcErrorMessage(raw: unknown): string {
   return oneLine
     // key=value style hints with any quote form
     .replace(/secret[_]?key\s*=\s*"?[^\s,"}]+"?/gi, "secret_key=[REDACTED]")
-    // base64 XDR blobs (12+ chars to keep the heuristic tight)
-    .replace(/xdr\s*=\s*"?[A-Za-z0-9+/=]{12,}"?/gi, "xdr=[REDACTED]")
+    // Signed payloads and credentials echoed by an RPC error.
+    .replace(/\bBearer\s+[^\s,"'};]+/gi, "Bearer [REDACTED]")
+    .replace(
+      /["']?(?:private[_-]?payload|payload[_-]?private)["']?\s*[:=]\s*("(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^\s,;}]+)/gi,
+      "privatePayload=[REDACTED]"
+    )
+    .replace(
+      /["']?(?:signature|signatures|sig)["']?\s*[:=]\s*"?[^\s,"'};]+"?/gi,
+      "signature=[REDACTED]"
+    )
+    // XDR values echoed by RPC errors.
+    .replace(/(?:signed[_-]?)?xdr\s*=\s*"?[^\s,"'};]+"?/gi, "xdr=[REDACTED]")
     // Raw Stellar secret seeds (S + 55 base32 chars)
     .replace(/\bS[A-Z2-7]{55}\b/g, "[REDACTED_SECRET_SEED]")
     // 64-char hex strings (likely signing material / private keys)
@@ -70,7 +80,6 @@ function sanitizeRpcErrorMessage(raw: unknown): string {
  * sensitive values. Stable categories keep dashboard labels consistent.
  */
 type RpcRetryOutcome = "success" | "transient_failure" | "timeout" | "validation_error" | "exhausted";
-
 
 export interface StellarConfig {
   horizonUrl: string;

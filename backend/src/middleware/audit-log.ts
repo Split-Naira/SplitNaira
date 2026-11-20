@@ -11,7 +11,8 @@
  *
  * Redacted fields (case-insensitive key match):
  *   - `apiKey`, `api_key`, `secret`, `token`, `password`, `privateKey`,
- *     `private_key`, `seed`, `xdr`, `signature`, `sig`
+ *     `private_key`, `seed`, `xdr`, `signedXdr`, `signature`, `sig`,
+ *     `authorization`, `bearerToken`, `privatePayload`
  */
 
 import type { NextFunction, Request, Response } from "express";
@@ -41,6 +42,11 @@ const REDACTED_KEYS = new Set([
   "secretkey",
   "secret_key",
   "mnemonic",
+  "authorization",
+  "bearertoken",
+  "signedxdr",
+  "signedtransactionxdr",
+  "privatepayload",
 ]);
 
 function isRedactedKey(key: string): boolean {
@@ -48,44 +54,30 @@ function isRedactedKey(key: string): boolean {
 }
 
 /**
- * Redacts known-sensitive fields from a payload object (one level deep).
- * Nested objects are walked one additional level to catch common patterns
- * like `{ credentials: { token: "..." } }`.
+ * Redacts known-sensitive fields recursively, including values inside arrays.
  *
  * Returns a new object; the original is never mutated.
  */
-export function redactSensitivePayload(
-  payload: Record<string, unknown>
-): Record<string, unknown> {
+export function redactSensitivePayload(payload: Record<string, unknown>): Record<string, unknown> {
+  const redactValue = (value: unknown): unknown => {
+    if (Array.isArray(value)) {
+      return value.map(redactValue);
+    }
+    if (value === null || typeof value !== "object") {
+      return value;
+    }
+
+    const redacted: Record<string, unknown> = {};
+    for (const [key, nestedValue] of Object.entries(value)) {
+      redacted[key] = isRedactedKey(key) ? "[REDACTED]" : redactValue(nestedValue);
+    }
+    return redacted;
+  };
+
   const redacted: Record<string, unknown> = {};
-
   for (const [key, value] of Object.entries(payload)) {
-    // Check the direct key
-    if (isRedactedKey(key)) {
-      redacted[key] = "[REDACTED]";
-      continue;
-    }
-
-    // Walk one level into nested plain objects
-    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-      const nested = value as Record<string, unknown>;
-      const redactedNested: Record<string, unknown> = {};
-      let anyRedacted = false;
-      for (const [nk, nv] of Object.entries(nested)) {
-        if (isRedactedKey(nk)) {
-          redactedNested[nk] = "[REDACTED]";
-          anyRedacted = true;
-        } else {
-          redactedNested[nk] = nv;
-        }
-      }
-      redacted[key] = anyRedacted ? redactedNested : value;
-      continue;
-    }
-
-    redacted[key] = value;
+    redacted[key] = isRedactedKey(key) ? "[REDACTED]" : redactValue(value);
   }
-
   return redacted;
 }
 
@@ -167,10 +159,7 @@ async function persistAuditLog(
       actor: extractActor(req),
       // Issue #1262: record the stable outcome category
       outcome,
-      payload:
-        outcome === "success"
-          ? buildPayload(req)
-          : buildFailureMetadata(req, res),
+      payload: outcome === "success" ? buildPayload(req) : buildFailureMetadata(req, res),
     });
     await repository.save(entry);
   } catch (error) {

@@ -33,6 +33,10 @@ const sensitiveFields = [
     operation: "wallet",
     fields: ["walletAddress", "privateKey", "secret_key", "mnemonic", "seed"],
   },
+  {
+    operation: "Stellar transaction",
+    fields: ["signature", "sig", "xdr", "signedXdr", "signed_xdr", "bearerToken", "privatePayload"],
+  },
 ] as const;
 
 describe("Winston logger — structured sensitive-field redaction", () => {
@@ -99,5 +103,44 @@ describe("Winston logger — structured sensitive-field redaction", () => {
     const output = lines[0];
     expect(output).not.toContain("mixed-case-access-token");
     expect(output).toContain("[REDACTED]");
+  });
+
+  it("redacts transaction secrets on failure while preserving safe diagnostics", () => {
+    logger.error("Stellar transaction submission failed", {
+      error: {
+        signature: "transaction-signature-secret",
+        signedXdr: "signed-xdr-secret",
+        authorization: "Bearer bearer-token-secret",
+        privatePayload: { memo: "private-payload-secret" },
+      },
+      txHash: "public-transaction-hash",
+      reason: "tx_bad_auth",
+    });
+
+    const output = lines[0];
+    for (const secret of [
+      "transaction-signature-secret",
+      "signed-xdr-secret",
+      "bearer-token-secret",
+      "private-payload-secret",
+    ]) {
+      expect(output).not.toContain(secret);
+    }
+    expect(output).toContain("public-transaction-hash");
+    expect(output).toContain("tx_bad_auth");
+  });
+
+  it("does not redact transaction identifiers or public payload metadata", () => {
+    logger.info("Stellar transaction prepared", {
+      txHash: "public-transaction-hash",
+      payloadSize: 128,
+      transactionStatus: "pending",
+    });
+
+    const output = lines[0];
+    expect(output).toContain("public-transaction-hash");
+    expect(output).toContain("128");
+    expect(output).toContain("pending");
+    expect(output).not.toContain("[REDACTED]");
   });
 });
