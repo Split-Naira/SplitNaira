@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { stellarAddressSchema } from "./splits.js";
 
 /** Hard ceiling for any transaction page, independent of the caller (#1259). */
 export const MAX_TRANSACTION_PAGE_SIZE = 100;
@@ -23,6 +24,24 @@ export const transactionHistoryQuerySchema = z.object({
 
 // Recipient listing accepts the same page controls as /history (#1259).
 export const transactionRecipientQuerySchema = z.object(transactionPageFields);
+
+export const payoutAttemptSchema = z.object({
+  txHash: z.string().regex(/^[0-9a-fA-F]{64}$/),
+  projectId: z.string().min(1).max(32).regex(/^[a-zA-Z0-9_]+$/),
+  sourceAccount: stellarAddressSchema.refine((value) => value.startsWith("G")),
+});
+
+export const payoutRecoveryStatusSchema = z.object({
+  txHash: z.string(),
+  projectId: z.string(),
+  sourceAccount: z.string(),
+  networkPassphrase: z.string(),
+  submittedAt: z.number().int(),
+  status: z.enum(["pending", "completed", "failed"]),
+  failureCode: z.string().nullable(),
+  failureLedger: z.number().int().nullable(),
+  lastCheckedAt: z.number().int().nullable(),
+});
 
 // Transaction export query schema (#1332).
 //

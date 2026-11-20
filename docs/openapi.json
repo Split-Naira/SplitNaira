@@ -4334,6 +4334,254 @@
         ]
       }
     },
+    "/transactions/recovery/attempts": {
+      "post": {
+        "description": "Stores the transaction hash and caller-reported payout context after Soroban accepts a distribution. Network status is always verified server-side.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "projectId": {
+                    "maxLength": 32,
+                    "minLength": 1,
+                    "pattern": "^[a-zA-Z0-9_]+$",
+                    "type": "string"
+                  },
+                  "sourceAccount": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "txHash": {
+                    "pattern": "^[0-9a-fA-F]{64}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "txHash",
+                  "projectId",
+                  "sourceAccount"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "failureCode": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "failureLedger": {
+                      "nullable": true,
+                      "type": "integer"
+                    },
+                    "lastCheckedAt": {
+                      "nullable": true,
+                      "type": "integer"
+                    },
+                    "networkPassphrase": {
+                      "type": "string"
+                    },
+                    "projectId": {
+                      "type": "string"
+                    },
+                    "sourceAccount": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "enum": [
+                        "pending",
+                        "completed",
+                        "failed"
+                      ],
+                      "type": "string"
+                    },
+                    "submittedAt": {
+                      "type": "integer"
+                    },
+                    "txHash": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "txHash",
+                    "projectId",
+                    "sourceAccount",
+                    "networkPassphrase",
+                    "submittedAt",
+                    "status",
+                    "failureCode",
+                    "failureLedger",
+                    "lastCheckedAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Persisted payout attempt"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "409": {
+            "description": "Transaction hash is already associated with different metadata"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Register a submitted payout for recovery",
+        "tags": [
+          "Transactions"
+        ]
+      }
+    },
+    "/transactions/recovery/attempts/{txHash}": {
+      "get": {
+        "description": "Checks the stored transaction hash against Soroban RPC and updates its persisted recovery status. A retry is safe only after a failed or expired result.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "txHash",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-fA-F0-9]{64}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "failureCode": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "failureLedger": {
+                      "nullable": true,
+                      "type": "integer"
+                    },
+                    "lastCheckedAt": {
+                      "nullable": true,
+                      "type": "integer"
+                    },
+                    "networkPassphrase": {
+                      "type": "string"
+                    },
+                    "projectId": {
+                      "type": "string"
+                    },
+                    "sourceAccount": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "enum": [
+                        "pending",
+                        "completed",
+                        "failed"
+                      ],
+                      "type": "string"
+                    },
+                    "submittedAt": {
+                      "type": "integer"
+                    },
+                    "txHash": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "txHash",
+                    "projectId",
+                    "sourceAccount",
+                    "networkPassphrase",
+                    "submittedAt",
+                    "status",
+                    "failureCode",
+                    "failureLedger",
+                    "lastCheckedAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Latest payout recovery status"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "NOT_FOUND",
+                  "message": "Project afrobeats_001 does not exist.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Resource not found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Reconcile a submitted payout",
+        "tags": [
+          "Transactions"
+        ]
+      }
+    },
     "/transactions/{txHash}": {
       "get": {
         "description": "Returns a single payout record matching the Stellar transaction hash.",

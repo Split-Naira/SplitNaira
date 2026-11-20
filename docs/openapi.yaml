@@ -2807,6 +2807,181 @@ paths:
                 error: INTERNAL_ERROR
                 message: An unexpected error occurred. Please try again later.
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
+  /transactions/recovery/attempts:
+    post:
+      summary: Register a submitted payout for recovery
+      description: Stores the transaction hash and caller-reported payout context
+        after Soroban accepts a distribution. Network status is always verified
+        server-side.
+      tags:
+        - Transactions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                txHash:
+                  type: string
+                  pattern: ^[0-9a-fA-F]{64}$
+                projectId:
+                  type: string
+                  minLength: 1
+                  maxLength: 32
+                  pattern: ^[a-zA-Z0-9_]+$
+                sourceAccount:
+                  type: string
+                  minLength: 1
+              required:
+                - txHash
+                - projectId
+                - sourceAccount
+      responses:
+        "200":
+          description: Persisted payout attempt
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  txHash:
+                    type: string
+                  projectId:
+                    type: string
+                  sourceAccount:
+                    type: string
+                  networkPassphrase:
+                    type: string
+                  submittedAt:
+                    type: integer
+                  status:
+                    type: string
+                    enum:
+                      - pending
+                      - completed
+                      - failed
+                  failureCode:
+                    type: string
+                    nullable: true
+                  failureLedger:
+                    type: integer
+                    nullable: true
+                  lastCheckedAt:
+                    type: integer
+                    nullable: true
+                required:
+                  - txHash
+                  - projectId
+                  - sourceAccount
+                  - networkPassphrase
+                  - submittedAt
+                  - status
+                  - failureCode
+                  - failureLedger
+                  - lastCheckedAt
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: Transaction hash is already associated with different metadata
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                error: INTERNAL_ERROR
+                message: An unexpected error occurred. Please try again later.
+                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
+  /transactions/recovery/attempts/{txHash}:
+    get:
+      summary: Reconcile a submitted payout
+      description: Checks the stored transaction hash against Soroban RPC and updates
+        its persisted recovery status. A retry is safe only after a failed or
+        expired result.
+      tags:
+        - Transactions
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[a-fA-F0-9]{64}$
+          required: true
+          name: txHash
+          in: path
+      responses:
+        "200":
+          description: Latest payout recovery status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  txHash:
+                    type: string
+                  projectId:
+                    type: string
+                  sourceAccount:
+                    type: string
+                  networkPassphrase:
+                    type: string
+                  submittedAt:
+                    type: integer
+                  status:
+                    type: string
+                    enum:
+                      - pending
+                      - completed
+                      - failed
+                  failureCode:
+                    type: string
+                    nullable: true
+                  failureLedger:
+                    type: integer
+                    nullable: true
+                  lastCheckedAt:
+                    type: integer
+                    nullable: true
+                required:
+                  - txHash
+                  - projectId
+                  - sourceAccount
+                  - networkPassphrase
+                  - submittedAt
+                  - status
+                  - failureCode
+                  - failureLedger
+                  - lastCheckedAt
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                error: NOT_FOUND
+                message: Project afrobeats_001 does not exist.
+                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                error: INTERNAL_ERROR
+                message: An unexpected error occurred. Please try again later.
+                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
   /transactions/export:
     get:
       summary: Export the authenticated wallet's own transaction history

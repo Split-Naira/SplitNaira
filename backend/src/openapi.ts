@@ -42,6 +42,8 @@ import {
   transactionRecordSchema,
   transactionReceiptSchema,
   transactionHistoryResponseSchema,
+  payoutAttemptSchema,
+  payoutRecoveryStatusSchema,
 } from "./schemas/transactions.schemas.js";
 
 const registry = new OpenAPIRegistry();
@@ -1158,6 +1160,50 @@ registry.registerPath({
 });
 
 // ─── Transaction Endpoints ────────────────────────────────────────────────────
+
+registry.registerPath({
+  method: "post",
+  path: "/transactions/recovery/attempts",
+  summary: "Register a submitted payout for recovery",
+  description:
+    "Stores the transaction hash and caller-reported payout context after Soroban accepts a distribution. Network status is always verified server-side.",
+  tags: ["Transactions"],
+  request: {
+    body: {
+      required: true,
+      content: { "application/json": { schema: payoutAttemptSchema } },
+    },
+  },
+  responses: {
+    200: {
+      description: "Persisted payout attempt",
+      content: { "application/json": { schema: payoutRecoveryStatusSchema } },
+    },
+    409: {
+      description: "Transaction hash is already associated with different metadata",
+    },
+    ...standardErrorResponses({ badRequest: true, serverError: true }),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/transactions/recovery/attempts/{txHash}",
+  summary: "Reconcile a submitted payout",
+  description:
+    "Checks the stored transaction hash against Soroban RPC and updates its persisted recovery status. A retry is safe only after a failed or expired result.",
+  tags: ["Transactions"],
+  request: {
+    params: z.object({ txHash: z.string().regex(/^[a-fA-F0-9]{64}$/) }),
+  },
+  responses: {
+    200: {
+      description: "Latest payout recovery status",
+      content: { "application/json": { schema: payoutRecoveryStatusSchema } },
+    },
+    ...standardErrorResponses({ badRequest: true, notFound: true, serverError: true }),
+  },
+});
 
 registry.registerPath({
   method: "get",

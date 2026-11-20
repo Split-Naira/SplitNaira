@@ -3,6 +3,7 @@ import { DataSource, type QueryRunner } from "typeorm";
 import { getEnv } from "../config/env.js";
 import { User } from "../entities/User.js";
 import { TransactionRecord } from "../entities/Transaction.js";
+import { TransactionAttempt } from "../entities/TransactionAttempt.js";
 import { ServiceState } from "../entities/ServiceState.js";
 import { AuditLog } from "../entities/AuditLog.js";
 import { LedgerBlock } from "../entities/LedgerBlock.js";
@@ -18,6 +19,7 @@ import { logger } from "./logger.js";
 export const ENTITIES = [
   User,
   TransactionRecord,
+  TransactionAttempt,
   ServiceState,
   AuditLog,
   LedgerBlock,
@@ -26,6 +28,7 @@ export const ENTITIES = [
   NotificationPreference,
   Notification,
   ProjectEditHistory,
+  EmailVerificationToken,
 ];
 
 let AppDataSource: DataSource | null = null;
@@ -58,6 +61,7 @@ export function createDataSource(): DataSource {
     entities: [
       User,
       TransactionRecord,
+      TransactionAttempt,
       ServiceState,
       AuditLog,
       LedgerBlock,

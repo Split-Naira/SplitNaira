@@ -89,6 +89,24 @@ describe("submitSorobanTransactionAndPoll", () => {
     expect(afterSubmitted).toHaveBeenCalledWith(HASH);
   });
 
+  it("waits for durable submission metadata to be recorded before polling", async () => {
+    const order: string[] = [];
+    const rpcServer = server({ status: "PENDING", hash: HASH }, { status: "SUCCESS", txHash: HASH });
+    rpcServer.pollTransaction.mockImplementation(async () => {
+      order.push("poll");
+      return { status: "SUCCESS", txHash: HASH };
+    });
+
+    await submitSorobanTransactionAndPoll(rpcServer, signedTransaction(), {
+      afterSubmitted: async () => {
+        await Promise.resolve();
+        order.push("persist");
+      },
+    });
+
+    expect(order).toEqual(["persist", "poll"]);
+  });
+
   it.each([
     ["a lowercase status", { status: "success" }],
     ["an unknown status", { status: "CONFIRMED" }],
@@ -140,10 +158,21 @@ describe("submitSorobanTransactionAndPoll", () => {
     expect(rpcServer.pollTransaction).not.toHaveBeenCalled();
   });
 
-  it("still surfaces non-validation network errors unchanged", async () => {
+  it("treats a send network error as unconfirmed when the transaction hash is known", async () => {
     const rpcServer = server(undefined);
     rpcServer.sendTransaction.mockRejectedValue(new Error("Network Error"));
 
-    await expect(submitSorobanTransactionAndPoll(rpcServer, signedTransaction())).rejects.toThrow("Network Error");
+    const afterSubmitted = vi.fn();
+    const transaction = signedTransaction();
+    const error = await submitSorobanTransactionAndPoll(
+      rpcServer,
+      transaction,
+      { afterSubmitted },
+    ).catch((caught: unknown) => caught);
+
+    expect(isUnconfirmedSubmission(error)).toBe(true);
+    expect(afterSubmitted).toHaveBeenCalledWith(
+      transaction.hash().toString("hex"),
+    );
   });
 });

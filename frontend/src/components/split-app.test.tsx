@@ -26,6 +26,8 @@ const mocks = vi.hoisted(() => ({
   mockSendTransaction: vi.fn(),
   mockPollTransaction: vi.fn(),
   mockGetTransaction: vi.fn(),
+  mockRecordPayoutAttempt: vi.fn(),
+  mockGetPayoutRecoveryStatus: vi.fn(),
   mockUseMaintenanceStatus: vi.fn()
 }));
 
@@ -66,7 +68,7 @@ vi.mock("@/lib/wallet", () => {
     submitSorobanTransactionAndPoll: async (
       server: ReturnType<typeof mockRpc>,
       transaction: unknown,
-      options?: { afterSubmitted?: (hash: string) => void; pollAttempts?: number }
+      options?: { afterSubmitted?: (hash: string) => void | Promise<void>; pollAttempts?: number }
     ) => {
       const submitResponse = await server.sendTransaction(transaction);
       if (submitResponse.status === "ERROR" || submitResponse.status === "TRY_AGAIN_LATER") {
@@ -78,7 +80,7 @@ vi.mock("@/lib/wallet", () => {
       if (!hash) {
         throw new Error("Submission did not return a transaction hash.");
       }
-      options?.afterSubmitted?.(hash);
+      await options?.afterSubmitted?.(hash);
       const polled = await server.pollTransaction(hash, {
         attempts: options?.pollAttempts ?? 90
       });
@@ -138,7 +140,17 @@ vi.mock("@/lib/api", () => ({
   buildWithdrawUnallocatedXdr: vi.fn().mockResolvedValue({ xdr: "MOCK_WITHDRAW_XDR" }),
   getAdminStatus: vi.fn().mockResolvedValue({ paused: false, admin: "GOWNER123" }),
   buildPauseDistributionsXdr: vi.fn().mockResolvedValue({ xdr: "MOCK_PAUSE_XDR" }),
-  buildUnpauseDistributionsXdr: vi.fn().mockResolvedValue({ xdr: "MOCK_UNPAUSE_XDR" })
+  buildUnpauseDistributionsXdr: vi.fn().mockResolvedValue({ xdr: "MOCK_UNPAUSE_XDR" }),
+  recordPayoutAttempt: mocks.mockRecordPayoutAttempt,
+  getPayoutRecoveryStatus: mocks.mockGetPayoutRecoveryStatus,
+  ApiError: class ApiError extends Error {
+    constructor(public readonly status: number) {
+      super("API request failed");
+    }
+    get isNotFound() {
+      return this.status === 404;
+    }
+  }
 }));
 
 vi.mock("@stellar/stellar-sdk", () => ({
@@ -244,6 +256,8 @@ describe("SplitApp lock project flow", () => {
     });
     mocks.mockSendTransaction.mockResolvedValue({ status: "PENDING", hash: "HASH_1" });
     mocks.mockPollTransaction.mockResolvedValue({ status: "SUCCESS" });
+    mocks.mockRecordPayoutAttempt.mockResolvedValue({ status: "pending" });
+    mocks.mockGetPayoutRecoveryStatus.mockResolvedValue({ status: "pending" });
   });
 
   it("shows lock button for owner when project is unlocked", async () => {
@@ -565,6 +579,8 @@ describe("SplitApp distribute flow", () => {
     });
     mocks.mockSendTransaction.mockResolvedValue({ status: "PENDING", hash: "DIST_TX_HASH" });
     mocks.mockPollTransaction.mockResolvedValue({ status: "SUCCESS" });
+    mocks.mockRecordPayoutAttempt.mockResolvedValue({ status: "pending" });
+    mocks.mockGetPayoutRecoveryStatus.mockResolvedValue({ status: "pending" });
   });
 
   it("shows distribute button when project has balance and wallet connected", async () => {
@@ -608,6 +624,11 @@ describe("SplitApp distribute flow", () => {
 
     await waitFor(() => {
       expect(mocks.mockBuildDistributeXdr).toHaveBeenCalledWith("project_1", "GOWNER123");
+    });
+    expect(mocks.mockRecordPayoutAttempt).toHaveBeenCalledWith({
+      txHash: "DIST_TX_HASH",
+      projectId: "project_1",
+      sourceAccount: "GOWNER123",
     });
   });
 
