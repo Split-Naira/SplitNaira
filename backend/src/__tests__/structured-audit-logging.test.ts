@@ -184,6 +184,32 @@ describe("redactSensitivePayload", () => {
     expect(nested.secret).toBe("[REDACTED]");
   });
 
+  it("redacts signed transaction data, bearer credentials, and private payloads at any depth", () => {
+    const original = {
+      transaction: {
+        signed_xdr: "signed-xdr-secret",
+        signature: "signature-secret",
+        credentials: [{ bearerToken: "bearer-token-secret" }],
+        envelope: { privatePayload: "private-payload-secret", txHash: "public-hash" },
+      },
+    };
+
+    const result = redactSensitivePayload(original);
+    const transaction = result.transaction as Record<string, unknown>;
+    const credentials = transaction.credentials as Array<Record<string, unknown>>;
+    const envelope = transaction.envelope as Record<string, unknown>;
+
+    expect(transaction.signed_xdr).toBe("[REDACTED]");
+    expect(transaction.signature).toBe("[REDACTED]");
+    expect(credentials[0].bearerToken).toBe("[REDACTED]");
+    expect(envelope.privatePayload).toBe("[REDACTED]");
+    expect(envelope.txHash).toBe("public-hash");
+    expect(JSON.stringify(result)).not.toMatch(
+      /signed-xdr-secret|signature-secret|bearer-token-secret|private-payload-secret/
+    );
+    expect(original.transaction.signed_xdr).toBe("signed-xdr-secret");
+  });
+
   it("does not mutate the original payload", () => {
     const original = { token: "abc", admin: "G_TEST" };
     const result = redactSensitivePayload(original);

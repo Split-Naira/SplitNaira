@@ -170,7 +170,7 @@ describe("Issue #1031: Admin audit log captures mutations (success path)", () =>
     const savedEntry = mockCreate.mock.calls[0][0];
     expect(savedEntry.requestId).toBe(customId);
     expect(savedEntry.action).toBe("allow_token");
-    expect(savedEntry.payload).toMatchObject({ admin: "GADMIN", token: "GTOKEN" });
+    expect(savedEntry.payload).toMatchObject({ admin: "GADMIN", token: "[REDACTED]" });
   });
 
   it("logs successful disallow-token mutation with payload", async () => {

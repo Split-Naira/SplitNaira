@@ -288,6 +288,35 @@ describe("RPC Retry and Timeout Policy", () => {
         expect(serialized).not.toContain(hexBlob);
       }
     });
+
+    it("scrubs bearer tokens, signatures, signed XDR, and private payloads from failed RPC logs", async () => {
+      const secrets = [
+        "bearer-secret-token",
+        "signature-secret-value",
+        "signed-xdr-secret-value",
+        "private-payload-secret",
+      ];
+      const operation = vi
+        .fn()
+        .mockRejectedValueOnce(
+          new Error(
+            `Bearer ${secrets[0]} signature=${secrets[1]} signedXdr=${secrets[2]} privatePayload=${secrets[3]}`
+          )
+        )
+        .mockResolvedValue("ok");
+
+      await executeWithRetry(operation, {
+        initialDelayMs: 1,
+        operation: "sendTransaction",
+      });
+
+      const logged = JSON.stringify(warnSpy.mock.calls);
+      for (const secret of secrets) {
+        expect(logged).not.toContain(secret);
+      }
+      expect(logged).toContain("[REDACTED]");
+      expect(logged).toContain("sendTransaction");
+    });
   });
 });
 
