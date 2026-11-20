@@ -205,6 +205,25 @@ describe("CreateSplitWizard accessible errors (#1267)", () => {
     expect(summary()).toBeNull();
   });
 
+  it("focuses a dynamically-keyed collaborator field directly when it is the only error (#1596)", async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        initialValues={{
+          collaborators: [
+            { address: "", alias: "Lead", basisPoints: "5000" },
+            { address: VALID_B, alias: "Producer", basisPoints: "5000" },
+          ],
+        }}
+      />,
+    );
+
+    await user.click(submitButton());
+
+    await waitFor(() => expect(screen.getByPlaceholderText("Recipient #1")).toHaveFocus());
+    expect(summary()).toBeNull();
+  });
+
   it("includes the share-total error in the summary and links it from every share field", async () => {
     const user = userEvent.setup();
     render(

@@ -77,11 +77,11 @@ export const TransactionReceipt: React.FC<TransactionReceiptProps> = ({
       {/* Transaction Hash Section */}
       {txHash && (
         <div className="bg-[#111214] p-3 rounded-lg border border-[#26282E] flex items-center justify-between gap-2">
-          <div className="truncate">
+          <div className="min-w-0 flex-1">
             <span className="text-xs text-gray-500 block">Transaction Hash</span>
-            <span className="text-xs font-mono text-gray-300 truncate block">{txHash}</span>
+            <span className="text-xs font-mono text-gray-300 break-all block">{txHash}</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={handleCopyHash}
