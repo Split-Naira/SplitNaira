@@ -1144,6 +1144,99 @@ describe("#1266 duplicate payment submission protection", () => {
 });
 
 // ============================================================
+//  #1595 — Browser back/forward navigation in the create wizard
+// ============================================================
+//
+// There's no client-side router for the tab switcher, so "back" leaves the
+// SPA and "forward" lands on a freshly mounted page. The only way an
+// in-progress submission survives that round trip is the per-account draft
+// (lib/form-draft.ts, sessionStorage), and the only way a resubmission could
+// be duplicated is if mounting replayed a pending request. Simulate the
+// round trip by unmounting (back) and rendering fresh (forward).
+describe("#1595 browser back/forward navigation in the create wizard", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.sessionStorage.clear();
+    mocks.mockUseWallet.mockReturnValue({
+      wallet: { connected: true, address: "GOWNER123", network: "testnet" },
+      connect: vi.fn(),
+      refresh: vi.fn()
+    });
+    mocks.mockGetWalletState.mockResolvedValue({
+      connected: true,
+      address: "GOWNER123",
+      network: "testnet"
+    });
+    mocks.mockGetAllSplits.mockResolvedValue([]);
+    mocks.mockGetClaimable.mockResolvedValue({ claimed: "0", distributionRound: 0 });
+    mocks.mockGetProjectHistory.mockResolvedValue({ items: [], nextCursor: null });
+    mocks.mockGetTokenAllowlist.mockResolvedValue(baseAllowlist);
+    mocks.mockGetSplit.mockResolvedValue(baseProject);
+    mocks.mockSignWithWallet.mockResolvedValue("SIGNED_XDR");
+    mocks.mockBuildCreateSplitXdr.mockResolvedValue({
+      xdr: "CREATE_XDR",
+      metadata: { networkPassphrase: "TESTNET", contractId: "CID" }
+    });
+    mocks.mockSendTransaction.mockResolvedValue({ status: "PENDING", hash: "TX_HASH" });
+    mocks.mockPollTransaction.mockResolvedValue({ status: "SUCCESS" });
+  });
+
+  it("restores partially entered, validated values after the wizard is torn down and recreated (simulated back/forward)", async () => {
+    const user = userEvent.setup();
+    const view = renderSplitApp();
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.type(screen.getByLabelText("Project Identifier"), "nav_project");
+    await user.type(screen.getByLabelText("Display Title"), "Nav Project");
+    await user.type(screen.getByPlaceholderText("Recipient #1"), "GCOLLAB1");
+
+    // The draft is written on every change via watch(); let it flush.
+    await waitFor(() =>
+      expect(window.sessionStorage.getItem("splitnaira:draft:create:GOWNER123")).not.toBeNull()
+    );
+
+    // Simulated browser back (page torn down) then forward (fresh mount).
+    view.unmount();
+    renderSplitApp();
+
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(screen.getByLabelText("Project Identifier")).toHaveValue("nav_project");
+    expect(screen.getByLabelText("Display Title")).toHaveValue("Nav Project");
+    expect(screen.getByPlaceholderText("Recipient #1")).toHaveValue("GCOLLAB1");
+    expect(mocks.mockBuildCreateSplitXdr).not.toHaveBeenCalled();
+  });
+
+  it("does not auto-submit or duplicate a create transaction when the wizard remounts after navigation", async () => {
+    const user = userEvent.setup();
+    const view = renderSplitApp();
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.type(screen.getByLabelText("Project Identifier"), "nav_project_2");
+    await user.type(screen.getByLabelText("Display Title"), "Nav Project 2");
+    await user.selectOptions(
+      screen.getByLabelText(/Asset token/i),
+      "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+    );
+    await user.type(screen.getByPlaceholderText("Recipient #1"), "GCOLLAB1");
+    await user.type(screen.getByPlaceholderText("Recipient #2"), "GCOLLAB2");
+    const aliases = screen.getAllByPlaceholderText("e.g. Lead Vocals");
+    await user.type(aliases[0], "Lead");
+    await user.type(aliases[1], "Producer");
+
+    await waitFor(() =>
+      expect(window.sessionStorage.getItem("splitnaira:draft:create:GOWNER123")).not.toBeNull()
+    );
+
+    view.unmount();
+    renderSplitApp();
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    // Remounting restores the draft but must never trigger a submission by
+    // itself — only an explicit click does.
+    expect(mocks.mockBuildCreateSplitXdr).not.toHaveBeenCalled();
+    expect(mocks.mockSendTransaction).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================
 //  #1267 — Accessible errors on the deposit (payment) form
 // ============================================================
 

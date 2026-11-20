@@ -84,4 +84,19 @@ describe('TransactionReceipt', () => {
     );
     expect(screen.queryByLabelText('View on Stellar Explorer')).toBeNull();
   });
+
+  it('wraps long transaction hashes instead of clipping them (#1600)', () => {
+    // `truncate` clips with an ellipsis and, inside a flex row without
+    // `min-w-0`, lets the hash push the card wider than the viewport on
+    // mobile and in print. The hash must wrap in place instead.
+    render(<TransactionReceipt status="pending" isStale={false} txHash={mockTxHash} />);
+
+    const hashEl = screen.getByText(mockTxHash);
+    expect(hashEl.className).toContain('break-all');
+    expect(hashEl.className).not.toContain('truncate');
+
+    const hashContainer = hashEl.parentElement;
+    expect(hashContainer?.className).toContain('min-w-0');
+    expect(hashContainer?.className).not.toContain('truncate');
+  });
 });
