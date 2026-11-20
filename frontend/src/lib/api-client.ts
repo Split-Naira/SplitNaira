@@ -102,6 +102,24 @@ export interface IdempotencyStats {
   replaysTotal: number;
 }
 
+export interface PayoutAttemptMetadata {
+  txHash: string;
+  projectId: string;
+  sourceAccount: string;
+}
+
+export interface PayoutRecoveryStatus {
+  txHash: string;
+  projectId: string;
+  sourceAccount: string;
+  networkPassphrase: string;
+  submittedAt: number;
+  status: "pending" | "completed" | "failed";
+  failureCode: string | null;
+  failureLedger: number | null;
+  lastCheckedAt: number | null;
+}
+
 /**
  * Simplified frontend-side system status, derived from the backend health
  * endpoint response.
@@ -320,6 +338,26 @@ export class ApiClient {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sourceAddress }),
       },
+    );
+  }
+
+  async recordPayoutAttempt(payload: PayoutAttemptMetadata): Promise<PayoutRecoveryStatus> {
+    return this.requestJson<PayoutRecoveryStatus>(
+      "/transactions/recovery/attempts",
+      "Failed to save payout recovery metadata",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        idempotent: true,
+      },
+    );
+  }
+
+  async getPayoutRecoveryStatus(txHash: string): Promise<PayoutRecoveryStatus> {
+    return this.requestJson<PayoutRecoveryStatus>(
+      `/transactions/recovery/attempts/${encodeURIComponent(txHash)}`,
+      "Failed to check payout recovery status",
     );
   }
 

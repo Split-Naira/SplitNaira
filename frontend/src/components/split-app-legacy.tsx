@@ -31,6 +31,9 @@ import {
   buildPauseDistributionsXdr,
   buildUnpauseDistributionsXdr,
   type AdminStatusState,
+  ApiError,
+  getPayoutRecoveryStatus,
+  recordPayoutAttempt,
 } from "@/lib/api";
 import { isOwner, findDuplicateCollaboratorAddressIds, type CollaboratorAddressEntry } from "@/lib/address";
 import {
@@ -683,7 +686,23 @@ export function SplitApp({
     if (!submission || checkingUnconfirmed) return;
     setCheckingUnconfirmed(action);
     try {
-      const outcome = await resolveUnconfirmedSubmission(createSorobanRpcServer(), submission);
+      let outcome: Awaited<ReturnType<typeof resolveUnconfirmedSubmission>>;
+      if (action === "distribute") {
+        try {
+          const recovery = await getPayoutRecoveryStatus(submission.hash);
+          outcome =
+            recovery.status === "completed"
+              ? "succeeded"
+              : recovery.status === "failed"
+                ? "failed"
+                : "pending";
+        } catch (error) {
+          if (!(error instanceof ApiError) || !error.isNotFound) throw error;
+          outcome = await resolveUnconfirmedSubmission(createSorobanRpcServer(), submission);
+        }
+      } else {
+        outcome = await resolveUnconfirmedSubmission(createSorobanRpcServer(), submission);
+      }
       if (outcome === "pending") {
         notify.info("Still waiting for the network. Check again in a moment.");
         return;
@@ -704,6 +723,9 @@ export function SplitApp({
       } else {
         notify.info("The transaction expired without confirming. You can try again.");
       }
+    } catch (error) {
+      console.error("Failed to check transaction recovery status:", error);
+      notify.error("Could not verify the transaction status. Keep the action blocked and try again.");
     } finally {
       setCheckingUnconfirmed(null);
     }
@@ -876,7 +898,8 @@ export function SplitApp({
   const onDistribute = () => submissionGuard.run("distribute", runDistribute);
 
   const runDistribute = async () => {
-    if (!fetchedProject || !wallet.address) return;
+    const sourceAccount = wallet.address;
+    if (!fetchedProject || !sourceAccount) return;
     setIsSubmitting(true);
     setShowDistributeModal(false);
     const telemetry = trackSplitLifecycle("distribute", {
@@ -885,14 +908,26 @@ export function SplitApp({
     });
     let submitted: UnconfirmedSubmission | null = null;
     try {
-      const { xdr, metadata } = await buildDistributeXdr(fetchedProject.projectId, wallet.address);
+      const { xdr, metadata } = await buildDistributeXdr(fetchedProject.projectId, sourceAccount);
       const signedTxXdr = await signWithWallet(xdr, metadata.networkPassphrase);
       const server = createSorobanRpcServer();
       const transaction = new Transaction(signedTxXdr, metadata.networkPassphrase);
 
-      await submitSorobanTransactionAndPoll(server, transaction, {
-        afterSubmitted: (hash) => {
+      const { hash } = await submitSorobanTransactionAndPoll(server, transaction, {
+        afterSubmitted: async (hash) => {
           submitted = { hash, submittedAt: Date.now() };
+          try {
+            await recordPayoutAttempt({
+              txHash: hash,
+              projectId: fetchedProject.projectId,
+              sourceAccount,
+            });
+          } catch (error) {
+            console.error("Failed to persist payout recovery metadata:", error);
+            notify.error(
+              "The payout was submitted, but its recovery record could not be saved. Do not retry until its status is confirmed.",
+            );
+          }
           telemetry.submitted(hash);
           setTxHash(hash);
           setReceipt({
@@ -904,17 +939,43 @@ export function SplitApp({
           });
         },
       });
+      try {
+        await getPayoutRecoveryStatus(hash);
+      } catch (error) {
+        console.error("Failed to reconcile confirmed payout recovery metadata:", error);
+        notify.error("Payout confirmed, but its recovery record could not be updated.");
+      }
 
       telemetry.succeeded();
       setReceipt((prev) =>
         prev?.action === "distribute" && prev.hash ? { ...prev, lifecycle: "success" } : prev,
       );
       notify.success("Distribution completed successfully.");
-      refreshDependentViews("distribute", { projectId: fetchedProject.projectId, account: wallet.address });
+      refreshDependentViews("distribute", { projectId: fetchedProject.projectId, account: sourceAccount });
       await onFetchProject();
     } catch (error) {
+      let recoveryStatus: Awaited<ReturnType<typeof getPayoutRecoveryStatus>> | null = null;
+      if (submitted) {
+        try {
+          recoveryStatus = await getPayoutRecoveryStatus(submitted.hash);
+        } catch (recoveryError) {
+          console.error("Failed to reconcile payout after submission error:", recoveryError);
+        }
+      }
+      if (recoveryStatus?.status === "completed") {
+        telemetry.succeeded();
+        setReceipt((prev) =>
+          prev?.action === "distribute" && prev.hash ? { ...prev, lifecycle: "success" } : prev,
+        );
+        notify.success("Payout confirmed.");
+        refreshDependentViews("distribute", { projectId: fetchedProject.projectId, account: sourceAccount });
+        await onFetchProject();
+        return;
+      }
       telemetry.failed(error);
-      blockIfUnconfirmed("distribute", error, submitted);
+      if (recoveryStatus?.status !== "failed") {
+        blockIfUnconfirmed("distribute", error, submitted);
+      }
       const message = error instanceof Error ? error.message : "Distribution failed.";
       setReceipt((prev) =>
         prev?.lifecycle === "confirming" && prev.action === "distribute"

@@ -72,6 +72,18 @@ Only `final` maps to `TransactionStatus = "completed"`. `included` and
 
 ## Operator notes
 
+- Distribution submissions are also kept in `transaction_attempts`, separately
+  from confirmed payout history. The client registers the hash, project, source
+  wallet and configured network as soon as Soroban accepts the submission.
+  `GET /transactions/recovery/attempts/:txHash` reconciles that record against
+  Soroban RPC and stores the last check, terminal failure code and failure
+  ledger. RPC errors and `NOT_FOUND` results inside the transaction validity
+  window remain pending; after the 300-second transaction window plus a
+  60-second margin, a still-missing transaction is marked expired/failed.
+- A confirmed attempt remains completed even if a later read reports a
+  conflicting failure. A failed or expired attempt can be retried only by
+  building and signing a fresh transaction; the failed signed envelope is never
+  reused. Check the recovery endpoint before retrying an unconfirmed payout.
 - To change a policy value, edit `FINALITY_POLICIES` and update the table above
   in the same PR. The tests assert that mainnet stays at least as strict as
   every resettable network.

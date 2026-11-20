@@ -163,7 +163,7 @@ export async function submitSorobanTransactionAndPoll(
   options?: {
     pollAttempts?: number;
     /** Invoked as soon as the RPC accepts the tx (hash known), before polling completes. */
-    afterSubmitted?: (hash: string) => void;
+    afterSubmitted?: (hash: string) => void | Promise<void>;
   }
 ): Promise<{ hash: string }> {
   let submit: rpc.Api.SendTransactionResponse;
@@ -171,20 +171,21 @@ export async function submitSorobanTransactionAndPoll(
     submit = await server.sendTransaction(transaction);
     parseSendTransactionResponse(submit);
   } catch (error) {
-    if (!(error instanceof RpcResponseValidationError)) throw error;
     const localHash = localTransactionHash(transaction);
-    reportInvalidRpcResponse(error, "submit", localHash ?? undefined);
+    if (error instanceof RpcResponseValidationError) {
+      reportInvalidRpcResponse(error, "submit", localHash ?? undefined);
+    }
     if (!localHash) throw error;
     // The RPC may have accepted it: track it by its own hash so the caller
     // keeps the action blocked until the outcome is known.
-    options?.afterSubmitted?.(localHash);
+    await options?.afterSubmitted?.(localHash);
     throw unconfirmedSubmissionError(error);
   }
 
   assertSubmissionAccepted(submit);
   const hash = submit.hash;
 
-  options?.afterSubmitted?.(hash);
+  await options?.afterSubmitted?.(hash);
 
   let polled: rpc.Api.GetTransactionResponse;
   try {
@@ -193,8 +194,9 @@ export async function submitSorobanTransactionAndPoll(
     });
     parseGetTransactionResponse(polled);
   } catch (error) {
-    if (!(error instanceof RpcResponseValidationError)) throw error;
-    reportInvalidRpcResponse(error, "poll", hash);
+    if (error instanceof RpcResponseValidationError) {
+      reportInvalidRpcResponse(error, "poll", hash);
+    }
     throw unconfirmedSubmissionError(error);
   }
 

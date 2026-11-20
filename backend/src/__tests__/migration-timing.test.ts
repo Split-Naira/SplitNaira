@@ -204,7 +204,7 @@ describe("Schema presence (all migrations applied)", () => {
     const rows = (await db().query(
       `SELECT count(*)::int AS "n" FROM "migrations"`,
     )) as Array<{ n: number }>;
-    // 16 migration files in src/migrations/
+    // 17 migration files in src/migrations/
     expect(rows[0]?.n).toBeGreaterThanOrEqual(12);
   });
 });

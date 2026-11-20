@@ -3,6 +3,7 @@ import {
   transactionHistoryQuerySchema,
   transactionExportQuerySchema,
   transactionRecipientQuerySchema,
+  payoutAttemptSchema,
 } from "../schemas/transactions.schemas.js";
 import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
 import { toCsvRow } from "../lib/csv.js";
@@ -20,6 +21,14 @@ import {
 import { authJwtMiddleware } from "../middleware/auth-jwt.js";
 import { logger } from "../services/logger.js";
 import { getEnv } from "../config/env.js";
+import { getStellarRpcServer, executeWithRetry } from "../services/stellar.js";
+import { getDataSource } from "../services/database.js";
+import { TransactionAttempt } from "../entities/TransactionAttempt.js";
+import {
+  PayoutAttemptConflictError,
+  registerPayoutAttempt,
+  updatePayoutAttemptFromObservation,
+} from "../services/transaction-recovery.js";
 
 export const transactionsRouter = Router();
 
@@ -30,6 +39,104 @@ const payoutHistoryService = createPayoutHistoryService();
 // the caller's own rate limit. Protects the DB and the response from an
 // unbounded query even for a fully authorized, well-intentioned caller.
 const EXPORT_MAX_ROWS = 50_000;
+
+function formatPayoutAttempt(attempt: TransactionAttempt) {
+  return {
+    txHash: attempt.txHash,
+    projectId: attempt.projectId,
+    sourceAccount: attempt.sourceAccount,
+    networkPassphrase: attempt.networkPassphrase,
+    submittedAt: attempt.submittedAt,
+    status: attempt.status,
+    failureCode: attempt.failureCode,
+    failureLedger: attempt.failureLedger,
+    lastCheckedAt: attempt.lastCheckedAt,
+  };
+}
+
+transactionsRouter.post(
+  "/recovery/attempts",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = payoutAttemptSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new AppError(
+          ErrorType.VALIDATION,
+          ErrorCode.VALIDATION_ERROR,
+          "Invalid payout attempt metadata.",
+          undefined,
+          parsed.error.flatten(),
+        );
+      }
+
+      const networkPassphrase = getEnv().SOROBAN_NETWORK_PASSPHRASE;
+      const attempt = await registerPayoutAttempt(getDataSource(), {
+        txHash: parsed.data.txHash.toLowerCase(),
+        projectId: parsed.data.projectId,
+        sourceAccount: parsed.data.sourceAccount,
+        networkPassphrase,
+      });
+      return res.status(200).json(formatPayoutAttempt(attempt));
+    } catch (error) {
+      if (error instanceof PayoutAttemptConflictError) {
+        return res.status(409).json({
+          error: "payout_attempt_conflict",
+          message: error.message,
+        });
+      }
+      return next(error);
+    }
+  },
+);
+
+transactionsRouter.get(
+  "/recovery/attempts/:txHash",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const txHashParam = req.params.txHash;
+      const txHash = Array.isArray(txHashParam) ? txHashParam[0] : txHashParam;
+      if (!txHash || !/^[a-fA-F0-9]{64}$/.test(txHash)) {
+        throw new AppError(
+          ErrorType.VALIDATION,
+          ErrorCode.VALIDATION_ERROR,
+          "Invalid transaction hash.",
+        );
+      }
+
+      const dataSource = getDataSource();
+      const repository = dataSource.getRepository(TransactionAttempt);
+      const attempt = await repository.findOneBy({ txHash: txHash.toLowerCase() });
+      if (!attempt) {
+        throw new AppError(ErrorType.RPC, ErrorCode.NOT_FOUND, "Payout attempt not found.");
+      }
+
+      const observation = await executeWithRetry(
+        () => getStellarRpcServer().getTransaction(attempt.txHash),
+        { operation: "recoverPayoutTransaction" },
+      );
+      if (
+        observation.status !== "NOT_FOUND" &&
+        observation.status !== "SUCCESS" &&
+        observation.status !== "FAILED"
+      ) {
+        throw new Error("Soroban RPC returned an unsupported transaction status.");
+      }
+      const reconciled = await updatePayoutAttemptFromObservation(
+        dataSource,
+        attempt,
+        {
+          status: observation.status,
+          ...("ledger" in observation && typeof observation.ledger === "number"
+            ? { ledger: observation.ledger }
+            : {}),
+        },
+      );
+      return res.status(200).json(formatPayoutAttempt(reconciled));
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
 
 function decodePageCursor(raw: string | undefined): TransactionCursor | undefined {
   if (raw === undefined) return undefined;

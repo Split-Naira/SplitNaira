@@ -9,6 +9,8 @@ export {
   type AdminStatusState,
   type UnallocatedBalanceState,
   type IdempotencyStats,
+  type PayoutAttemptMetadata,
+  type PayoutRecoveryStatus,
   type WithdrawUnallocatedPayload,
   type WithdrawUnallocatedResponse,
   type ListProjectsParams,
@@ -16,10 +18,25 @@ export {
   type SystemStatusResponse,
 } from "./api-client";
 
-import { ApiClient, type IdempotencyStats, type ListProjectsParams, type SystemStatusResponse } from "./api-client";
+import {
+  ApiClient,
+  type IdempotencyStats,
+  type ListProjectsParams,
+  type PayoutAttemptMetadata,
+  type PayoutRecoveryStatus,
+  type SystemStatusResponse,
+} from "./api-client";
 import type { SplitProject, Collaborator } from "./stellar";
 
 const client = new ApiClient();
+
+export async function recordPayoutAttempt(payload: PayoutAttemptMetadata): Promise<PayoutRecoveryStatus> {
+  return client.recordPayoutAttempt(payload);
+}
+
+export async function getPayoutRecoveryStatus(txHash: string): Promise<PayoutRecoveryStatus> {
+  return client.getPayoutRecoveryStatus(txHash);
+}
 
 export async function buildCreateSplitXdr(payload: {
   owner: string;

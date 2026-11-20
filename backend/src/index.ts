@@ -141,6 +141,7 @@ app.use("/users", (req, res, next) => {
   return writeLimiter(req, res, next);
 });
 app.use("/transactions", readLimiter);
+app.use("/transactions/recovery", writeLimiter);
 app.use("/notifications", readLimiter);
 app.use("/api/ledger", readLimiter);
 app.use("/events", sseConnectionLimiter);
