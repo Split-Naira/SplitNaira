@@ -12,6 +12,7 @@ vi.mock("../lib/wallet", () => ({
 }));
 
 beforeEach(() => {
+  vi.clearAllMocks();
   vi.useFakeTimers();
 });
 
@@ -38,6 +39,117 @@ describe("wallet account switch", () => {
 
     expect(didConnect).toBe(false);
     expect(result.current.error).toBe("Wallet unavailable");
+  });
+
+  it("ignores an initialization result that finishes after connect", async () => {
+    let resolveInitialRefresh!: (state: walletLib.WalletState) => void;
+    vi.mocked(walletLib.getWalletState).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveInitialRefresh = resolve;
+        }),
+    );
+    vi.mocked(walletLib.connectWallet).mockResolvedValue({
+      connected: true,
+      address: ADDR_B,
+      network: "TESTNET",
+    });
+
+    const { result } = renderHook(() => useWalletState());
+
+    await act(async () => {
+      expect(await result.current.connect()).toBe(true);
+    });
+    expect(result.current.wallet.address).toBe(ADDR_B);
+
+    await act(async () => {
+      resolveInitialRefresh({
+        connected: true,
+        address: ADDR_A,
+        network: "TESTNET",
+      });
+    });
+
+    expect(result.current.wallet.address).toBe(ADDR_B);
+  });
+
+  it("reuses an in-flight initialization refresh", async () => {
+    let resolveRefresh!: (state: walletLib.WalletState) => void;
+    vi.mocked(walletLib.getWalletState).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useWalletState());
+    let firstRefresh!: Promise<boolean>;
+    let duplicateRefresh!: Promise<boolean>;
+    act(() => {
+      firstRefresh = result.current.refresh();
+      duplicateRefresh = result.current.refresh();
+    });
+
+    expect(walletLib.getWalletState).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveRefresh({
+        connected: true,
+        address: ADDR_A,
+        network: "TESTNET",
+      });
+      expect(await Promise.all([firstRefresh, duplicateRefresh])).toEqual([
+        true,
+        true,
+      ]);
+    });
+
+    expect(result.current.wallet.address).toBe(ADDR_A);
+    expect(result.current.loading).toBe(false);
+  });
+
+  it("deduplicates concurrent connects and applies their completion once", async () => {
+    vi.mocked(walletLib.getWalletState).mockResolvedValue({
+      connected: false,
+      address: null,
+      network: null,
+    });
+    let resolveConnect!: (state: walletLib.WalletState) => void;
+    vi.mocked(walletLib.connectWallet).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveConnect = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useWalletState());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    let firstConnect!: Promise<boolean>;
+    let duplicateConnect!: Promise<boolean>;
+    act(() => {
+      firstConnect = result.current.connect();
+      duplicateConnect = result.current.connect();
+    });
+
+    expect(walletLib.connectWallet).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveConnect({
+        connected: true,
+        address: ADDR_A,
+        network: "TESTNET",
+      });
+      expect(await Promise.all([firstConnect, duplicateConnect])).toEqual([
+        true,
+        true,
+      ]);
+    });
+
+    expect(result.current.wallet.address).toBe(ADDR_A);
+    expect(result.current.loading).toBe(false);
   });
 
   it("resets and refreshes when poll detects a different address", async () => {
@@ -70,6 +182,43 @@ describe("wallet account switch", () => {
     });
 
     expect(result.current.wallet.address).toBe(ADDR_B);
+    expect(result.current.loading).toBe(false);
+  });
+
+  it("clears wallet state when polling detects a disconnect", async () => {
+    vi.mocked(walletLib.getWalletState)
+      .mockResolvedValueOnce({
+        connected: true,
+        address: ADDR_A,
+        network: "TESTNET",
+      })
+      .mockResolvedValueOnce({
+        connected: false,
+        address: null,
+        network: null,
+      })
+      .mockResolvedValue({
+        connected: false,
+        address: null,
+        network: null,
+      });
+
+    const { result } = renderHook(() => useWalletState());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    expect(result.current.wallet.connected).toBe(true);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
+    });
+
+    expect(result.current.wallet).toEqual({
+      connected: false,
+      address: null,
+      network: null,
+    });
     expect(result.current.loading).toBe(false);
   });
 

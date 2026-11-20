@@ -79,6 +79,12 @@ export function useWallet(): WalletContextValue {
 export function useWalletState() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const mountedRef = useRef(true);
+  const generationRef = useRef(0);
+  const refreshPromiseRef = useRef<{
+    generation: number;
+    promise: Promise<boolean>;
+  } | null>(null);
+  const connectPromiseRef = useRef<Promise<boolean> | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -88,53 +94,93 @@ export function useWalletState() {
   }, []);
 
   const refresh = useCallback(async () => {
+    if (connectPromiseRef.current) return connectPromiseRef.current;
+
+    const generation = generationRef.current;
+    const activeRefresh = refreshPromiseRef.current;
+    if (activeRefresh?.generation === generation) return activeRefresh.promise;
+
     dispatch({ type: "LOADING" });
-    try {
-      const walletState = await getWalletState();
-      if (mountedRef.current)
-        dispatch({ type: "SUCCESS", payload: walletState });
-      return true;
-    } catch (err) {
-      if (err instanceof Error) {
-        Sentry.captureException(err, {
-          tags: {
-            section: "wallet-hook",
-            action: "refresh",
-          }
-        });
+    const promise = (async () => {
+      try {
+        const walletState = await getWalletState();
+        if (mountedRef.current && generation === generationRef.current) {
+          dispatch({ type: "SUCCESS", payload: walletState });
+          return true;
+        }
+        return false;
+      } catch (err) {
+        if (err instanceof Error) {
+          Sentry.captureException(err, {
+            tags: {
+              section: "wallet-hook",
+              action: "refresh",
+            },
+          });
+        }
+        if (mountedRef.current && generation === generationRef.current) {
+          dispatch({
+            type: "ERROR",
+            payload: err instanceof Error ? err.message : "Unknown error",
+          });
+        }
+        return false;
       }
-      if (mountedRef.current)
-        dispatch({
-          type: "ERROR",
-          payload: err instanceof Error ? err.message : "Unknown error",
-        });
-      return false;
-    }
+    })();
+
+    refreshPromiseRef.current = { generation, promise };
+    void promise.then(() => {
+      if (refreshPromiseRef.current?.promise === promise) {
+        refreshPromiseRef.current = null;
+      }
+    });
+    return promise;
   }, []);
 
   const connect = useCallback(async () => {
+    if (connectPromiseRef.current) return connectPromiseRef.current;
+
+    const generation = ++generationRef.current;
     dispatch({ type: "LOADING" });
-    try {
-      const walletState = await connectWallet();
-      if (mountedRef.current)
-        dispatch({ type: "SUCCESS", payload: walletState });
-      return true;
-    } catch (err) {
-      if (err instanceof Error) {
-        Sentry.captureException(err, {
-          tags: {
-            section: "wallet-hook",
-            action: "connect",
-          }
-        });
+    const promise = (async () => {
+      try {
+        const walletState = await connectWallet();
+        if (mountedRef.current && generation === generationRef.current) {
+          dispatch({ type: "SUCCESS", payload: walletState });
+          return true;
+        }
+        return false;
+      } catch (err) {
+        if (err instanceof Error) {
+          Sentry.captureException(err, {
+            tags: {
+              section: "wallet-hook",
+              action: "connect",
+            },
+          });
+        }
+        if (mountedRef.current && generation === generationRef.current) {
+          dispatch({
+            type: "ERROR",
+            payload: err instanceof Error ? err.message : "Failed to connect",
+          });
+        }
+        return false;
       }
-      if (mountedRef.current)
-        dispatch({
-          type: "ERROR",
-          payload: err instanceof Error ? err.message : "Failed to connect",
-        });
-      return false;
-    }
+    })();
+
+    connectPromiseRef.current = promise;
+    void promise.then(() => {
+      if (connectPromiseRef.current === promise) {
+        connectPromiseRef.current = null;
+      }
+    });
+    return promise;
+  }, []);
+
+  const reset = useCallback(() => {
+    generationRef.current += 1;
+    dispatch({ type: "RESET" });
   }, []);
 
   // Auto-restore session on mount
@@ -150,12 +196,12 @@ export function useWalletState() {
     const current = state.wallet.address;
 
     if (prev && current && prev !== current) {
-      dispatch({ type: "RESET" });
+      reset();
       refresh();
     }
 
     prevAddressRef.current = current;
-  }, [state.wallet.address, refresh]);
+  }, [state.wallet.address, refresh, reset]);
 
   // Poll for wallet account changes every 2s while connected.
   // Freighter does not emit events, so we poll getWalletState().
@@ -163,8 +209,10 @@ export function useWalletState() {
     if (!state.wallet.connected || !state.wallet.address) return;
 
     const interval = setInterval(async () => {
+      const generation = generationRef.current;
       try {
         const fresh = await getWalletState();
+        if (generation !== generationRef.current) return;
         // Issue #1507: a disconnect has to clear state too. The previous
         // guard required `fresh.connected`, which made the one transition that
         // most needs clearing — the user disconnecting — the one that was
@@ -173,7 +221,7 @@ export function useWalletState() {
         // and the "reconnect" toast could never fire because it keys off the
         // same flag that was never updated.
         if (!fresh.connected || fresh.address !== state.wallet.address) {
-          dispatch({ type: "RESET" });
+          reset();
           refresh();
         }
       } catch {
@@ -182,7 +230,7 @@ export function useWalletState() {
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [state.wallet.connected, state.wallet.address, refresh]);
+  }, [state.wallet.connected, state.wallet.address, refresh, reset]);
 
   return { ...state, connect, refresh };
 }
