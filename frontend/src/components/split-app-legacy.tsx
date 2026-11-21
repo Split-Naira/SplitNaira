@@ -1664,6 +1664,139 @@ export function SplitApp({
         </div>
       )}
 
+      {/* Collaborator Edit Modal */}
+      {isEditingCollaborators && (
+        <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/80 backdrop-blur-sm p-6">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-collaborators-title"
+            className="glass-card w-full max-w-2xl rounded-[2.5rem] p-10 animate-in zoom-in-95 duration-200"
+          >
+            <h2 id="edit-collaborators-title" className="font-display text-2xl mb-8">
+              Edit Collaborators
+            </h2>
+            <div className="space-y-4">
+              {editCollaborators.map((collaborator) => (
+                <div
+                  key={collaborator.id}
+                  className="grid gap-3 rounded-2xl border border-white/10 p-4 sm:grid-cols-[1fr_1fr_7rem_auto]"
+                >
+                  <div className="space-y-1">
+                    <label
+                      htmlFor={`edit-collab-address-${collaborator.id}`}
+                      className="text-[10px] font-bold uppercase tracking-widest text-muted"
+                    >
+                      Address
+                    </label>
+                    <input
+                      id={`edit-collab-address-${collaborator.id}`}
+                      value={collaborator.address}
+                      onChange={(e) =>
+                        setEditCollaborators((prev) =>
+                          prev.map((item) =>
+                            item.id === collaborator.id
+                              ? { ...item, address: e.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                      className="glass-input w-full rounded-xl px-4 py-3 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label
+                      htmlFor={`edit-collab-alias-${collaborator.id}`}
+                      className="text-[10px] font-bold uppercase tracking-widest text-muted"
+                    >
+                      Alias
+                    </label>
+                    <input
+                      id={`edit-collab-alias-${collaborator.id}`}
+                      value={collaborator.alias}
+                      onChange={(e) =>
+                        setEditCollaborators((prev) =>
+                          prev.map((item) =>
+                            item.id === collaborator.id
+                              ? { ...item, alias: e.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                      className="glass-input w-full rounded-xl px-4 py-3 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label
+                      htmlFor={`edit-collab-bp-${collaborator.id}`}
+                      className="text-[10px] font-bold uppercase tracking-widest text-muted"
+                    >
+                      Basis points
+                    </label>
+                    <input
+                      id={`edit-collab-bp-${collaborator.id}`}
+                      type="number"
+                      min="0"
+                      max="10000"
+                      value={collaborator.basisPoints}
+                      onChange={(e) =>
+                        setEditCollaborators((prev) =>
+                          prev.map((item) =>
+                            item.id === collaborator.id
+                              ? { ...item, basisPoints: e.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                      className="glass-input w-full rounded-xl px-4 py-3 text-sm"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      onClick={() => removeEditCollaborator(collaborator.id)}
+                      disabled={editCollaborators.length <= 2 || isUpdatingCollaborators}
+                      className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-red-300 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <button
+                type="button"
+                onClick={addEditCollaborator}
+                disabled={isUpdatingCollaborators}
+                className="rounded-xl border border-white/10 px-5 py-3 text-[10px] font-bold uppercase tracking-widest text-muted transition hover:bg-white/5 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Add Collaborator
+              </button>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingCollaborators(false)}
+                  disabled={isUpdatingCollaborators}
+                  className="rounded-2xl border border-white/10 px-6 py-4 text-xs font-bold uppercase tracking-widest hover:bg-white/5 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={onUpdateCollaborators}
+                  disabled={isUpdatingCollaborators || submissionGuard.isBlocked("update_collaborators")}
+                  aria-busy={submissionGuard.inFlight.has("update_collaborators")}
+                  className="premium-button rounded-2xl bg-white px-6 py-4 text-xs font-bold uppercase tracking-widest text-[#0a0a09] disabled:opacity-50"
+                >
+                  {isUpdatingCollaborators ? "Updating..." : "Save Collaborators"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Metadata Edit Modal */}
       {isEditingMetadata && (
         <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/80 backdrop-blur-sm p-6">

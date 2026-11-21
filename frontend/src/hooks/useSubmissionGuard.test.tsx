@@ -62,7 +62,9 @@ describe("useSubmissionGuard (#1266)", () => {
     });
 
     await act(async () => {
-      await expect(result.current.run("deposit", failing)).rejects.toThrow("wallet rejected");
+      await expect(result.current.run("deposit", failing)).rejects.toThrow(
+        "wallet rejected",
+      );
     });
     expect(result.current.isBlocked("deposit")).toBe(false);
 
@@ -77,9 +79,16 @@ describe("useSubmissionGuard (#1266)", () => {
     const { result } = renderHook(() => useSubmissionGuard());
     const task = vi.fn(async () => "ok");
 
-    act(() => result.current.markUnconfirmed("deposit", { hash: "HASH", submittedAt: 1 }));
+    act(() =>
+      result.current.markUnconfirmed("deposit", {
+        hash: "HASH",
+        submittedAt: 1,
+      }),
+    );
     expect(result.current.isBlocked("deposit")).toBe(true);
-    expect(result.current.unconfirmed).toEqual({ deposit: { hash: "HASH", submittedAt: 1 } });
+    expect(result.current.unconfirmed).toEqual({
+      deposit: { hash: "HASH", submittedAt: 1 },
+    });
 
     await act(async () => {
       expect(await result.current.run("deposit", task)).toBeUndefined();
@@ -92,6 +101,40 @@ describe("useSubmissionGuard (#1266)", () => {
       await result.current.run("deposit", task);
     });
     expect(task).toHaveBeenCalledTimes(1);
+  });
+
+  // Audit coverage for every payment/split action the UI can submit (#1593).
+  // `claim` is included even though the current UI has no claim button: any
+  // future claim wiring goes through this same guard, so the guarantee is
+  // pinned now rather than discovered as a double-payout later.
+  it.each([
+    "create",
+    "deposit",
+    "update_collaborators",
+    "lock",
+    "distribute",
+    "claim",
+  ])("allows only one in-flight %s submission", async (action) => {
+    const { result } = renderHook(() => useSubmissionGuard());
+    const gate = deferred<string>();
+    const task = vi.fn(() => gate.promise);
+
+    let first!: Promise<string | undefined>;
+    let second!: Promise<string | undefined>;
+    act(() => {
+      first = result.current.run(action, task);
+      second = result.current.run(action, task);
+    });
+
+    expect(task).toHaveBeenCalledTimes(1);
+    expect(result.current.isBlocked(action)).toBe(true);
+    expect(await second).toBeUndefined();
+
+    await act(async () => {
+      gate.resolve("done");
+      expect(await first).toBe("done");
+    });
+    expect(result.current.isBlocked(action)).toBe(false);
   });
 
   it("warns before leaving the page only while work is pending", async () => {
@@ -113,7 +156,9 @@ describe("useSubmissionGuard (#1266)", () => {
     await act(async () => gate.resolve());
     expect(fireBeforeUnload()).toBe(false);
 
-    act(() => result.current.markUnconfirmed("create", { hash: "H", submittedAt: 1 }));
+    act(() =>
+      result.current.markUnconfirmed("create", { hash: "H", submittedAt: 1 }),
+    );
     expect(fireBeforeUnload()).toBe(true);
     act(() => result.current.clearUnconfirmed("create"));
     expect(fireBeforeUnload()).toBe(false);

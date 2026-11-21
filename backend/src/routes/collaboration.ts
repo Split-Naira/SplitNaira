@@ -21,6 +21,7 @@ import {
   getInvitationById,
 } from "../services/collaboration/invitation-registry.js";
 import {
+  getProjectOwner,
   setProjectOwner,
   transferOwnership,
   isCurrentOwner,
@@ -32,6 +33,13 @@ import {
   type ProjectRoleContextResolver,
 } from "../middleware/project-permission.js";
 import { stellarAddressSchema } from "../schemas/splits.js";
+import { withResponseValidation } from "../middleware/validateResponse.js";
+import {
+  InvitationResponseSchema,
+  OwnershipTransferResponseSchema,
+  PermissionsMatrixResponseSchema,
+  ProjectDeletionResponseSchema,
+} from "../schemas/collaboration.schemas.js";
 
 export const collaborationRouter = Router();
 
@@ -68,9 +76,12 @@ export function setProjectDeletionSnapshotResolver(
 }
 
 
-collaborationRouter.get("/permissions/matrix", (_req, res) => {
-  res.status(200).json({ roles: getPermissionsMatrix() });
-});
+collaborationRouter.get(
+  "/permissions/matrix",
+  withResponseValidation(PermissionsMatrixResponseSchema, (_req, res) => {
+    res.status(200).json({ roles: getPermissionsMatrix() });
+  }),
+);
 
 const deleteBodySchema = z.object({
   confirmed: z.boolean(),
@@ -84,7 +95,7 @@ collaborationRouter.post(
   // project's stored collaboration record — never from the request body.
   requireStellarAddress,
   createProjectPermissionMiddleware("project:delete", resolveRoleContext),
-  async (req: Request, res: Response, next: NextFunction) => {
+  withResponseValidation(ProjectDeletionResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = deleteBodySchema.parse(req.body);
       const projectId = req.params.projectId as string;
@@ -123,7 +134,7 @@ collaborationRouter.post(
     } catch (error) {
       return next(error);
     }
-  },
+  }),
 );
 
 const inviteBodySchema = z.object({
@@ -137,7 +148,7 @@ collaborationRouter.post(
   "/projects/:projectId/invitations",
   requireStellarAddress,
   createProjectPermissionMiddleware("project:invite", resolveRoleContext),
-  (req: Request, res: Response, next: NextFunction) => {
+  withResponseValidation(InvitationResponseSchema, (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = inviteBodySchema.parse(req.body);
       const projectId = req.params.projectId as string;
@@ -153,12 +164,12 @@ collaborationRouter.post(
     } catch (error) {
       return next(error);
     }
-  },
+  }),
 );
 
 collaborationRouter.post(
   "/invitations/accept",
-  (req: Request, res: Response, next: NextFunction) => {
+  withResponseValidation(InvitationResponseSchema, (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = z.object({ tokenJti: z.string().min(1) }).parse(req.body);
       const record = acceptInvitationByTokenJti(body.tokenJti);
@@ -172,13 +183,13 @@ collaborationRouter.post(
       }
       return next(error);
     }
-  },
+  }),
 );
 
 collaborationRouter.post(
   "/invitations/:invitationId/cancel",
   requireStellarAddress,
-  async (req: Request, res: Response, next: NextFunction) => {
+  withResponseValidation(InvitationResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const invitationId = req.params.invitationId as string;
       const invitation = getInvitationById(invitationId);
@@ -203,7 +214,7 @@ collaborationRouter.post(
       }
       return next(error);
     }
-  },
+  }),
 );
 
 const transferBodySchema = z.object({
@@ -213,7 +224,7 @@ const transferBodySchema = z.object({
 collaborationRouter.post(
   "/projects/:projectId/transfer-ownership",
   requireStellarAddress,
-  async (req: Request, res: Response, next: NextFunction) => {
+  withResponseValidation(OwnershipTransferResponseSchema, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = transferBodySchema.parse(req.body);
       const projectId = req.params.projectId as string;
@@ -222,7 +233,13 @@ collaborationRouter.post(
       if (!projectContext) {
         return res.status(404).json({ error: "project_owner_unknown" });
       }
-      setProjectOwner(projectId, projectContext.owner);
+      // Seed the owner only when this process has never seen the project.
+      // Re-seeding from the role context on every request would overwrite the
+      // owner recorded by a prior transfer, handing the previous owner their
+      // transfer rights back.
+      if (!getProjectOwner(projectId)) {
+        setProjectOwner(projectId, projectContext.owner);
+      }
       const record = transferOwnership({
         projectId,
         actor: requesterAddress,
@@ -242,6 +259,6 @@ collaborationRouter.post(
       }
       return next(error);
     }
-  },
+  }),
 );
 

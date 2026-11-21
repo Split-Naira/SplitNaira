@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   mockBuildDistributeXdr: vi.fn(),
   mockBuildCreateSplitXdr: vi.fn(),
   mockBuildDepositXdr: vi.fn(),
+  mockBuildUpdateCollaboratorsXdr: vi.fn(),
   mockBuildAllowTokenXdr: vi.fn(),
   mockBuildDisallowTokenXdr: vi.fn(),
   mockSendTransaction: vi.fn(),
@@ -135,7 +136,7 @@ vi.mock("@/lib/api", () => ({
   buildAllowTokenXdr: mocks.mockBuildAllowTokenXdr,
   buildDisallowTokenXdr: mocks.mockBuildDisallowTokenXdr,
   buildUpdateMetadataXdr: vi.fn().mockResolvedValue({ xdr: "MOCK_UPDATE_METADATA_XDR" }),
-  buildUpdateCollaboratorsXdr: vi.fn().mockResolvedValue({ xdr: "MOCK_UPDATE_COLLAB_XDR" }),
+  buildUpdateCollaboratorsXdr: mocks.mockBuildUpdateCollaboratorsXdr,
   getUnallocatedBalance: vi.fn().mockResolvedValue({ balance: "0", owner: "" }),
   buildWithdrawUnallocatedXdr: vi.fn().mockResolvedValue({ xdr: "MOCK_WITHDRAW_XDR" }),
   getAdminStatus: vi.fn().mockResolvedValue({ paused: false, admin: "GOWNER123" }),
@@ -975,6 +976,8 @@ describe("#1266 duplicate payment submission protection", () => {
     mocks.mockBuildDistributeXdr.mockResolvedValue(buildResponse("DISTRIBUTE_XDR"));
     mocks.mockBuildDepositXdr.mockResolvedValue(buildResponse("DEPOSIT_XDR"));
     mocks.mockBuildCreateSplitXdr.mockResolvedValue(buildResponse("CREATE_XDR"));
+    mocks.mockBuildLockProjectXdr.mockResolvedValue(buildResponse("LOCK_XDR"));
+    mocks.mockBuildUpdateCollaboratorsXdr.mockResolvedValue(buildResponse("COLLAB_XDR"));
     mocks.mockSendTransaction.mockResolvedValue({ status: "PENDING", hash: "TX_HASH" });
     mocks.mockPollTransaction.mockResolvedValue({ status: "SUCCESS" });
   });
@@ -1022,6 +1025,45 @@ describe("#1266 duplicate payment submission protection", () => {
     await act(async () => pending.resolve(buildResponse("DEPOSIT_XDR")));
     await waitFor(() => expect(mocks.mockSendTransaction).toHaveBeenCalledTimes(1));
     expect(mocks.mockBuildDepositXdr).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts only one lock when the confirm button is clicked twice before re-rendering", async () => {
+    const pending = deferred<ReturnType<typeof buildResponse>>();
+    mocks.mockBuildLockProjectXdr.mockReturnValue(pending.promise);
+
+    const user = await loadProject();
+    await user.click(screen.getByRole("button", { name: "Lock Project" }));
+    const dialog = screen.getByRole("dialog", { hidden: true });
+    const confirm = within(dialog).getByRole("button", { name: "Lock Project" });
+
+    act(() => {
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+    });
+
+    await act(async () => pending.resolve(buildResponse("LOCK_XDR")));
+    await waitFor(() => expect(mocks.mockSendTransaction).toHaveBeenCalledTimes(1));
+    expect(mocks.mockBuildLockProjectXdr).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts only one collaborator update when Save is clicked twice before re-rendering", async () => {
+    const pending = deferred<ReturnType<typeof buildResponse>>();
+    mocks.mockBuildUpdateCollaboratorsXdr.mockReturnValue(pending.promise);
+
+    const user = await loadProject();
+    await user.click(screen.getByRole("button", { name: "Edit Collaborators" }));
+    const dialog = screen.getByRole("dialog", { hidden: true });
+    const save = within(dialog).getByRole("button", { name: "Save Collaborators" });
+
+    act(() => {
+      fireEvent.click(save);
+      fireEvent.click(save);
+    });
+    expect(save).toHaveAttribute("aria-busy", "true");
+
+    await act(async () => pending.resolve(buildResponse("COLLAB_XDR")));
+    await waitFor(() => expect(mocks.mockSendTransaction).toHaveBeenCalledTimes(1));
+    expect(mocks.mockBuildUpdateCollaboratorsXdr).toHaveBeenCalledTimes(1);
   });
 
   it("restores Confirm Deposit after a definitive failure so the user can retry", async () => {
