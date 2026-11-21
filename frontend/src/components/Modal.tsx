@@ -1,7 +1,12 @@
 /* eslint-disable jsx-a11y/no-noninteractive-element-interactions */
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import "./Modal.css";
 import { useFocusTrap } from "./useFocusTrap";
+import {
+  registerModal,
+  restoreFocusAfterClose,
+  type ModalFocusEntry,
+} from "./modalFocus";
 
 type Props = {
   isOpen: boolean;
@@ -19,17 +24,23 @@ export default function Modal({
   closeOnOverlayClick = true,
 }: Props) {
   const modalRef = useRef<HTMLDivElement>(null);
-  const lastFocusedElement = useRef<HTMLElement | null>(null);
 
+  // Save the trigger before the trap moves focus into the dialog, then
+  // restore it on close or unmount. Nested dialogs are tracked in a stack so a
+  // child whose trigger disappeared returns focus to its parent instead of
+  // dropping it on <body> (#1592).
+  useEffect(() => {
+    if (!isOpen) return;
 
-  // Save & restore focus before the trap moves focus into the dialog.
-  useLayoutEffect(() => {
-    if (isOpen) {
-      lastFocusedElement.current = document.activeElement as HTMLElement;
-      return;
-    }
+    const entry: ModalFocusEntry = {
+      trigger: document.activeElement as HTMLElement | null,
+      dialog: modalRef.current,
+    };
+    registerModal(entry);
 
-    lastFocusedElement.current?.focus();
+    // Passive cleanup runs after the dialog has left the DOM, so `isConnected`
+    // reliably tells us whether the trigger survived the close.
+    return () => restoreFocusAfterClose(entry);
   }, [isOpen]);
 
   useFocusTrap(modalRef, isOpen);

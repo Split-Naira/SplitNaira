@@ -80,8 +80,10 @@ export function WalletAuthChallenge({
   const [status, setStatus] = useState<WalletAuthChallengeStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  /** Announced once a refreshed challenge has actually arrived. */
+  const [politeNotice, setPoliteNotice] = useState<string | null>(null);
   const [timeRemaining, setTimeRemaining] = useState<number>(() =>
-    Math.max(0, expiresAt - Date.now())
+    Math.max(0, expiresAt - Date.now()),
   );
 
   // Track mount state to avoid state updates after unmount.
@@ -131,6 +133,7 @@ export function WalletAuthChallenge({
       if (mountedRef.current) {
         setStatus("idle");
         setErrorMessage(null);
+        setPoliteNotice("A new challenge is ready. Sign to continue.");
       }
     }
   }, [challenge]);
@@ -141,6 +144,7 @@ export function WalletAuthChallenge({
     if (status === "expired") return;
     setStatus("awaiting_signature");
     setErrorMessage(null);
+    setPoliteNotice(null);
 
     try {
       await onSign(challenge);
@@ -162,7 +166,7 @@ export function WalletAuthChallenge({
       setErrorMessage(
         isRejection
           ? null // Rejection uses its own messaging, not a raw error string.
-          : "Something went wrong while requesting your signature. Please try again."
+          : "Something went wrong while requesting your signature. Please try again.",
       );
     }
   }, [challenge, onSign, status]);
@@ -190,6 +194,7 @@ export function WalletAuthChallenge({
   const handleRetry = useCallback(() => {
     setStatus("idle");
     setErrorMessage(null);
+    setPoliteNotice(null);
   }, []);
 
   // ── Derived values ────────────────────────────────────────────────────────
@@ -197,6 +202,31 @@ export function WalletAuthChallenge({
   const isExpired = status === "expired" || timeRemaining === 0;
   const secondsRemaining = Math.ceil(timeRemaining / 1000);
   const isNearExpiry = secondsRemaining > 0 && secondsRemaining <= 30;
+
+  // ── Screen-reader announcements (#1589) ──────────────────────────────────
+  //
+  // A persistent live region is used instead of relying on the visual state
+  // blocks, which mount with their content and therefore are not reliably
+  // announced. The countdown is intentionally excluded: announcing every tick
+  // would drown out the state changes that matter.
+  // Wording is deliberately distinct from the visual blocks so a screen-reader
+  // announcement never duplicates the visible copy for assistive tech that
+  // reads both the live region and the dialog content.
+  const assertiveAnnouncement = isExpired
+    ? "Challenge expired. Request a new challenge to continue."
+    : status === "rejected"
+      ? "Signature request cancelled. No data was sent or stored."
+      : status === "error"
+        ? "The signature request failed. Please try again."
+        : "";
+
+  const politeAnnouncement = isRefreshing
+    ? "Requesting a new challenge."
+    : status === "awaiting_signature"
+      ? "Waiting for your wallet to sign the identity challenge."
+      : status === "success"
+        ? "Wallet signature accepted. You are verified."
+        : (politeNotice ?? "");
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -209,16 +239,32 @@ export function WalletAuthChallenge({
       className={clsx(
         "rounded-xl border bg-white p-6 shadow-lg dark:bg-gray-900",
         "max-w-md w-full mx-auto",
-        className
+        className,
       )}
     >
+      {/* Live regions must exist before their text changes to be announced. */}
+      <div
+        data-testid="wallet-auth-live-polite"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+      >
+        {politeAnnouncement}
+      </div>
+      <div
+        data-testid="wallet-auth-live-assertive"
+        role="alert"
+        aria-live="assertive"
+        aria-atomic="true"
+        className="sr-only"
+      >
+        {assertiveAnnouncement}
+      </div>
+
       {/* Header */}
       <div className="flex items-start gap-3 mb-5">
-        <span
-          aria-hidden="true"
-          className="flex-shrink-0 text-2xl"
-          role="img"
-        >
+        <span aria-hidden="true" className="flex-shrink-0 text-2xl" role="img">
           🔐
         </span>
         <div>
@@ -252,13 +298,11 @@ export function WalletAuthChallenge({
       {/* Expiry indicator */}
       {!isExpired && (
         <div
-          aria-live="polite"
-          aria-atomic="true"
           className={clsx(
             "mb-5 flex items-center gap-2 text-sm",
             isNearExpiry
               ? "text-amber-700 dark:text-amber-400"
-              : "text-gray-500 dark:text-gray-400"
+              : "text-gray-500 dark:text-gray-400",
           )}
         >
           <span aria-hidden="true">{isNearExpiry ? "⚠️" : "⏱️"}</span>
@@ -272,11 +316,7 @@ export function WalletAuthChallenge({
 
       {/* Expired state */}
       {isExpired && (
-        <div
-          role="alert"
-          aria-live="assertive"
-          className="mb-5 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-700 dark:bg-amber-950"
-        >
+        <div className="mb-5 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-700 dark:bg-amber-950">
           <p className="font-medium text-amber-800 dark:text-amber-200">
             This challenge has expired.
           </p>
@@ -289,11 +329,7 @@ export function WalletAuthChallenge({
 
       {/* Rejected state */}
       {status === "rejected" && (
-        <div
-          role="alert"
-          aria-live="polite"
-          className="mb-5 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 dark:border-orange-800 dark:bg-orange-950"
-        >
+        <div className="mb-5 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 dark:border-orange-800 dark:bg-orange-950">
           <p className="font-medium text-orange-800 dark:text-orange-200">
             Signature cancelled.
           </p>
@@ -306,11 +342,7 @@ export function WalletAuthChallenge({
 
       {/* Generic error state */}
       {status === "error" && errorMessage && (
-        <div
-          role="alert"
-          aria-live="polite"
-          className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950"
-        >
+        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950">
           <p className="font-medium text-red-800 dark:text-red-200">
             Signing failed.
           </p>
@@ -322,11 +354,7 @@ export function WalletAuthChallenge({
 
       {/* Success state */}
       {status === "success" && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="mb-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 dark:border-green-800 dark:bg-green-950"
-        >
+        <div className="mb-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 dark:border-green-800 dark:bg-green-950">
           <p className="font-medium text-green-800 dark:text-green-200">
             ✓ Identity verified.
           </p>
@@ -347,7 +375,7 @@ export function WalletAuthChallenge({
               "text-sm font-semibold text-white transition-colors",
               "bg-violet-600 hover:bg-violet-700 focus-visible:outline focus-visible:outline-2",
               "focus-visible:outline-offset-2 focus-visible:outline-violet-600",
-              "disabled:cursor-not-allowed disabled:opacity-60"
+              "disabled:cursor-not-allowed disabled:opacity-60",
             )}
           >
             {status === "awaiting_signature" ? (
@@ -394,7 +422,7 @@ export function WalletAuthChallenge({
               "text-sm font-semibold transition-colors",
               "bg-amber-500 text-white hover:bg-amber-600",
               "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
-              "focus-visible:outline-amber-500 disabled:cursor-not-allowed disabled:opacity-60"
+              "focus-visible:outline-amber-500 disabled:cursor-not-allowed disabled:opacity-60",
             )}
           >
             {isRefreshing ? "Requesting new challenge…" : "Get new challenge"}
@@ -411,7 +439,7 @@ export function WalletAuthChallenge({
               "text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100",
               "dark:text-gray-300 dark:hover:bg-gray-800",
               "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
-              "focus-visible:outline-gray-500"
+              "focus-visible:outline-gray-500",
             )}
           >
             Start over
@@ -429,7 +457,7 @@ export function WalletAuthChallenge({
               "text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100",
               "dark:text-gray-400 dark:hover:bg-gray-800",
               "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
-              "focus-visible:outline-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
+              "focus-visible:outline-gray-400 disabled:cursor-not-allowed disabled:opacity-60",
             )}
           >
             Cancel

@@ -37,6 +37,30 @@ The following privileged routes are wrapped with strict response validation:
 | `/ops/mainnet-readiness` | `GET` | `MainnetReadinessResponseSchema` | Evaluates environment, DB, cache, and secrets readiness. |
 | `/ops/backfill` | `POST` | `OpsBackfillResponseSchema` | Returns status of ledger event backfill operation. |
 
+### Collaboration response contracts (Issue #1618)
+
+The collaboration routes validate every success payload against
+`backend/src/schemas/collaboration.schemas.ts`:
+
+| Route | HTTP Method | Response Schema | Pins |
+|---|---|---|---|
+| `/collaboration/permissions/matrix` | `GET` | `PermissionsMatrixResponseSchema` | Role names and the permission list granted to each role. |
+| `/collaboration/projects/:projectId/invitations` | `POST` | `InvitationResponseSchema` | Invitation id, invitee, project, inviter, status, and expiry fields. |
+| `/collaboration/invitations/accept` | `POST` | `InvitationResponseSchema` | Accepted invitation record. |
+| `/collaboration/invitations/:invitationId/cancel` | `POST` | `InvitationResponseSchema` | Cancelled invitation record and cancellation attribution. |
+| `/collaboration/projects/:projectId/transfer-ownership` | `POST` | `OwnershipTransferResponseSchema` | Transfer record, new-owner flag, and the ownership audit trail. |
+| `/collaboration/projects/:projectId/delete` | `POST` | `ProjectDeletionResponseSchema` | Acting role and the deletion decision (`allowed`, `mode`, confirmation requirements). |
+
+`CollaborationMembershipSchema` pins the project membership record
+(`projectId`, `owner`, collaborators with roles, and the optimistic-concurrency
+`version`) produced by `services/collaboration/membership-changes.ts`, so a
+future membership read endpoint has an established contract.
+
+Response-contract tests live in
+`backend/src/routes/collaboration.response-schemas.test.ts`. They parse each
+success payload with its schema and assert the server's
+`withResponseValidation` failure counter stays at zero.
+
 ---
 
 ## 3. Audit Context Validation

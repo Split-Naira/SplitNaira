@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import Modal from "../Modal";
+import { resetModalFocusForTests } from "../modalFocus";
 
 // Wraps the Modal so we can mount a button that opens it from outside,
 // letting us assert focus restoration back to the trigger after close
@@ -18,7 +19,11 @@ function ModalHarness({ initiallyOpen = false }: { initiallyOpen?: boolean }) {
         Open Dialog
       </button>
       <button type="button">Another Button</button>
-      <Modal isOpen={open} onClose={() => setOpen(false)} title="Accessible Modal">
+      <Modal
+        isOpen={open}
+        onClose={() => setOpen(false)}
+        title="Accessible Modal"
+      >
         <label htmlFor="modal-first">First input</label>
         <input id="modal-first" />
         <label htmlFor="modal-second">Second input</label>
@@ -29,7 +34,55 @@ function ModalHarness({ initiallyOpen = false }: { initiallyOpen?: boolean }) {
   );
 }
 
+function NestedModalHarness() {
+  const [parentOpen, setParentOpen] = useState(false);
+  const [childOpen, setChildOpen] = useState(false);
+  const [showChildTrigger, setShowChildTrigger] = useState(true);
+
+  return (
+    <div>
+      <button type="button" onClick={() => setParentOpen(true)}>
+        Open Parent
+      </button>
+      <button type="button" onClick={() => setParentOpen(false)}>
+        Close Parent Externally
+      </button>
+      <button type="button" onClick={() => setShowChildTrigger(false)}>
+        Remove Child Trigger
+      </button>
+      <main>
+        <Modal
+          isOpen={parentOpen}
+          onClose={() => setParentOpen(false)}
+          title="Parent Dialog"
+        >
+          <label htmlFor="parent-input">Parent input</label>
+          <input id="parent-input" />
+          {showChildTrigger && (
+            <button type="button" onClick={() => setChildOpen(true)}>
+              Open Child
+            </button>
+          )}
+          <Modal
+            isOpen={childOpen}
+            onClose={() => setChildOpen(false)}
+            title="Child Dialog"
+          >
+            <label htmlFor="child-input">Child input</label>
+            <input id="child-input" />
+            <button type="button" onClick={() => setChildOpen(false)}>
+              Close Child
+            </button>
+          </Modal>
+        </Modal>
+      </main>
+    </div>
+  );
+}
+
 describe("Modal accessibility", () => {
+  beforeEach(() => resetModalFocusForTests());
+
   it("moves focus into the dialog when it opens", async () => {
     const user = userEvent.setup();
     render(<ModalHarness />);
@@ -88,7 +141,9 @@ describe("Modal accessibility", () => {
     // Keep focus on the dialog so we can hear keystrokes routed to the body listener.
     await user.keyboard("{Escape}");
 
-    expect(screen.queryByRole("dialog", { hidden: true })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { hidden: true }),
+    ).not.toBeInTheDocument();
   });
 
   it("restores focus to the trigger when the modal closes", async () => {
@@ -119,9 +174,60 @@ describe("Modal accessibility", () => {
     expect(dialog).toHaveAttribute("aria-labelledby", "modal-title");
   });
 
+  it("returns focus to its trigger after a nested dialog closes", async () => {
+    const user = userEvent.setup();
+    render(<NestedModalHarness />);
+
+    await user.click(screen.getByText("Open Parent"));
+    await user.click(screen.getByText("Open Child"));
+    expect(screen.getByLabelText("Child input")).toHaveFocus();
+
+    await user.click(screen.getByText("Close Child"));
+
+    expect(screen.getByText("Open Child")).toHaveFocus();
+  });
+
+  it("falls back to the parent dialog when the nested trigger disappears", async () => {
+    const user = userEvent.setup();
+    render(<NestedModalHarness />);
+
+    await user.click(screen.getByText("Open Parent"));
+    await user.click(screen.getByText("Open Child"));
+    await user.click(screen.getByText("Remove Child Trigger"));
+    expect(screen.queryByText("Open Child")).not.toBeInTheDocument();
+
+    await user.click(screen.getByText("Close Child"));
+
+    const parentDialog = screen
+      .getByText("Parent Dialog")
+      .closest('[role="dialog"]');
+    expect(parentDialog).toContainElement(
+      document.activeElement as HTMLElement,
+    );
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  it("restores the parent's trigger when a parent closes while a child is open", async () => {
+    const user = userEvent.setup();
+    render(<NestedModalHarness />);
+
+    const openParent = screen.getByText("Open Parent");
+    await user.click(openParent);
+    await user.click(screen.getByText("Open Child"));
+
+    await user.click(screen.getByText("Close Parent Externally"));
+
+    expect(
+      screen.queryByRole("dialog", { hidden: true }),
+    ).not.toBeInTheDocument();
+    expect(openParent).toHaveFocus();
+  });
+
   it("does not render the modal markup when closed", () => {
     render(<ModalHarness initiallyOpen={false} />);
-    expect(screen.queryByRole("dialog", { hidden: true })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { hidden: true }),
+    ).not.toBeInTheDocument();
   });
 
   it("cleans up the document-level keydown listener on unmount (no Escape side-effects)", () => {
@@ -129,7 +235,11 @@ describe("Modal accessibility", () => {
       const [open, setOpen] = useState(true);
       return (
         <>
-          <Modal isOpen={open} onClose={() => setOpen(false)} title="Disposable">
+          <Modal
+            isOpen={open}
+            onClose={() => setOpen(false)}
+            title="Disposable"
+          >
             <p>Disposable content</p>
           </Modal>
           <button type="button" onClick={() => setOpen(false)}>

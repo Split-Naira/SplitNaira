@@ -356,4 +356,90 @@ describe("WalletAuthChallenge — Issue #1264", () => {
       expect(screen.queryByRole("button", { name: /cancel/i })).not.toBeInTheDocument();
     });
   });
+
+  // ── Screen-reader announcements (#1589) ───────────────────────────────────
+
+  const politeRegion = () => screen.getByTestId("wallet-auth-live-polite");
+  const assertiveRegion = () => screen.getByTestId("wallet-auth-live-assertive");
+
+  it("announces awaiting signature when the wallet prompt opens", async () => {
+    const onSign = vi.fn(() => new Promise<void>(() => {}));
+    renderChallenge({ onSign });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /sign to continue/i }));
+    });
+
+    await waitFor(() => {
+      expect(politeRegion()).toHaveTextContent(/Waiting for your wallet to sign/i);
+    });
+  });
+
+  it("announces rejection assertively", async () => {
+    const onSign = vi.fn().mockRejectedValue(new Error("User rejected the request"));
+    renderChallenge({ onSign });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /sign to continue/i }));
+    });
+
+    await waitFor(() => {
+      expect(assertiveRegion()).toHaveTextContent(/Signature request cancelled/i);
+    });
+  });
+
+  it("announces expiry assertively", () => {
+    renderChallenge({ expiresAt: EXPIRED_EXPIRY });
+
+    expect(assertiveRegion()).toHaveTextContent(/Challenge expired/i);
+  });
+
+  it("announces that a refresh is in progress and then that a new challenge is ready", async () => {
+    let resolveRefresh!: () => void;
+    const onRefresh = vi.fn(
+      () => new Promise<void>((resolve) => { resolveRefresh = resolve; })
+    );
+    const onSign = vi.fn().mockResolvedValue(undefined);
+
+    const { rerender } = renderChallenge({ expiresAt: EXPIRED_EXPIRY, onRefresh, onSign });
+
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: /get new challenge/i }));
+    });
+
+    await waitFor(() => {
+      expect(politeRegion()).toHaveTextContent(/Requesting a new challenge/i);
+    });
+
+    await act(async () => {
+      resolveRefresh();
+      await Promise.resolve();
+    });
+
+    rerender(
+      <WalletAuthChallenge
+        challenge="refreshed-nonce"
+        expiresAt={Date.now() + 5 * 60 * 1000}
+        onSign={onSign}
+        onRefresh={onRefresh}
+        onCancel={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(politeRegion()).toHaveTextContent(/new challenge is ready/i);
+    });
+  });
+
+  it("announces success politely", async () => {
+    renderChallenge({ onSign: vi.fn().mockResolvedValue(undefined) });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /sign to continue/i }));
+    });
+
+    await waitFor(() => {
+      expect(politeRegion()).toHaveTextContent(/Wallet signature accepted/i);
+    });
+  });
 });

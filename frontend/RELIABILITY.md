@@ -89,7 +89,7 @@ The primary split actions emit structured lifecycle events through `frontend/src
 
 ## 4b. Duplicate Submission Protection (#1266)
 
-Payment and split actions (create, deposit, distribute, lock) go through `useSubmissionGuard` (`src/hooks/useSubmissionGuard.ts`) and the helpers in `src/lib/submission-guard.ts`.
+Payment and split actions (create, deposit, collaborator update, lock, distribute) go through `useSubmissionGuard` (`src/hooks/useSubmissionGuard.ts`) and the helpers in `src/lib/submission-guard.ts`. The guard is action-keyed, so a single-flight test matrix covers all six payment actions including `claim`; the current UI has no claim submission button, but any future claim wiring inherits the same guarantee. See `src/hooks/useSubmissionGuard.test.tsx` and the duplicate-submission cases in `src/components/split-app.test.tsx`.
 
 - **Single flight per action.** `run(action, task)` takes a synchronous lock held in a ref. A double click, a repeated Enter press, or a "Retry" fired before React re-renders can't start a second submission, even though the button's `disabled` attribute hasn't updated yet. The lock is released when the task settles.
 - **Idempotency key for create.** `POST /splits` is sent with an `Idempotency-Key`. The key is reused while the payload is unchanged, so a retry after a build or signing failure gets the backend's replayed response. It's rotated as soon as the transaction is submitted, because the built XDR's sequence number is then spent, and also after a `409 idempotency_key_conflict`. With a key on the request, the API client's automatic 5xx retries are safe too.
