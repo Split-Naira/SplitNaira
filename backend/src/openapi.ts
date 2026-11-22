@@ -45,6 +45,7 @@ import {
   payoutAttemptSchema,
   payoutRecoveryStatusSchema,
 } from "./schemas/transactions.schemas.js";
+import { SUBMISSION_EXPIRY_MS } from "./services/transaction-recovery.js";
 
 const registry = new OpenAPIRegistry();
 
@@ -1166,7 +1167,12 @@ registry.registerPath({
   path: "/transactions/recovery/attempts",
   summary: "Register a submitted payout for recovery",
   description:
-    "Stores the transaction hash and caller-reported payout context after Soroban accepts a distribution. Network status is always verified server-side.",
+    "Stores the transaction hash and caller-reported payout context after Soroban accepts a distribution. " +
+    "The response is always the persisted attempt with `status: \"pending\"` on first registration: " +
+    "acceptance by the network does **not** mean the payout succeeded, so the outcome must be resolved " +
+    "by polling `GET /transactions/recovery/attempts/{txHash}`. Registration is idempotent for the " +
+    "same hash and metadata; re-registering the same hash with different metadata returns 409 " +
+    "`payout_attempt_conflict`.",
   tags: ["Transactions"],
   request: {
     body: {
@@ -1176,11 +1182,15 @@ registry.registerPath({
   },
   responses: {
     200: {
-      description: "Persisted payout attempt",
+      description:
+        "Persisted payout attempt. `status` is `pending` on first registration, meaning the on-chain " +
+        "outcome is not known yet; poll the GET endpoint instead of submitting the payout again.",
       content: { "application/json": { schema: payoutRecoveryStatusSchema } },
     },
     409: {
-      description: "Transaction hash is already associated with different metadata",
+      description:
+        "Transaction hash is already associated with different metadata (`payout_attempt_conflict`). " +
+        "The original attempt is untouched; register a retry only under its own new hash.",
     },
     ...standardErrorResponses({ badRequest: true, serverError: true }),
   },
@@ -1191,14 +1201,28 @@ registry.registerPath({
   path: "/transactions/recovery/attempts/{txHash}",
   summary: "Reconcile a submitted payout",
   description:
-    "Checks the stored transaction hash against Soroban RPC and updates its persisted recovery status. A retry is safe only after a failed or expired result.",
+    "Checks the stored transaction hash against Soroban RPC and updates its persisted recovery status.\n\n" +
+    "Unknown outcomes: when Soroban RPC reports `NOT_FOUND`, the transaction may still be in flight, " +
+    "so the attempt stays `pending` and this endpoint must be polled. `NOT_FOUND` is never treated as " +
+    "a failure on its own. If the hash is still unknown " +
+    `${SUBMISSION_EXPIRY_MS / 60_000} minutes after \`submittedAt\`, the attempt becomes \`failed\` with ` +
+    "`failureCode: \"transaction_expired\"`; a transaction that can no longer be included may be " +
+    "safely retried under a new hash.\n\n" +
+    "Safe retries: never resubmit while `status` is `pending` — the original transaction may still " +
+    "land, and resubmitting can pay collaborators twice. Only `failed` is final and eligible for a " +
+    "retry. A retry must be a newly built, newly signed transaction with its own hash; hashes are " +
+    "immutable and replaying one fails on-chain. `completed` is final even if a later observation " +
+    "is stale.",
   tags: ["Transactions"],
   request: {
     params: z.object({ txHash: z.string().regex(/^[a-fA-F0-9]{64}$/) }),
   },
   responses: {
     200: {
-      description: "Latest payout recovery status",
+      description:
+        "Latest payout recovery status. `pending` means the outcome is unconfirmed (including RPC " +
+        "`NOT_FOUND`): keep polling. `completed` is final. `failed` with `transaction_failed` or " +
+        "`transaction_expired` is final and is the only state where a retry may be safe.",
       content: { "application/json": { schema: payoutRecoveryStatusSchema } },
     },
     ...standardErrorResponses({ badRequest: true, notFound: true, serverError: true }),

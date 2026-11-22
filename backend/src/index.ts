@@ -42,6 +42,12 @@ import { auditAdminMutationsMiddleware } from "./middleware/audit-log.js";
 import { validateEnv, printEnvDiagnostics } from "./config/env.js";
 import { resolveCorsOrigins } from "./config/cors.js";
 import { initDatabase, closeDatabase } from "./services/database.js";
+import {
+  DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS,
+  DEFAULT_SHUTDOWN_FORCE_TIMEOUT_MS,
+  drainActiveTransactions,
+  runShutdownSequence,
+} from "./services/shutdown.js";
 import { logger } from "./services/logger.js";
 import {
   startEventListenerService,
@@ -49,6 +55,14 @@ import {
 } from "./services/EventListenerService.js";
 
 dotenv.config();
+
+/** Parses a non-negative millisecond env override, falling back when invalid. */
+function envMilliseconds(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
 
 export const app = express();
 
@@ -230,21 +244,54 @@ if (process.env.NODE_ENV !== "test") {
       const port = Number(process.env.PORT ?? 3001);
       const server = app.listen(port, () => { logger.info(`Server started on port ${port}`); });
 
+      let shutdownStarted = false;
       const shutdown = async (signal: NodeJS.Signals) => {
+        if (shutdownStarted) {
+          logger.warn(`Received ${signal} while already shutting down`);
+          return;
+        }
+        shutdownStarted = true;
         logger.info(`Received ${signal}. Shutting down...`);
-        // Flip readiness first so load balancers stop routing new traffic
-        // here immediately, well before DB/SSE/server teardown finishes.
-        markShuttingDown();
-        closeAllSseConnections();
-        stopEventListenerService();
-        await closeDatabase();
-        server.close((err?: Error) => {
-          if (err) { logger.error("Error during server close", { error: err }); process.exit(1); }
-          logger.info("Server closed cleanly");
-          process.exit(0);
-        });
-        const forceTimeoutMs = Number(process.env.SHUTDOWN_FORCE_TIMEOUT_MS ?? 10_000);
-        setTimeout(() => { logger.warn("Force exiting after timeout"); process.exit(1); }, forceTimeoutMs).unref();
+
+        try {
+          const result = await runShutdownSequence(
+            {
+              // Flip readiness first so load balancers stop routing new traffic
+              // here immediately, well before DB/SSE/server teardown finishes.
+              markShuttingDown,
+              closeSseConnections: () => { closeAllSseConnections(); },
+              stopEventListener: () => { stopEventListenerService(); },
+              closeServer: () => new Promise<void>((resolve, reject) => {
+                server.close((err?: Error) => {
+                  if (err) { reject(err); return; }
+                  logger.info("Server closed cleanly");
+                  resolve();
+                });
+              }),
+              drainTransactions: (timeoutMs) => drainActiveTransactions({ timeoutMs }),
+              closeDatabase,
+              forceExit: (code) => process.exit(code),
+              log: (level, message, meta) => { logger[level](message, meta); },
+            },
+            {
+              drainTimeoutMs: envMilliseconds(
+                "SHUTDOWN_DRAIN_TIMEOUT_MS",
+                DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS,
+              ),
+              forceTimeoutMs: envMilliseconds(
+                "SHUTDOWN_FORCE_TIMEOUT_MS",
+                DEFAULT_SHUTDOWN_FORCE_TIMEOUT_MS,
+              ),
+            },
+          );
+
+          if (result.forced) {
+            logger.warn("Force exit completed before graceful shutdown finished");
+          }
+        } catch (error) {
+          logger.error("Error during shutdown", { error });
+          process.exit(1);
+        }
       };
 
       process.on("SIGINT", shutdown);

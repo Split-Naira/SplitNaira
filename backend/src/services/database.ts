@@ -34,6 +34,21 @@ export const ENTITIES = [
 let AppDataSource: DataSource | null = null;
 let initializationPromise: Promise<DataSource> | null = null;
 
+// Issue #1638: shutdown needs to know whether pooled connections are still
+// inside an open transaction before the pool is destroyed.
+let activeTransactionCount = 0;
+
+export function getActiveTransactionCount(): number {
+  return activeTransactionCount;
+}
+
+export function resetActiveTransactionCountForTests(): void {
+  if (process.env.NODE_ENV !== "test") {
+    throw new Error("resetActiveTransactionCountForTests is only available in test mode.");
+  }
+  activeTransactionCount = 0;
+}
+
 export function createDataSource(): DataSource {
   const env = getEnv();
   const databaseUrl = env.DATABASE_URL;
@@ -192,6 +207,7 @@ export async function withTransaction<T>(
       throw error;
     }
 
+    activeTransactionCount++;
     try {
       const result = await callback(queryRunner);
       await queryRunner.commitTransaction();
@@ -208,6 +224,9 @@ export async function withTransaction<T>(
       }
     } finally {
       await releaseSafely(queryRunner);
+      // Decrement only after the connection is back in the pool: draining must
+      // not let closeDatabase() race a release that is still in flight.
+      activeTransactionCount = Math.max(0, activeTransactionCount - 1);
     }
   }
 }
