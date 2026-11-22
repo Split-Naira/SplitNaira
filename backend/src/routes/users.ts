@@ -13,6 +13,7 @@ import { signToken } from "../services/jwt.js";
 import { authJwtMiddleware } from "../middleware/auth-jwt.js";
 import { logAuthEvent } from "../services/auth-events.js";
 import { loginAttemptStore } from "../services/login-attempts.js";
+import { deprecationHeaders } from "../middleware/deprecation.js";
 
 export const usersRouter = Router();
 
@@ -83,9 +84,10 @@ usersRouter.post("/register", async (req: Request, res: Response, next: NextFunc
  * POST /users/login
  * summary: Log in by wallet address
  * description: Authenticates a registered user and returns a JWT bearer token.
+ * deprecated: use POST /auth/wallet/challenge + POST /auth/wallet/verify
  * tags: [Users]
  */
-usersRouter.post("/login", async (req: Request, res: Response, next: NextFunction) => {
+usersRouter.post("/login", deprecationHeaders("wallet-login-address-only"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const loginSchema = z.object({
       walletAddress: stellarAddressSchema

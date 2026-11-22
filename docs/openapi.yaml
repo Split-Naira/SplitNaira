@@ -2427,10 +2427,14 @@ paths:
   /users/login:
     post:
       summary: Log in by wallet address
-      description: Returns a JWT for an active registered wallet. Five failed attempts
-        within 15 minutes lock that wallet for 15 minutes. Unknown, inactive,
-        deleted, and locked wallets receive the same 401 response. The existing
-        per-IP limiter may also return 429.
+      description: "Deprecated by the signed wallet challenge flow (Issue #1232): this
+        endpoint authenticates from a public wallet address alone. Returns a JWT
+        for an active registered wallet. Five failed attempts within 15 minutes
+        lock that wallet for 15 minutes. Unknown, inactive, deleted, and locked
+        wallets receive the same 401 response. The existing per-IP limiter may
+        also return 429. Migrate to POST /auth/wallet/challenge followed by POST
+        /auth/wallet/verify."
+      deprecated: true
       tags:
         - Users
       requestBody:
@@ -2501,6 +2505,204 @@ paths:
                 message: Unable to sign in. Check your details or try again later.
                 requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
                 details: {}
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                error: INTERNAL_ERROR
+                message: An unexpected error occurred. Please try again later.
+                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
+  /auth/wallet/challenge:
+    post:
+      summary: Request a signed wallet login challenge
+      description: Issues a short-lived, single-use challenge (default 5 minutes, see
+        WALLET_CHALLENGE_TTL_MS) bound to one Stellar account address. The
+        wallet must sign the returned `challenge` string with the Ed25519 key
+        behind the address and submit the base64 signature to POST
+        /auth/wallet/verify. Requesting a new challenge does not invalidate
+        earlier ones; each is single-use.
+      tags:
+        - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                walletAddress:
+                  type: string
+                  minLength: 1
+              required:
+                - walletAddress
+      responses:
+        "201":
+          description: Challenge issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  challengeId:
+                    type: string
+                    format: uuid
+                    description: Pass this to POST /auth/wallet/verify
+                  walletAddress:
+                    type: string
+                  challenge:
+                    type: string
+                    description: Exact UTF-8 message the wallet must sign; do not trim or reformat
+                      it
+                  issuedAt:
+                    type: string
+                    format: date-time
+                  expiresAt:
+                    type: string
+                    format: date-time
+                  expiresInSeconds:
+                    type: integer
+                    minimum: 0
+                    exclusiveMinimum: true
+                  requestId:
+                    type: string
+                required:
+                  - challengeId
+                  - walletAddress
+                  - challenge
+                  - issuedAt
+                  - expiresAt
+                  - expiresInSeconds
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                error: RATE_LIMIT_EXCEEDED
+                message: Too many requests. Please retry after the rate limit window.
+                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                error: INTERNAL_ERROR
+                message: An unexpected error occurred. Please try again later.
+                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
+  /auth/wallet/verify:
+    post:
+      summary: Verify a wallet signature and issue a JWT
+      description: Verifies the base64 Ed25519 signature over the exact challenge
+        string against the address the challenge was issued for, then returns a
+        JWT bearer token for an active registered account. Unknown, expired,
+        reused, mismatched, and malformed challenges fail with 401; the
+        signature is verified before the account lookup, and the challenge is
+        consumed exactly once.
+      tags:
+        - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                walletAddress:
+                  type: string
+                  minLength: 1
+                challengeId:
+                  type: string
+                  format: uuid
+                signature:
+                  type: string
+                  minLength: 1
+                  maxLength: 512
+                  description: Base64-encoded 64-byte Ed25519 signature over the challenge string
+              required:
+                - walletAddress
+                - challengeId
+                - signature
+            example:
+              walletAddress: GBJRKIYXAAFD3NZCWJXGUTNKYUQFZC2ANS6LRMBPJCE4IZSMJJMZPQBT
+              challengeId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
+              signature: OUq3...base64-encoded-ed25519-signature...==
+      responses:
+        "200":
+          description: Signature verified; authenticated user with JWT
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  walletAddress:
+                    type: string
+                  email:
+                    type: string
+                  alias:
+                    type: string
+                  role:
+                    type: string
+                    enum:
+                      - company
+                      - customer
+                      - driver
+                  isActive:
+                    type: boolean
+                  createdAt:
+                    type: string
+                  updatedAt:
+                    type: string
+                  token:
+                    type: string
+                  requestId:
+                    type: string
+                required:
+                  - id
+                  - walletAddress
+                  - role
+                  - isActive
+                  - createdAt
+                  - updatedAt
+                  - token
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                error: UNAUTHORIZED
+                message: Missing or invalid bearer token / admin API key.
+                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                error: RATE_LIMIT_EXCEEDED
+                message: Too many requests. Please retry after the rate limit window.
+                requestId: b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d
         "500":
           description: Internal server error
           content:

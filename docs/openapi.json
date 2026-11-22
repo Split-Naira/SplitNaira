@@ -780,6 +780,281 @@
         ]
       }
     },
+    "/auth/wallet/challenge": {
+      "post": {
+        "description": "Issues a short-lived, single-use challenge (default 5 minutes, see WALLET_CHALLENGE_TTL_MS) bound to one Stellar account address. The wallet must sign the returned `challenge` string with the Ed25519 key behind the address and submit the base64 signature to POST /auth/wallet/verify. Requesting a new challenge does not invalidate earlier ones; each is single-use.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "walletAddress": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "walletAddress"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "challenge": {
+                      "description": "Exact UTF-8 message the wallet must sign; do not trim or reformat it",
+                      "type": "string"
+                    },
+                    "challengeId": {
+                      "description": "Pass this to POST /auth/wallet/verify",
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "expiresInSeconds": {
+                      "exclusiveMinimum": true,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "issuedAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "walletAddress": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "challengeId",
+                    "walletAddress",
+                    "challenge",
+                    "issuedAt",
+                    "expiresAt",
+                    "expiresInSeconds"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Challenge issued"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "RATE_LIMIT_EXCEEDED",
+                  "message": "Too many requests. Please retry after the rate limit window.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Request a signed wallet login challenge",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/auth/wallet/verify": {
+      "post": {
+        "description": "Verifies the base64 Ed25519 signature over the exact challenge string against the address the challenge was issued for, then returns a JWT bearer token for an active registered account. Unknown, expired, reused, mismatched, and malformed challenges fail with 401; the signature is verified before the account lookup, and the challenge is consumed exactly once.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "challengeId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d",
+                "signature": "OUq3...base64-encoded-ed25519-signature...==",
+                "walletAddress": "GBJRKIYXAAFD3NZCWJXGUTNKYUQFZC2ANS6LRMBPJCE4IZSMJJMZPQBT"
+              },
+              "schema": {
+                "properties": {
+                  "challengeId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "signature": {
+                    "description": "Base64-encoded 64-byte Ed25519 signature over the challenge string",
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "walletAddress": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "walletAddress",
+                  "challengeId",
+                  "signature"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "alias": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "isActive": {
+                      "type": "boolean"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "enum": [
+                        "company",
+                        "customer",
+                        "driver"
+                      ],
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "walletAddress": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "walletAddress",
+                    "role",
+                    "isActive",
+                    "createdAt",
+                    "updatedAt",
+                    "token"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Signature verified; authenticated user with JWT"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "UNAUTHORIZED",
+                  "message": "Missing or invalid bearer token / admin API key.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "RATE_LIMIT_EXCEEDED",
+                  "message": "Too many requests. Please retry after the rate limit window.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Verify a wallet signature and issue a JWT",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
     "/events": {
       "get": {
         "description": "Opens a Server-Sent Events stream and emits a `transaction_update` event each time the backend observes an update for the given `txHash`. Limited to 5 concurrent subscribers per `txHash` (configurable via `SSE_MAX_LISTENERS_PER_TXHASH`); exceeding it returns 429.\n\nExample frame:\n```\nevent: transaction_update\ndata: {\"txHash\":\"3389e9f0f1a65f19736cacf544c2e825313e8447f569233bb8db39aa607c8fc\",\"status\":\"pending\"}\n\n```",
@@ -4697,7 +4972,8 @@
     },
     "/users/login": {
       "post": {
-        "description": "Returns a JWT for an active registered wallet. Five failed attempts within 15 minutes lock that wallet for 15 minutes. Unknown, inactive, deleted, and locked wallets receive the same 401 response. The existing per-IP limiter may also return 429.",
+        "deprecated": true,
+        "description": "Deprecated by the signed wallet challenge flow (Issue #1232): this endpoint authenticates from a public wallet address alone. Returns a JWT for an active registered wallet. Five failed attempts within 15 minutes lock that wallet for 15 minutes. Unknown, inactive, deleted, and locked wallets receive the same 401 response. The existing per-IP limiter may also return 429. Migrate to POST /auth/wallet/challenge followed by POST /auth/wallet/verify.",
         "requestBody": {
           "content": {
             "application/json": {
