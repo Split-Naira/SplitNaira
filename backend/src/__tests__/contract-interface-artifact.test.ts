@@ -49,7 +49,8 @@ describe("contract interface artifact", () => {
     expect(contractInterface.generatedBy).toBe("contracts/scripts/generate-interface.mjs");
     expect(contractInterface.methods.length).toBeGreaterThanOrEqual(27);
     expect(contractInterface.events.length).toBeGreaterThanOrEqual(7);
-    expect(contractInterface.errors).toHaveLength(21);
+    // 22 variants in contracts/errors.rs, including AlreadyClaimed (code 22).
+    expect(contractInterface.errors).toHaveLength(22);
   });
 
   it("covers backend write and read contract calls", () => {

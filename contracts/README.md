@@ -8,6 +8,7 @@
 limits, or XDR encoding in ways that silently break deployed contracts.
 
 **To upgrade the SDK:**
+
 1. Update both `[dependencies]` and `[dev-dependencies]` entries in `Cargo.toml` to the new exact version.
 2. Run `cargo update -p soroban-sdk` to refresh `Cargo.lock`.
 3. Run `cargo test --locked` and confirm all tests pass.
@@ -21,11 +22,13 @@ This document defines the public interface exposed by `SplitNairaContract` in `c
 ## Data Model
 
 ### Collaborator
+
 - `address: Address` - Collaborator Stellar address.
 - `alias: String` - Human-readable collaborator label.
 - `basis_points: u32` - Share in basis points (`10_000 = 100%`).
 
 ### SplitProject
+
 - `project_id: Symbol`
 - `title: String`
 - `project_type: String`
@@ -37,6 +40,7 @@ This document defines the public interface exposed by `SplitNairaContract` in `c
 - `distribution_round: u32`
 
 ### ClaimableInfo
+
 - `claimed: i128` - Total amount paid to collaborator for project.
 - `distribution_round: u32` - Last completed distribution round.
 
@@ -45,74 +49,121 @@ This document defines the public interface exposed by `SplitNairaContract` in `c
 ### Admin + Allowlist
 
 ### `set_admin(admin: Address) -> Result<(), SplitError>`
+
 Sets or rotates contract admin.
+
 - Auth: `admin` (first setup) or current admin (rotation).
 - Errors: `Unauthorized` via auth checks.
 
 ### `allow_token(admin: Address, token: Address) -> Result<(), SplitError>`
+
 Allowlists a token contract address.
+
 - Auth: contract admin.
 - Errors: `AdminNotSet`, `Unauthorized`.
 
 ### `disallow_token(admin: Address, token: Address) -> Result<(), SplitError>`
+
 Removes a token from allowlist.
+
 - Auth: contract admin.
 - Errors: `AdminNotSet`, `Unauthorized`.
 
 ### `set_max_collaborators(admin: Address, value: u32) -> Result<(), SplitError>`
+
 Configures the per-project collaborator cap (Scale & Capacity tuning).
+
 - Auth: contract admin.
 - Bounds: `2 <= value <= 200`. The ceiling keeps `distribute` within Soroban's
   per-call resource limits; the floor matches the two-collaborator minimum.
 - Default when never set: `50` (historical behaviour, backward compatible).
-- Rollback: set the value back to `50`. Only affects validation of *new*
+- Rollback: set the value back to `50`. Only affects validation of _new_
   `create_project` / `update_collaborators` calls.
 - Errors: `AdminNotSet`, `Unauthorized`, `InvalidMaxCollaborators`.
 
 ### `get_max_collaborators() -> u32`
+
 Returns the collaborator cap currently in effect (admin override or default `50`).
 
 ### Project lifecycle
 
 ### `create_project(owner, project_id, title, project_type, token, collaborators) -> Result<(), SplitError>`
+
 Creates a split project and initializes project balance to `0`.
+
 - Auth: `owner`.
 - Errors: `ProjectExists`, `TooFewCollaborators`, `ZeroShare`, `DuplicateCollaborator`, `InvalidSplit`, `TokenNotAllowed`, `ArithmeticOverflow`.
+- Duplicate semantics (shared with `update_collaborators`, pinned by
+  `duplicate_collaborator_tests.rs`, issue #1646):
+  - An address is a duplicate when it appears more than once in the _same_
+    list, whatever its alias or share. Being the project owner as well, or a
+    collaborator in other projects, is not a duplicate.
+  - Length checks (`TooFewCollaborators`, `TooManyCollaborators`) run first.
+    Entries are then checked in list order, zero share before duplicate, so
+    the first bad entry decides the error. The basis-point total
+    (`InvalidSplit`) is checked last.
+  - A rejected create writes nothing (no project, balance or index entry).
 
 ### `update_collaborators(project_id, owner, collaborators) -> Result<(), SplitError>`
+
 Updates collaborator split definitions when unlocked.
+
 - Auth: `owner`.
 - Errors: `NotFound`, `Unauthorized`, `ProjectLocked`, `TooFewCollaborators`, `ZeroShare`, `DuplicateCollaborator`, `InvalidSplit`, `ArithmeticOverflow`.
+- `NotFound`, `Unauthorized` and `ProjectLocked` are reported before any list
+  validation. A list may keep current collaborators (once each). A rejected
+  duplicate leaves the stored collaborators, pending balance and events
+  unchanged.
 
 ### `lock_project(project_id, owner) -> Result<(), SplitError>`
+
 Locks collaborator configuration permanently.
+
 - Auth: `owner`.
 - Errors: `NotFound`, `Unauthorized`, `AlreadyLocked`.
 
 ### `update_project_metadata(project_id, owner, title, project_type) -> Result<(), SplitError>`
+
 Updates title/type while unlocked.
+
 - Auth: `owner`.
 - Errors: `NotFound`, `Unauthorized`, `ProjectLocked`.
 
 ### Funds flow
 
 ### `deposit(project_id, from, amount) -> Result<(), SplitError>`
+
 Transfers `amount` from `from` to contract and credits `ProjectBalance(project_id)`.
+
 - Auth: `from`.
 - Errors: `InvalidAmount`, `NotFound`.
+- Amount boundaries (pinned by `deposit_boundary_tests.rs`, issue #1645):
+  - `amount <= 0` (including `i128::MIN`) returns `InvalidAmount` before the
+    project lookup, the funder's `require_auth` and any token transfer. It
+    does not open a new claim epoch.
+  - One stroop (`1`) is the smallest accepted deposit. It moves the balance,
+    accounted total and `deposit_received` event by exactly `1`.
+  - The smallest _distributable_ balance is one stroop per collaborator;
+    below that `distribute` returns `NoBalance` and the funds stay put until
+    later deposits reach it. A `claim` whose share rounds down to `0` returns
+    `0` and does not use up the collaborator's claim for that epoch.
 
 ### `distribute(project_id) -> Result<(), SplitError>`
+
 Distributes project balance to collaborators by basis points.
+
 - Auth: none (permissionless trigger).
 - Errors: `NotFound`, `NoBalance`.
 - Compatibility invariants:
   - `distribution_round` increases once per successful distribution and never on failure.
   - `total_distributed` increases by the exact amount paid out.
   - Any rounding remainder is assigned to the final collaborator so the full project balance is consumed.
-  - The remainder is at most `n−1` stroops and goes to the last collaborator in *stored order*. Individual shares can round down to `0`. `claim` assigns no remainder and pays out from the current pooled balance. For the full rules, worked examples and off-chain guidance, see [docs/contract-distribution-remainder-accounting.md](../docs/contract-distribution-remainder-accounting.md).
+  - The remainder is at most `n−1` stroops and goes to the last collaborator in _stored order_. Individual shares can round down to `0`. `claim` assigns no remainder and pays out from the current pooled balance. For the full rules, worked examples and off-chain guidance, see [docs/contract-distribution-remainder-accounting.md](../docs/contract-distribution-remainder-accounting.md).
 
 ### `withdraw_unallocated(admin, token, to, amount) -> Result<(), SplitError>`
+
 Admin-only recovery of tokens held by contract but not tracked in any project ledger.
+
 - Unallocated formula:
   - `token_balance(contract) - sum(project_balance for projects using token)`
 - Safety: Cannot withdraw more than current unallocated amount.
@@ -122,66 +173,90 @@ Admin-only recovery of tokens held by contract but not tracked in any project le
 ### Read-only queries
 
 ### `get_project(project_id) -> Option<SplitProject>`
+
 Returns project or `None`.
 
 ### `project_exists(project_id) -> bool`
+
 Cheap existence check that does not load full struct and never panics.
 
 ### `get_claimed(project_id, address) -> i128`
+
 Returns total claimed amount for collaborator in project.
 
 ### `get_claimable(project_id, collaborator) -> Result<ClaimableInfo, SplitError>`
+
 Returns claimed amount plus project `distribution_round`.
+
 - Errors: `NotFound`.
 
 ### `get_balance(project_id) -> Result<i128, SplitError>`
+
 Returns project-scoped distributable balance.
+
 - Errors: `NotFound`.
 
 ### `get_unallocated_balance(token) -> Result<i128, SplitError>`
+
 Returns token units held by contract that are not attributed to any project balance.
+
 - Errors: `ArithmeticOverflow`.
 
 ### `get_project_count() -> u32`
+
 Returns total number of created projects.
 
 ### `list_projects(start, limit) -> Vec<SplitProject>`
+
 Paginated projects.
+
 - Compatibility invariants:
   - Creation order is stable.
   - Windowing semantics stay aligned with `get_project_ids(start, limit)`.
   - Metadata edits, locking, deposits, and distributions do not reorder or remove entries.
 
 ### `get_project_ids(start, limit) -> Vec<Symbol>`
+
 Paginated project IDs in creation order.
+
 - Compatibility invariants:
   - This is the canonical creation-order index app layers can page over.
   - Returned IDs must line up position-for-position with `list_projects(start, limit)`.
 
 ### `is_token_allowed(token) -> bool`
+
 Returns allowlist status.
 
 ### `get_allowed_token_count() -> u32`
+
 Returns count of allowlisted token addresses.
 
 ### `get_admin() -> Option<Address>`
+
 Returns current admin.
 
 ### `pause_distributions(admin: Address) -> Result<(), SplitError>`
+
 Pauses all `distribute` calls (emergency stop). Deposits and reads continue.
+
 - Auth: contract admin.
 - Errors: `AdminNotSet`, `Unauthorized`.
 
 ### `unpause_distributions(admin: Address) -> Result<(), SplitError>`
+
 Resumes distributions after an admin pause.
+
 - Auth: contract admin.
 - Errors: `AdminNotSet`, `Unauthorized`.
 
 ### `is_distributions_paused() -> bool`
+
 Returns whether distributions are currently paused.
 
 ### `transfer_project_ownership(project_id, current_owner, new_owner) -> Result<(), SplitError>`
+
 Transfers project ownership to a new address while the project is unlocked.
+
 - Auth: `current_owner`.
 - Errors: `NotFound`, `Unauthorized`, `ProjectLocked`.
 
@@ -193,7 +268,7 @@ models. Table-driven coverage of the unauthorized-caller paths below lives in
 
 - **Owner-gated** (`update_collaborators`, `lock_project`,
   `update_project_metadata`, `transfer_project_ownership`): the project's
-  `owner` field is compared against the caller-supplied address *before*
+  `owner` field is compared against the caller-supplied address _before_
   `require_auth()` runs. A mismatch returns `SplitError::Unauthorized`. The
   project-existence guard (`NotFound`) always runs first, so calling any of
   these against a nonexistent project returns `NotFound`, never
@@ -218,11 +293,20 @@ because the payout math is trustless: funds only ever move to the addresses
 and basis-point splits already recorded on the project, so there is no
 authorization boundary to enforce on the trigger itself. `deposit` is
 similarly open to any caller, gated only by `from.require_auth()` (the payer
-authorizes their own transfer in) — there is no restriction on *who* may
+authorizes their own transfer in) — there is no restriction on _who_ may
 fund a project.
 
 Rejected/unauthorized calls never mutate contract state — no storage write
 happens before the authorization check on every gated method above.
+
+The admin token operations (`allow_token`, `disallow_token`,
+`withdraw_unallocated`) are additionally tested against every caller that
+holds authority elsewhere in `contracts/admin_token_authorization_tests.rs`
+(issue #1648): the project owner, a project collaborator, an unrelated
+address and the previous admin after rotation all get `Unauthorized` (or
+`AdminNotSet` before setup). The identity check runs before argument
+validation, so a non-admin never sees `InvalidAmount`, `InvalidRecipient` or
+`InsufficientUnallocated`.
 
 ## Machine-Consumable Interface
 
@@ -239,6 +323,7 @@ npm run generate:contract-interface
 ```
 
 `npm run build:contracts` also refreshes the artifact after a successful contract build. Commit the refreshed JSON with the contract change so app layers and code generators can diff the contract surface in review.
+
 ## Regression Guarantees
 
 The contract test suite includes upgrade-safety regression coverage for the app-facing assumptions most likely to break compatibility:
@@ -252,6 +337,7 @@ The contract test suite includes upgrade-safety regression coverage for the app-
 Soroban event shape is `(topics, data)`. This contract uses `topics = (event_name: Symbol, subject)`.
 
 ### `project_created`
+
 - Topics format: `("project_created", project_id)`
 - Data format: `owner`
 - Example:
@@ -259,6 +345,7 @@ Soroban event shape is `(topics, data)`. This contract uses `topics = (event_nam
   - Data: `G...OWNER`
 
 ### `project_locked`
+
 - Topics format: `("project_locked", project_id)`
 - Data format: `project_id`
 - Example:
@@ -266,6 +353,7 @@ Soroban event shape is `(topics, data)`. This contract uses `topics = (event_nam
   - Data: `"afrobeats_vol3"`
 
 ### `payment_sent`
+
 - Topics format: `("payment_sent", project_id)`
 - Data format: `(recipient, amount)`
 - Example:
@@ -273,6 +361,7 @@ Soroban event shape is `(topics, data)`. This contract uses `topics = (event_nam
   - Data: `(G...RECIPIENT, 5000000000)`
 
 ### `distribution_complete`
+
 - Topics format: `("distribution_complete", project_id)`
 - Data format: `(round, total)`
 - Example:
@@ -280,6 +369,7 @@ Soroban event shape is `(topics, data)`. This contract uses `topics = (event_nam
   - Data: `(1, 10000000000)`
 
 ### `deposit_received`
+
 - Topics format: `("deposit_received", project_id)`
 - Data format: `(from, amount)`
 - Example:
@@ -287,6 +377,7 @@ Soroban event shape is `(topics, data)`. This contract uses `topics = (event_nam
   - Data: `(G...FUNDER, 10000000000)`
 
 ### `metadata_updated`
+
 - Topics format: `("metadata_updated", project_id)`
 - Data format: `project_id`
 - Example:
@@ -294,6 +385,7 @@ Soroban event shape is `(topics, data)`. This contract uses `topics = (event_nam
   - Data: `"afrobeats_vol3"`
 
 ### `unallocated_withdrawn`
+
 - Topics format: `("unallocated_withdrawn", token)`
 - Data format: `(admin, to, amount, remaining_unallocated)`
 - Example:
@@ -301,6 +393,7 @@ Soroban event shape is `(topics, data)`. This contract uses `topics = (event_nam
   - Data: `(G...ADMIN, G...TREASURY, 2000000000, 1000000000)`
 
 ### `ownership_transferred`
+
 - Topics format: `("ownership_transferred", project_id)`
 - Data format: `(previous_owner, new_owner)`
 - Example:
@@ -308,6 +401,7 @@ Soroban event shape is `(topics, data)`. This contract uses `topics = (event_nam
   - Data: `(G...PREVIOUS, G...NEW)`
 
 ### `collaborators_updated`
+
 - Topics format: `("collaborators_updated", project_id)`
 - Data format: `project_id`
 - Example:
@@ -315,6 +409,7 @@ Soroban event shape is `(topics, data)`. This contract uses `topics = (event_nam
   - Data: `"afrobeats_vol3"`
 
 ### `max_collaborators_set`
+
 - Topics format: `("max_collaborators_set", admin)`
 - Data format: `value` (the new per-project collaborator cap)
 - Example:

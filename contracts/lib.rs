@@ -22,6 +22,8 @@ use events::{
 #[cfg(test)]
 mod address_validation_tests;
 #[cfg(test)]
+mod admin_token_authorization_tests;
+#[cfg(test)]
 mod authorization_coverage_tests;
 #[cfg(test)]
 mod authorization_tests;
@@ -30,9 +32,13 @@ mod budget_regression_tests;
 #[cfg(test)]
 mod cost_benchmark_tests;
 #[cfg(test)]
+mod deposit_boundary_tests;
+#[cfg(test)]
 mod deposit_property_tests;
 #[cfg(test)]
 mod duplicate_claim_tests;
+#[cfg(test)]
+mod duplicate_collaborator_tests;
 #[cfg(test)]
 mod failure_invariant_tests;
 #[cfg(test)]
