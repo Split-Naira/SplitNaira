@@ -119,8 +119,9 @@ export function evaluateLedgerBalance(
   const violations: InvariantViolation[] = [];
 
   // Index settlement blocks by txHash. Duplicate txHashes among settlement
-  // blocks would themselves be a duplication defect; flag it (the unique
-  // index is only guaranteed on transactions.txHash, not ledger_blocks).
+  // blocks would themselves be a duplication defect; flag it. Since #1641 the
+  // partial unique index UQ_ledger_blocks_settlement_tx_hash prevents this on
+  // migrated databases, but rows restored from older backups are still checked.
   const settlementByTxHash = new Map<string, LedgerBlock[]>();
   for (const block of ledgerBlocks) {
     if (block.type !== "settlement") continue;

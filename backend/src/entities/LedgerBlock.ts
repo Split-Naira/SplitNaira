@@ -7,6 +7,11 @@ export type LedgerBlockType = (typeof LEDGER_BLOCK_TYPES)[number];
 @Index("IDX_ledger_blocks_ledger_seq", ["ledgerSeq"])
 @Index("IDX_ledger_blocks_tx_hash", ["txHash"])
 @Index("IDX_ledger_blocks_project_id", ["projectId"])
+// #1641: a payout settles at most once. Partial so milestone rows may share a txHash.
+@Index("UQ_ledger_blocks_settlement_tx_hash", ["txHash"], {
+  unique: true,
+  where: `"type" = 'settlement'`,
+})
 export class LedgerBlock {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
