@@ -11,6 +11,7 @@ import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
 import { logger } from "../services/logger.js";
 import { signToken } from "../services/jwt.js";
 import { authJwtMiddleware } from "../middleware/auth-jwt.js";
+import { sendErrorResponse } from "../middleware/error.js";
 import { logAuthEvent } from "../services/auth-events.js";
 import { loginAttemptStore } from "../services/login-attempts.js";
 
@@ -37,10 +38,7 @@ usersRouter.post("/register", async (req: Request, res: Response, next: NextFunc
     });
 
     if (walletExists) {
-      return res.status(409).json({
-        error: "conflict",
-        message: "Wallet address already registered.",
-      });
+      return sendErrorResponse(res, 409, "conflict", "Wallet address already registered.");
     }
 
     // Only open a transaction if the wallet does not already exist

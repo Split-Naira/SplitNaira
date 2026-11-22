@@ -18,6 +18,7 @@ import {
   type ProjectPermission,
   type ProjectRoleContext,
 } from "../services/collaboration/permissions.js";
+import { sendErrorResponse } from "./error.js";
 
 /**
  * Authoritative source for a project's collaboration record, or `null` when the
@@ -48,17 +49,18 @@ export function createProjectPermissionMiddleware(
     const requesterAddress: string | undefined = res.locals.requesterAddress;
 
     if (!requesterAddress) {
-      res.status(401).json({
-        error: "unauthorized",
-        message:
-          "Authenticate with a signed X-Stellar-Address header before this action.",
-      });
+      sendErrorResponse(
+        res,
+        401,
+        "unauthorized",
+        "Authenticate with a signed X-Stellar-Address header before this action.",
+      );
       return;
     }
 
     const projectId = req.params.projectId as string | undefined;
     if (!projectId) {
-      res.status(400).json({ error: "project_id_required" });
+      sendErrorResponse(res, 400, "project_id_required", "A project id is required.");
       return;
     }
 
@@ -76,12 +78,17 @@ export function createProjectPermissionMiddleware(
       next();
     } catch (err: unknown) {
       const e = err as { role?: string | null; reason?: string };
-      res.status(403).json({
-        error: "permission_denied",
-        permission,
-        role: e.role ?? null,
-        reason: e.reason ?? "insufficient_role",
-      });
+      const role = e.role ?? null;
+      const reason = e.reason ?? "insufficient_role";
+      // Top-level permission/role/reason predate #1640 and are kept for clients.
+      sendErrorResponse(
+        res,
+        403,
+        "permission_denied",
+        "You do not have permission to perform this action on the project.",
+        { permission, role, reason },
+        { permission, role, reason },
+      );
     }
   };
 }

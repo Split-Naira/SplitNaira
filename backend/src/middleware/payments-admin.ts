@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import { getEnv } from "../config/env.js";
 import { logger } from "../services/logger.js";
+import { sendErrorResponse } from "./error.js";
 
 export const PAYMENTS_ADMIN_API_KEY_HEADER = "x-admin-api-key";
 
@@ -46,12 +47,7 @@ export function requirePaymentsAdminAccess(
   const providedKey = req.header(PAYMENTS_ADMIN_API_KEY_HEADER)?.trim();
   if (!providedKey || !hasMatchingApiKey(expectedKey, providedKey)) {
     logBlockedAdminRequest(req, res, "invalid_api_key");
-    res.status(401).json({
-      error: "admin_auth_required",
-      message: "Payments admin authentication failed.",
-      requestId: res.locals.requestId,
-      details: {}
-    });
+    sendErrorResponse(res, 401, "admin_auth_required", "Payments admin authentication failed.");
     return;
   }
 
@@ -75,12 +71,11 @@ export function enforcePaymentsAdminWriteEnabled(
   }
 
   logBlockedAdminRequest(req, res, "writes_disabled");
-  res.status(503).json({
-    error: "payments_admin_writes_disabled",
-    message: "Payments admin write operations are temporarily disabled.",
-    requestId: res.locals.requestId,
-    details: {
-      rollbackAware: true
-    }
-  });
+  sendErrorResponse(
+    res,
+    503,
+    "payments_admin_writes_disabled",
+    "Payments admin write operations are temporarily disabled.",
+    { rollbackAware: true },
+  );
 }

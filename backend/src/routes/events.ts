@@ -5,6 +5,7 @@ import { logger } from "../services/logger.js";
 import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
 import { incrementSseConnections, recordSseDisconnect } from "../services/metrics.js";
 import { isShuttingDown } from "./health.js";
+import { sendErrorResponse } from "../middleware/error.js";
 
 // Heartbeat cadence for the path-based transaction stream. A comment line every
 // 15s keeps intermediary proxies from closing an otherwise-idle connection.
@@ -92,12 +93,12 @@ export function getActiveSseConnectionCount(): number {
  */
 function rejectIfShuttingDown(res: Response): boolean {
   if (!isShuttingDown()) return false;
-  res.status(503).json({
-    error: "shutting_down",
-    message: "Service is shutting down and is not accepting new event streams.",
-    requestId: res.locals.requestId,
-    details: {},
-  });
+  sendErrorResponse(
+    res,
+    503,
+    "shutting_down",
+    "Service is shutting down and is not accepting new event streams.",
+  );
   return true;
 }
 

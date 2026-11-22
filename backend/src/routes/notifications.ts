@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { authJwtMiddleware } from "../middleware/auth-jwt.js";
+import { sendErrorResponse } from "../middleware/error.js";
 import {
   MANDATORY_CATEGORIES,
   PREFERENCE_CATEGORIES,
@@ -182,10 +183,7 @@ notificationsRouter.post(
       if (!updated) {
         // Also the answer when the notification belongs to someone else:
         // distinguishing "not yours" from "not found" would leak existence.
-        return res.status(404).json({
-          error: "not_found",
-          message: "Notification not found.",
-        });
+        return sendErrorResponse(res, 404, "not_found", "Notification not found.");
       }
 
       return res.status(200).json(serialize(updated));

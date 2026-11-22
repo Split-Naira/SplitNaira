@@ -50,6 +50,7 @@ import {
   AdminUnsignedXdrResponseSchema,
 } from "../schemas/admin.schemas.js";
 import { withResponseValidation } from "../middleware/validateResponse.js";
+import { sendErrorResponse } from "../middleware/error.js";
 import {
   claimableInfoSchema,
   contractBoolSchema,
@@ -162,8 +163,10 @@ function sendValidationError(
   message: string,
   details: Record<string, unknown> = {}
 ) {
+  // #1640: `code` matches the shared errorHandler envelope for validation failures.
   return res.status(400).json({
     error: "validation_error",
+    code: ErrorCode.VALIDATION_ERROR,
     message,
     requestId,
     details,
@@ -173,6 +176,7 @@ function sendValidationError(
 function sendRpcError(res: Response, requestId: string, message: string, status = 502) {
   return res.status(status).json({
     error: "rpc_error",
+    code: "RPC_ERROR",
     message,
     requestId,
     details: {},
@@ -448,11 +452,12 @@ splitsRouter.post(
             )
           : false;
         if (isPaused) {
-          return res.status(409).json({
-            error: "distributions_paused",
-            message:
-              "Distributions are paused by the contract admin. Please try again after unpause.",
-          });
+          return sendErrorResponse(
+            res,
+            409,
+            "distributions_paused",
+            "Distributions are paused by the contract admin. Please try again after unpause.",
+          );
         }
 
         const result = await buildUnsignedContractCall({
@@ -852,7 +857,13 @@ splitsRouter.get(
           if (error instanceof RequestValidationError) {
             return res
               .status(400)
-              .json({ error: "validation_error", message: error.message, requestId, details: {} });
+              .json({
+                error: "validation_error",
+                code: ErrorCode.VALIDATION_ERROR,
+                message: error.message,
+                requestId,
+                details: {},
+              });
           }
           throw error;
         }
@@ -893,7 +904,13 @@ splitsRouter.get(
           if (error instanceof RequestValidationError) {
             return res
               .status(400)
-              .json({ error: "validation_error", message: error.message, requestId, details: {} });
+              .json({
+                error: "validation_error",
+                code: ErrorCode.VALIDATION_ERROR,
+                message: error.message,
+                requestId,
+                details: {},
+              });
           }
           throw error;
         }
@@ -925,7 +942,13 @@ splitsRouter.get(
           if (error instanceof RequestValidationError) {
             return res
               .status(400)
-              .json({ error: "validation_error", message: error.message, requestId, details: {} });
+              .json({
+                error: "validation_error",
+                code: ErrorCode.VALIDATION_ERROR,
+                message: error.message,
+                requestId,
+                details: {},
+              });
           }
           throw error;
         }
@@ -974,7 +997,13 @@ splitsRouter.get(
           if (error instanceof RequestValidationError) {
             return res
               .status(400)
-              .json({ error: "validation_error", message: error.message, requestId, details: {} });
+              .json({
+                error: "validation_error",
+                code: ErrorCode.VALIDATION_ERROR,
+                message: error.message,
+                requestId,
+                details: {},
+              });
           }
           throw error;
         }
@@ -1015,7 +1044,13 @@ splitsRouter.post(
           if (error instanceof RequestValidationError) {
             return res
               .status(400)
-              .json({ error: "validation_error", message: error.message, requestId, details: {} });
+              .json({
+                error: "validation_error",
+                code: ErrorCode.VALIDATION_ERROR,
+                message: error.message,
+                requestId,
+                details: {},
+              });
           }
           throw error;
         }

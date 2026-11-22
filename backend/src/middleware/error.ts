@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
 import { logger } from "../services/logger.js";
 import { RpcError, RpcTimeoutError } from "../services/stellar.js";
+import { sanitizeInboundRequestId } from "./request-id.js";
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -15,6 +16,40 @@ function formatZodError(err: ZodError) {
     message: "Invalid request payload.",
     details: { fieldErrors: flattened.fieldErrors, formErrors: flattened.formErrors },
   };
+}
+
+/**
+ * Issue #1640: stable error envelope for route-local failures.
+ *
+ * Routes that answer a failure themselves (instead of throwing to
+ * `errorHandler`) must still emit the same machine-readable shape:
+ * `{ error, code, message, requestId, details }`. `error` keeps its existing
+ * snake_case value for backwards compatibility and `code` is its stable
+ * UPPER_SNAKE form, so clients can branch on `code` across every route family.
+ * `extra` carries route-specific top-level fields that predate this contract
+ * (e.g. `decision` on a blocked deletion); it can never override the envelope.
+ */
+export function sendErrorResponse(
+  res: Response,
+  status: number,
+  error: string,
+  message: string,
+  details: Record<string, unknown> = {},
+  extra: Record<string, unknown> = {},
+) {
+  const requestId = (res.locals.requestId as string | undefined) ?? randomUUID();
+  res.locals.requestId = requestId;
+  if (typeof res.getHeader === "function" && !res.getHeader("x-request-id")) {
+    res.setHeader("x-request-id", requestId);
+  }
+  return res.status(status).json({
+    ...extra,
+    error,
+    code: error.toUpperCase(),
+    message,
+    requestId,
+    details,
+  });
 }
 
 /**
@@ -89,8 +124,14 @@ export function errorHandler(
   // Issue #1032: Every error response must carry a non-empty requestId.
   // When a parse error fires before the requestId middleware has run,
   // res.locals.requestId is undefined — generate one so the response is
-  // still correlatable.
-  const requestId = res.locals.requestId ?? randomUUID();
+  // still correlatable. #1640: in that case honour a safe client-supplied
+  // correlation id (same sanitisation as requestIdMiddleware), so a client can
+  // still match the failure to the request it sent.
+  const requestId =
+    res.locals.requestId ??
+    sanitizeInboundRequestId(req.header?.("x-request-id")) ??
+    sanitizeInboundRequestId(req.header?.("x-correlation-id")) ??
+    randomUUID();
   res.locals.requestId = requestId;
   if (!res.getHeader("x-request-id")) {
     res.setHeader("x-request-id", requestId);
