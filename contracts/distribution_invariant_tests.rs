@@ -343,3 +343,92 @@ fn create_project_above_configured_cap_is_rejected() {
     assert_eq!(result, Err(Ok(SplitError::TooManyCollaborators)));
     assert!(!client.project_exists(&project_id));
 }
+
+// -----------------------------------------------------------------------------
+// Repeated distribution with unchanged balance (#1658)
+// -----------------------------------------------------------------------------
+
+/// A second `distribute` call immediately after a successful first call must
+/// return `NoBalance` — it must not pay the same available balance twice (#1658).
+#[test]
+fn repeated_distribute_on_zero_balance_returns_no_balance() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+    let token_admin = Address::generate(&env);
+    let token = env.register_stellar_asset_contract(token_admin);
+
+    let owner = Address::generate(&env);
+    let collaborators = collabs_from_bp(&env, &[5000, 5000]);
+    let project_id = Symbol::new(&env, "repeat_dist");
+
+    client.create_project(
+        &owner,
+        &project_id,
+        &String::from_str(&env, "Repeat Dist"),
+        &String::from_str(&env, "music"),
+        &token,
+        &collaborators,
+    );
+
+    fund(&env, &client, &token, &project_id, &owner, 1000);
+
+    // First distribution must succeed and drain the balance to zero.
+    client.distribute(&project_id);
+    assert_eq!(client.get_balance(&project_id), 0);
+
+    // Second call with no new deposits must fail — the balance is now 0.
+    let result = client.try_distribute(&project_id);
+    assert_eq!(
+        result,
+        Err(Ok(SplitError::NoBalance)),
+        "repeated distribute on zero balance should return NoBalance"
+    );
+}
+
+/// Distributing, then receiving a new deposit, then distributing again is
+/// valid — only the new funds are paid out the second time (#1658).
+#[test]
+fn distribute_after_new_deposit_pays_only_new_funds() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register_contract(None, SplitNairaContract);
+    let client = SplitNairaContractClient::new(&env, &contract_id);
+    let token_admin = Address::generate(&env);
+    let token = env.register_stellar_asset_contract(token_admin);
+
+    let owner = Address::generate(&env);
+    let collabs = collabs_from_bp(&env, &[5000, 5000]);
+    let project_id = Symbol::new(&env, "two_rounds");
+
+    client.create_project(
+        &owner,
+        &project_id,
+        &String::from_str(&env, "Two Rounds"),
+        &String::from_str(&env, "music"),
+        &token,
+        &collabs,
+    );
+
+    // Round 1: deposit 1000, distribute.
+    fund(&env, &client, &token, &project_id, &owner, 1000);
+    client.distribute(&project_id);
+    assert_eq!(client.get_balance(&project_id), 0);
+
+    // Immediately after round 1 a second call must fail.
+    let result = client.try_distribute(&project_id);
+    assert_eq!(result, Err(Ok(SplitError::NoBalance)));
+
+    // Round 2: new deposit of 500.
+    fund(&env, &client, &token, &project_id, &owner, 500);
+    // Second distribution must succeed on the new 500 only.
+    client.distribute(&project_id);
+    assert_eq!(client.get_balance(&project_id), 0);
+
+    // After round 2 the balance is again 0.
+    let result = client.try_distribute(&project_id);
+    assert_eq!(result, Err(Ok(SplitError::NoBalance)));
+}
