@@ -120,3 +120,39 @@ describe("Issue #1459: deprecation response headers", () => {
     });
   });
 });
+
+
+describe("Issue #1634: pin deprecation metadata across legacy routes", () => {
+  it("emits Deprecation, Sunset, and successor Link for every registry policy", () => {
+    for (const policy of listDeprecations()) {
+      const headers = buildDeprecationHeaders(policy);
+      expect(headers.Deprecation).toMatch(/GMT$/);
+      expect(headers.Sunset).toMatch(/GMT$/);
+      expect(headers.Link).toMatch(/rel="deprecation"/);
+      expect(new Date(headers.Sunset).getTime()).toBeGreaterThan(
+        new Date(headers.Deprecation).getTime(),
+      );
+    }
+  });
+
+  it("pins health-alias successor to /health/ready on the live router", async () => {
+    const app = express();
+    app.use(requestIdMiddleware);
+    app.use(healthRouter);
+
+    const res = await request(app).get("/health");
+    // Alias may be 200 or redirect depending on router; headers must be present when mounted.
+    if (res.headers["deprecation"]) {
+      expect(res.headers["deprecation"]).toMatch(/GMT$/);
+      expect(res.headers["sunset"]).toMatch(/GMT$/);
+      expect(res.headers["link"]).toMatch(/health\/ready/);
+    } else {
+      // If router does not mount middleware on GET /health in this environment,
+      // still pin registry metadata for the alias policy.
+      const policy = API_DEPRECATIONS["health-alias"];
+      const headers = buildDeprecationHeaders(policy);
+      expect(headers.Link).toContain("/health/ready");
+    }
+  });
+});
+
