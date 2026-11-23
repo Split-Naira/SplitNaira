@@ -78,3 +78,69 @@ describe("project deletion safeguards (issue #1296)", () => {
     expect(log.every((e) => e.financial.projectId === "proj-1")).toBe(true);
   });
 });
+
+
+describe("project deletion retention and recovery boundaries (#1632)", () => {
+  beforeEach(() => {
+    resetProjectDeletionAuditForTests();
+  });
+
+  it("retains financial snapshot on soft-delete audit (linked-record retention)", () => {
+    const snapshot = snap({
+      hasDeposits: true,
+      hasDistributions: true,
+      transactionCount: 4,
+    });
+    const decision = requestProjectDeletion({
+      snapshot,
+      actor: "GOWNER",
+      confirmed: true,
+      confirmationText: CONFIRMATION_PHRASE,
+    });
+    expect(decision.mode).toBe("soft");
+    const entry = getProjectDeletionAuditLog().find((e) => e.type === "project.soft_deleted");
+    expect(entry).toBeDefined();
+    expect(entry!.financial.hasDeposits).toBe(true);
+    expect(entry!.financial.transactionCount).toBe(4);
+  });
+
+  it("wrong confirmation phrase never allows hard or soft delete", () => {
+    const d = evaluateProjectDeletion({
+      snapshot: snap(),
+      confirmed: true,
+      confirmationText: "delete",
+    });
+    expect(d.allowed).toBe(false);
+    expect(d.mode).toBeNull();
+  });
+
+  it("hard-delete path is irreversible intent: only when no chain-linked financial history", () => {
+    // Boundary: claims alone count as financial history → soft only
+    const withClaims = evaluateProjectDeletion({
+      snapshot: snap({ hasClaims: true }),
+      confirmed: true,
+      confirmationText: CONFIRMATION_PHRASE,
+    });
+    expect(withClaims.mode).toBe("soft");
+
+    const clean = evaluateProjectDeletion({
+      snapshot: snap({ transactionCount: 0 }),
+      confirmed: true,
+      confirmationText: CONFIRMATION_PHRASE,
+    });
+    expect(clean.mode).toBe("hard");
+  });
+
+  it("blocked attempts still produce audit for recovery investigation", () => {
+    requestProjectDeletion({
+      snapshot: snap({ hasDeposits: true }),
+      actor: "NOTOWNER",
+      confirmed: false,
+    });
+    const blocked = getProjectDeletionAuditLog().filter((e) => e.type === "project.hard_delete_blocked");
+    expect(blocked.length).toBe(1);
+    expect(blocked[0].actor).toBe("NOTOWNER");
+    expect(blocked[0].financial.projectId).toBe("proj-1");
+  });
+});
+
