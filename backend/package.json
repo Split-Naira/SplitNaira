@@ -29,6 +29,7 @@
     "preview:orphaned-cleanup": "tsx src/scripts/check-orphaned-transactions.ts --cleanup-preview",
     "reconcile:dry-run": "tsx src/scripts/reconcile-dry-run.ts",
     "report:pending-aging": "tsx src/scripts/pending-transaction-aging-report.ts",
+    "alert:pending-payouts": "tsx src/scripts/pending-payout-alerts.ts",
     "seed:dev": "tsx src/scripts/seed-development.ts"
   },
   "dependencies": {

@@ -19,6 +19,7 @@ import {
   type TransactionCursor,
 } from "../lib/keyset-cursor.js";
 import { authJwtMiddleware } from "../middleware/auth-jwt.js";
+import { sendErrorResponse } from "../middleware/error.js";
 import { logger } from "../services/logger.js";
 import { getEnv } from "../config/env.js";
 import { getStellarRpcServer, executeWithRetry } from "../services/stellar.js";
@@ -95,10 +96,7 @@ transactionsRouter.post(
       return res.status(200).json(formatPayoutAttempt(attempt));
     } catch (error) {
       if (error instanceof PayoutAttemptConflictError) {
-        return res.status(409).json({
-          error: "payout_attempt_conflict",
-          message: error.message,
-        });
+        return sendErrorResponse(res, 409, "payout_attempt_conflict", error.message);
       }
       return next(error);
     }

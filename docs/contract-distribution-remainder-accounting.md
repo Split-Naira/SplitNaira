@@ -7,7 +7,7 @@ How the SplitNaira contract handles integer rounding when it splits a project ba
 
 ## Why remainders exist
 
-Balances are integer stroops (`i128`), and shares are basis points (`bps`) out of `10_000`. A collaborator's exact share, `balance × bps / 10_000`, is usually not a whole number. Integer division always rounds down, so a pure per-collaborator floor leaves some stroops unassigned. These leftover stroops are called the *remainder* or *dust*.
+Balances are integer stroops (`i128`), and shares are basis points (`bps`) out of `10_000`. A collaborator's exact share, `balance × bps / 10_000`, is usually not a whole number. Integer division always rounds down, so a pure per-collaborator floor leaves some stroops unassigned. These leftover stroops are called the _remainder_ or _dust_.
 
 ## The rule (`distribute`)
 
@@ -26,11 +26,11 @@ paid(cₙ₋₁) = balance − Σ paid(c₀ … cₙ₋₂)           (last coll
 
 This mirrors `test_upgrade_regression_distribution_preserves_rounding_and_accounting_invariants` in `contracts/tests.rs`. It uses 3 collaborators at 3333 / 3333 / 3334 bps.
 
-| Round | Balance | Alice (3333) | Bob (3333) | Carol (3334, last) | Carol's own floor | Remainder to Carol |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1 | 101 | 33 | 33 | **35** | 33 | +2 (= n−1, the maximum) |
-| 2 | 10,003 | 3,333 | 3,333 | **3,337** | 3,335 | +2 |
-| **Total** | 10,104 | 3,366 | 3,366 | 3,372 | | |
+| Round     | Balance | Alice (3333) | Bob (3333) | Carol (3334, last) | Carol's own floor | Remainder to Carol      |
+| --------- | ------- | ------------ | ---------- | ------------------ | ----------------- | ----------------------- |
+| 1         | 101     | 33           | 33         | **35**             | 33                | +2 (= n−1, the maximum) |
+| 2         | 10,003  | 3,333        | 3,333      | **3,337**          | 3,335             | +2                      |
+| **Total** | 10,104  | 3,366        | 3,366      | 3,372              |                   |                         |
 
 After round 2: `total_distributed = 10,104`, `distribution_round = 2`, `get_balance = 0`, and the three `get_claimed` values add up to `total_distributed`.
 
@@ -49,14 +49,17 @@ Every successful `distribute` keeps the following true. Changing any of them is 
 ## Edge cases
 
 ### Balance smaller than the collaborator count
+
 `distribute` returns `NoBalance` when `balance < n`, and nothing changes. Deposits keep adding to the balance until it reaches `n`.
 
 > This guard sets a minimum balance. It does **not** promise every collaborator a non-zero payout. A small share can still round down to `0`. Example: balance `3` with shares `9998 / 1 / 1` pays `2 / 0 / 1`.
 
 ### Zero-amount shares are skipped
+
 If a collaborator's computed amount is `0`, the contract sends no transfer, emits no `payment_sent` event and leaves that collaborator's `Claimed` entry unchanged. The round still counts (`distribution_round` increases). Indexers must **not** assume one `payment_sent` event per collaborator per round. Rebuild a round from `distribution_complete.total` and the `payment_sent` events that are actually present.
 
 ### Reordering collaborators
+
 `update_collaborators` can change which collaborator is last, and so who receives future remainders. Past rounds are unaffected.
 
 ## Interaction with `claim` (pull payouts)
@@ -66,7 +69,7 @@ If a collaborator's computed amount is `0`, the contract sends no transfer, emit
 - It pays `floor(current_balance × bps / 10_000)` to the caller alone. **No remainder is assigned.** The rounded-off dust stays in `ProjectBalance` and goes out in the next `distribute`.
 - It increases `total_distributed` and the claimer's `Claimed` entry, but **not** `distribution_round`.
 
-> **Known limitation:** `claim` works out the share from the balance *as it is at the time of the claim*, not from what the collaborator was entitled to when funds were deposited. Earlier claims lower the pool that later claims are calculated from. So pulled payouts depend on the order of claims, and they don't match the push (`distribute`) split. Example: 50/50 split, balance 8,000,000. Alice claims 4,000,000, which leaves 4,000,000. Bob's claim then pays 2,000,000, not 4,000,000. The remaining 2,000,000 stays in the pool and goes out in the next `distribute` using the normal rule. (`test_claim_reduces_project_balance` pins the first half of this.) Until entitlement-based claim accounting ships, treat `distribute` as the authoritative split and `claim` as a partial, order-dependent advance.
+> **Known limitation:** `claim` works out the share from the balance _as it is at the time of the claim_, not from what the collaborator was entitled to when funds were deposited. Earlier claims lower the pool that later claims are calculated from. So pulled payouts depend on the order of claims, and they don't match the push (`distribute`) split. Example: 50/50 split, balance 8,000,000. Alice claims 4,000,000, which leaves 4,000,000. Bob's claim then pays 2,000,000, not 4,000,000. The remaining 2,000,000 stays in the pool and goes out in the next `distribute` using the normal rule. (`test_claim_reduces_project_balance` pins the first half of this.) Until entitlement-based claim accounting ships, treat `distribute` as the authoritative split and `claim` as a partial, order-dependent advance.
 
 ## Guidance for off-chain code
 
@@ -76,8 +79,17 @@ If a collaborator's computed amount is `0`, the contract sends no transfer, emit
 
 ## Where this is tested
 
-| Behaviour | Test |
-| --- | --- |
-| Remainder to last collaborator across rounds, full accounting | `tests.rs::test_upgrade_regression_distribution_preserves_rounding_and_accounting_invariants` |
-| `NoBalance` when `balance < n` / zero balance | `reliability_tests.rs::test_distribute_zero_balance_returns_no_balance` |
-| Claim reduces pooled balance | `tests.rs::test_claim_reduces_project_balance` |
+| Behaviour                                                                                                                                                                                                                                                       | Test                                                                                                    |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Remainder to last collaborator across rounds, full accounting                                                                                                                                                                                                   | `tests.rs::test_upgrade_regression_distribution_preserves_rounding_and_accounting_invariants`           |
+| `NoBalance` when `balance < n` / zero balance                                                                                                                                                                                                                   | `reliability_tests.rs::test_distribute_zero_balance_returns_no_balance`                                 |
+| Claim reduces pooled balance                                                                                                                                                                                                                                    | `tests.rs::test_claim_reduces_project_balance`                                                          |
+| Exact floor for every non-last share, remainder in `0 … n−1`, payouts sum to the balance (generated allocations, 2–50 members, `n` stroops up to `i128::MAX / 10_000`)                                                                                          | `bps_conservation_property_tests.rs::prop_distribution_conserves_and_bounds_remainder_up_to_member_cap` |
+| Random deposit / `claim` / `distribute` sequences (including duplicate, outsider and sub-threshold calls) keep `deposited == paid out + balance`, `Σ get_claimed == total_distributed`, contract custody == balance and zero unallocated drift after every step | `bps_conservation_property_tests.rs::prop_mixed_claim_and_distribute_sequences_conserve_funds`          |
+| `balance == n` distributes and conserves (zero shares leave `Claimed` unchanged); `balance == n − 1` is rejected with `NoBalance`                                                                                                                               | `bps_conservation_property_tests.rs::prop_minimum_balance_boundary_conserves_or_rejects`                |
+| The `n − 1` remainder bound is reached at the 50-member cap                                                                                                                                                                                                     | `bps_conservation_property_tests.rs::test_remainder_reaches_maximum_at_member_cap`                      |
+| Largest overflow-safe balance (`i128::MAX / 10_000`) conserves with the most skewed allocation                                                                                                                                                                  | `bps_conservation_property_tests.rs::test_max_safe_balance_conserves_with_skewed_allocation`            |
+
+### Safe balance range
+
+`distribute` and `claim` compute `balance × bps` in `i128` before dividing by `10_000`, so a single project balance must stay at or below `i128::MAX / 10_000` (≈ 1.7 × 10³⁴ stroops). That is far beyond any real token supply, and the property suite pins conservation right up to that boundary. The property suites are seeded and deterministic; set `SPLITNAIRA_PROPTEST_SEED=<u64>` to explore other cases (`cargo test bps_conservation`).

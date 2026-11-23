@@ -205,7 +205,8 @@ export async function main() {
   ensureEnv("HORIZON_URL", "https://horizon-testnet.stellar.org");
   ensureEnv("SOROBAN_RPC_URL", "https://soroban-testnet.stellar.org");
   ensureEnv("SOROBAN_NETWORK_PASSPHRASE", "Test SDF Network ; September 2015");
-  ensureEnv("CONTRACT_ID", "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+  // Must pass the StrKey checksum enforced by src/config/env.ts (#1502).
+  ensureEnv("CONTRACT_ID", "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4");
   ensureEnv("SIMULATOR_ACCOUNT", "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF");
 
   const config = resolveMigrationConfig();

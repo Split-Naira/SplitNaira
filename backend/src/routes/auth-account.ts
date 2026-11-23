@@ -4,6 +4,7 @@ import { IsNull } from "typeorm";
 import { getDataSource } from "../services/database.js";
 import { User } from "../entities/User.js";
 import { authJwtMiddleware } from "../middleware/auth-jwt.js";
+import { sendErrorResponse } from "../middleware/error.js";
 import { AppError, ErrorCode, ErrorType } from "../lib/errors.js";
 import {
   getEmailProvider,
@@ -176,9 +177,12 @@ authAccountRouter.post(
         logAuthEvent(res, "email_change_confirmed", "failure", {
           reason: "invalid_or_expired_token",
         });
-        return res
-          .status(400)
-          .json({ error: "invalid_or_expired_token", requestId: res.locals.requestId });
+        return sendErrorResponse(
+          res,
+          400,
+          "invalid_or_expired_token",
+          "The link is invalid or has expired.",
+        );
       };
       if (!payload || !payload.uid || payload.prev === undefined || payload.sv === undefined) {
         return invalid();

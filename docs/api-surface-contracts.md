@@ -25,6 +25,41 @@ Clients must branch on `code` (`NOT_FOUND`), never on `message`. The
 implementation lives in `backend/src/middleware/error.ts` (`notFoundHandler`)
 and is pinned by `backend/src/middleware/__tests__/unknown-route-contract.test.ts`.
 
+## Stable error envelope across route families (#1640)
+
+Every failure response from a public route family (`/splits`, `/splits/admin`,
+`/users`, `/auth`, `/collaboration`, `/transactions`, `/notifications`,
+`/api/ledger`, `/events`) uses the same envelope as the unknown-route contract:
+
+```json
+{
+  "error": "invalid_or_expired_token",
+  "code": "INVALID_OR_EXPIRED_TOKEN",
+  "message": "The link is invalid or has expired.",
+  "requestId": "client-or-generated-id",
+  "details": {}
+}
+```
+
+- `code` is the stable UPPER*SNAKE identifier that clients branch on, and
+  `error` is usually its snake_case form. A few older responses pair a more
+  specific `code` with a broader `error`, and they keep both for
+  compatibility: `SESSION_REVOKED` with `unauthorized`, and
+  `RESOURCE_LIMIT_EXCEEDED` with the SSE `too_many*\*` errors.
+- `requestId` always matches the `x-request-id` response header. A safe
+  client-supplied `x-request-id` (or `x-correlation-id`) is echoed back, even
+  when the request fails while its body is being parsed. A JWT-shaped or
+  otherwise unsafe value is replaced with a generated UUID.
+- `details` is always an object. Fields that a route returned at the top level
+  before this contract (for example `decision` on a blocked project deletion,
+  or `permission`/`role`/`reason` on `PERMISSION_DENIED`) are still returned
+  there.
+
+Routes that answer a failure themselves use `sendErrorResponse()` from
+`backend/src/middleware/error.ts`. Everything else is thrown to
+`errorHandler`, which produces the same shape. The contract is pinned per
+family by `backend/src/__tests__/route-family-error-codes.test.ts`.
+
 ## Deprecation and Sunset headers
 
 Endpoints scheduled for removal advertise it on every response so clients can

@@ -28,6 +28,8 @@ mod authorization_coverage_tests;
 #[cfg(test)]
 mod authorization_tests;
 #[cfg(test)]
+mod bps_conservation_property_tests;
+#[cfg(test)]
 mod budget_regression_tests;
 #[cfg(test)]
 mod cost_benchmark_tests;

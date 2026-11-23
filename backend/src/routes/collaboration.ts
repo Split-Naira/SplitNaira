@@ -34,6 +34,7 @@ import {
 } from "../middleware/project-permission.js";
 import { stellarAddressSchema } from "../schemas/splits.js";
 import { withResponseValidation } from "../middleware/validateResponse.js";
+import { sendErrorResponse } from "../middleware/error.js";
 import {
   InvitationResponseSchema,
   OwnershipTransferResponseSchema,
@@ -100,15 +101,17 @@ collaborationRouter.post(
       const body = deleteBodySchema.parse(req.body);
       const projectId = req.params.projectId as string;
       if (!resolveProjectDeletionSnapshot) {
-        return res.status(503).json({
-          error: "deletion_state_unavailable",
-          message: "Project financial history could not be verified. Deletion is disabled until authoritative history is available.",
-        });
+        return sendErrorResponse(
+          res,
+          503,
+          "deletion_state_unavailable",
+          "Project financial history could not be verified. Deletion is disabled until authoritative history is available.",
+        );
       }
 
       const snapshot = await resolveProjectDeletionSnapshot(projectId);
       if (!snapshot || snapshot.projectId !== projectId) {
-        return res.status(404).json({ error: "project_not_found" });
+        return sendErrorResponse(res, 404, "project_not_found", "Project not found.");
       }
 
       const decision = requestProjectDeletion({
@@ -119,11 +122,14 @@ collaborationRouter.post(
       });
 
       if (!decision.allowed) {
-        return res.status(409).json({
-          error: "deletion_blocked",
-          decision,
-          confirmationPhrase: CONFIRMATION_PHRASE,
-        });
+        return sendErrorResponse(
+          res,
+          409,
+          "deletion_blocked",
+          "Project deletion is blocked; see decision for the reasons.",
+          {},
+          { decision, confirmationPhrase: CONFIRMATION_PHRASE },
+        );
       }
 
       return res.status(200).json({
@@ -177,9 +183,12 @@ collaborationRouter.post(
     } catch (error) {
       const err = error as { code?: string; status?: number; message?: string };
       if (err.status) {
-        return res
-          .status(err.status)
-          .json({ error: err.code, message: err.message });
+        return sendErrorResponse(
+          res,
+          err.status,
+          err.code ?? "request_failed",
+          err.message ?? "The collaboration request could not be completed.",
+        );
       }
       return next(error);
     }
@@ -194,7 +203,7 @@ collaborationRouter.post(
       const invitationId = req.params.invitationId as string;
       const invitation = getInvitationById(invitationId);
       if (!invitation) {
-        return res.status(404).json({ error: "invitation_not_found" });
+        return sendErrorResponse(res, 404, "invitation_not_found", "Invitation not found.");
       }
       const projectContext = invitation.projectId
         ? await resolveRoleContext(invitation.projectId)
@@ -208,9 +217,12 @@ collaborationRouter.post(
     } catch (error) {
       const err = error as { code?: string; status?: number; message?: string };
       if (err.status) {
-        return res
-          .status(err.status)
-          .json({ error: err.code, message: err.message });
+        return sendErrorResponse(
+          res,
+          err.status,
+          err.code ?? "request_failed",
+          err.message ?? "The collaboration request could not be completed.",
+        );
       }
       return next(error);
     }
@@ -231,7 +243,7 @@ collaborationRouter.post(
       const requesterAddress = res.locals.requesterAddress as string;
       const projectContext = await resolveRoleContext(projectId);
       if (!projectContext) {
-        return res.status(404).json({ error: "project_owner_unknown" });
+        return sendErrorResponse(res, 404, "project_owner_unknown", "Project owner is not known.");
       }
       // Seed the owner only when this process has never seen the project.
       // Re-seeding from the role context on every request would overwrite the
@@ -253,9 +265,12 @@ collaborationRouter.post(
     } catch (error) {
       const err = error as { code?: string; status?: number; message?: string };
       if (err.status) {
-        return res
-          .status(err.status)
-          .json({ error: err.code, message: err.message });
+        return sendErrorResponse(
+          res,
+          err.status,
+          err.code ?? "request_failed",
+          err.message ?? "The collaboration request could not be completed.",
+        );
       }
       return next(error);
     }

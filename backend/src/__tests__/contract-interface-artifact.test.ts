@@ -49,7 +49,7 @@ describe("contract interface artifact", () => {
     expect(contractInterface.generatedBy).toBe("contracts/scripts/generate-interface.mjs");
     expect(contractInterface.methods.length).toBeGreaterThanOrEqual(27);
     expect(contractInterface.events.length).toBeGreaterThanOrEqual(7);
-    // 22 variants in contracts/errors.rs, including AlreadyClaimed (code 22).
+    // 22 since AlreadyClaimed (code 22) was added to errors.rs (#1254).
     expect(contractInterface.errors).toHaveLength(22);
   });
 

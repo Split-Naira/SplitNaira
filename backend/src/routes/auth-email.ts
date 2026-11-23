@@ -18,6 +18,7 @@ import { IsNull } from "typeorm";
 import { getMaxSessionVersionForEmail, revokeSessionsForEmail } from "../services/session-revocation.js";
 import { verificationResendCooldown } from "../services/verification-resend-cooldown.js";
 import { logAuthEvent } from "../services/auth-events.js";
+import { sendErrorResponse } from "../middleware/error.js";
 import {
   consumeEmailVerificationToken,
   hashEmailVerificationToken,
@@ -27,6 +28,15 @@ import {
 } from "../services/email-verification-token.js";
 
 export const authEmailRouter = Router();
+
+/**
+ * #1640: every rejected email-flow token gets the same stable envelope. The
+ * message is deliberately generic so it never reveals *why* the token failed
+ * (expired, reused, superseded, or never issued).
+ */
+function sendInvalidToken(res: Response) {
+  return sendErrorResponse(res, 400, "invalid_or_expired_token", "The link is invalid or has expired.");
+}
 
 const passwordResetRequestSchema = z.object({
   email: z.string().email("Invalid email format"),
@@ -109,7 +119,7 @@ authEmailRouter.post("/password-reset/confirm", async (req: Request, res: Respon
     const payload = verifyEmailFlowToken(token, "password_reset");
     if (!payload) {
       logAuthEvent(res, "password_reset_confirmed", "failure", { reason: "invalid_or_expired_token" });
-      return res.status(400).json({ error: "invalid_or_expired_token", requestId: res.locals.requestId });
+      return sendInvalidToken(res);
     }
 
     // Tokens issued before #1446 carry no `sv`; they were issued against version 0.
@@ -117,7 +127,7 @@ authEmailRouter.post("/password-reset/confirm", async (req: Request, res: Respon
     if (revoked === 0) {
       // Already used, superseded by a newer reset, or no account left for this email.
       logAuthEvent(res, "password_reset_confirmed", "failure", { email: payload.email, reason: "invalid_or_expired_token" });
-      return res.status(400).json({ error: "invalid_or_expired_token", requestId: res.locals.requestId });
+      return sendInvalidToken(res);
     }
 
     logAuthEvent(res, "password_reset_confirmed", "success", { email: payload.email, sessionsRevoked: true });
@@ -220,7 +230,7 @@ authEmailRouter.post("/email-verification/confirm", async (req: Request, res: Re
     const payload = verifyEmailFlowToken(token, "email_verification");
     if (!payload) {
       logAuthEvent(res, "email_verified", "failure", { reason: "invalid_or_expired_token" });
-      return res.status(400).json({ error: "invalid_or_expired_token", requestId: res.locals.requestId });
+      return sendInvalidToken(res);
     }
 
     const consumed = await consumeEmailVerificationToken(
@@ -229,7 +239,7 @@ authEmailRouter.post("/email-verification/confirm", async (req: Request, res: Re
     );
     if (!consumed) {
       // Reused, superseded, expired, or never issued.
-      return res.status(400).json({ error: "invalid_or_expired_token" });
+      return sendInvalidToken(res);
     }
 
     await getDataSource()
@@ -283,7 +293,7 @@ authEmailRouter.post("/invitations/accept", async (req: Request, res: Response, 
     const { token } = invitationAcceptSchema.parse(req.body);
     const payload = verifyEmailFlowToken(token, "invitation");
     if (!payload) {
-      return res.status(400).json({ error: "invalid_or_expired_token" });
+      return sendInvalidToken(res);
     }
 
     // Issue #1299 – reject cancelled invitations
@@ -293,11 +303,11 @@ authEmailRouter.post("/invitations/accept", async (req: Request, res: Response, 
     } catch (err: unknown) {
       const e = err as { code?: string; status?: number; message?: string };
       if (e.code === "invitation_cancelled") {
-        return res.status(410).json({ error: "invitation_cancelled", message: "This invitation was cancelled by the sender." });
+        return sendErrorResponse(res, 410, "invitation_cancelled", "This invitation was cancelled by the sender.");
       }
       // invitation_not_tracked: legacy tokens without registry entry still OK
       if (e.code && e.code !== "invitation_not_tracked") {
-        return res.status(e.status ?? 400).json({ error: e.code });
+        return sendErrorResponse(res, e.status ?? 400, e.code, e.message ?? "The invitation could not be accepted.");
       }
     }
 
@@ -367,13 +377,19 @@ authEmailRouter.post("/invitations/:invitationId/cancel", async (req: Request, r
     } catch (err: unknown) {
       const e = err as { code?: string; status?: number };
       if (e.code === "inviter_unknown") {
-        return res.status(403).json({
-          error: "inviter_unknown",
-          message:
-            "This invitation has no recorded inviter, so it can only be cancelled by the project owner.",
-        });
+        return sendErrorResponse(
+          res,
+          403,
+          "inviter_unknown",
+          "This invitation has no recorded inviter, so it can only be cancelled by the project owner.",
+        );
       }
-      return res.status(e.status ?? 400).json({ error: e.code ?? "cancel_failed" });
+      return sendErrorResponse(
+        res,
+        e.status ?? 400,
+        e.code ?? "cancel_failed",
+        "The invitation could not be cancelled.",
+      );
     }
   } catch (error) {
     return next(error);

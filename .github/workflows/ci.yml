@@ -79,7 +79,8 @@ jobs:
       HORIZON_URL: https://horizon-testnet.stellar.org
       SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
       SOROBAN_NETWORK_PASSPHRASE: Test SDF Network ; September 2015
-      CONTRACT_ID: CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+      # Must pass the StrKey checksum enforced by backend/src/config/env.ts (#1502).
+      CONTRACT_ID: CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4
       SIMULATOR_ACCOUNT: GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF
     steps:
       - uses: actions/checkout@v6
