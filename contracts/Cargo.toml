@@ -1,27 +1,25 @@
-﻿[package]
+﻿
+[package]
 name = "splitnaira-contracts"
 version = "0.1.0"
 edition = "2021"
-description = "Soroban smart contracts for SplitNaira â€” royalty splitting on Stellar"
+description = "Soroban smart contracts for SplitNaira — royalty splitting on Stellar"
 license = "MIT"
 repository = "https://github.com/Split-Naira/SplitNaira"
 
 [lib]
-crate-type = ["cdylib", "rlib"]
 name = "splitnaira_contract"
-path = "lib.rs"
+crate-type = ["cdylib", "rlib"]
 
-# reliability_tests.rs is registered via #[cfg(test)] mod in lib.rs
-# and is automatically included in: cargo test --features testutils
+# reliability_tests.rs is registered through #[cfg(test)] in lib.rs.
+# Run tests with: cargo test --features testutils
 [features]
 testutils = ["soroban-sdk/testutils"]
 
 [dependencies]
-# Pinned to an exact version to prevent silent breakage from minor/patch bumps.
-# Soroban minor versions can change storage cost models, instruction limits, or
-# XDR encoding in ways that break deployed contracts.
-# To upgrade: test on testnet, update both entries below and Cargo.lock, then
-# document the new version in contracts/README.md.
+# Keep Soroban SDK pinned to an exact version to avoid unexpected changes
+# to contract behavior, storage costs, instruction limits, or XDR encoding.
+# When upgrading, update Cargo.lock and validate against testnet.
 soroban-sdk = { version = "=20.5.0" }
 
 [dev-dependencies]
@@ -42,4 +40,3 @@ lto = true
 [profile.release-with-logs]
 inherits = "release"
 debug-assertions = true
-
