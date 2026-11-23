@@ -10,13 +10,13 @@ This document defines the retention policy, access controls, and archival proces
 
 ## Audit Event Categories
 
-| Category | Source | Retention Period | Storage |
-|----------|--------|-----------------|---------|
-| Admin mutations | `audit_log` table (middleware) | 2 years | PostgreSQL |
-| Application errors | Winston rotated logs | 90 days | Filesystem / Render |
-| Sentry error events | Sentry dashboard | 90 days (free tier) | Sentry cloud |
-| Health check failures | Winston rotated logs | 90 days | Filesystem / Render |
-| Authentication attempts | Winston rotated logs | 90 days | Filesystem / Render |
+| Category                | Source                         | Retention Period    | Storage             |
+| ----------------------- | ------------------------------ | ------------------- | ------------------- |
+| Admin mutations         | `audit_log` table (middleware) | 2 years             | PostgreSQL          |
+| Application errors      | Winston rotated logs           | 90 days             | Filesystem / Render |
+| Sentry error events     | Sentry dashboard               | 90 days (free tier) | Sentry cloud        |
+| Health check failures   | Winston rotated logs           | 90 days             | Filesystem / Render |
+| Authentication attempts | Winston rotated logs           | 90 days             | Filesystem / Render |
 
 ### Admin Mutations (audit_log table)
 
@@ -27,6 +27,11 @@ The `audit_log` table records every successful admin mutation under `/splits/adm
 - `ip_hash` — SHA-256 of the request IP, truncated to 16 hex chars
 - `request_id` — correlation ID for request tracing
 - `payload` — the request body (JSONB)
+
+The same table also holds payout attempt status transitions
+(`action = payout_attempt_transition`, #1643). They record the prior and next
+status with correlation metadata. See
+[ledger-transaction-finality.md](./ledger-transaction-finality.md#operator-notes).
 
 **Retention:** 2 years from `performed_at`. Rows older than 2 years are candidates for archival or deletion.
 
@@ -44,12 +49,12 @@ Sentry captures error events with full stack traces and context. The free tier r
 
 ## Access Controls
 
-| Role | Audit Log Access | Application Log Access | Sentry Access |
-|------|-----------------|----------------------|---------------|
-| Platform admin | Read (via SQL) | Read (via Render dashboard) | Read |
-| Developer | Read (via SQL) | Read (via Render dashboard) | Read |
-| Support | None | None | None |
-| External | None | None | None |
+| Role           | Audit Log Access | Application Log Access      | Sentry Access |
+| -------------- | ---------------- | --------------------------- | ------------- |
+| Platform admin | Read (via SQL)   | Read (via Render dashboard) | Read          |
+| Developer      | Read (via SQL)   | Read (via Render dashboard) | Read          |
+| Support        | None             | None                        | None          |
+| External       | None             | None                        | None          |
 
 ### Audit Log Query Access
 
@@ -109,12 +114,14 @@ COPY (
 Quarterly, a platform administrator should:
 
 1. Query for audit log rows older than 2 years:
+
    ```sql
    SELECT COUNT(*) FROM audit_log
    WHERE performed_at < NOW() - INTERVAL '2 years';
    ```
 
 2. If rows exist, export them to cold storage before deletion:
+
    ```sql
    -- Export to CSV before deletion
    COPY (SELECT * FROM audit_log WHERE performed_at < NOW() - INTERVAL '2 years')
@@ -122,6 +129,7 @@ Quarterly, a platform administrator should:
    ```
 
 3. Delete the archived rows:
+
    ```sql
    DELETE FROM audit_log
    WHERE performed_at < NOW() - INTERVAL '2 years';
@@ -137,11 +145,11 @@ In the event of a security incident, audit logs may be preserved beyond the stan
 
 The database connection pool should be configured to handle audit log writes without exhausting connections:
 
-| Setting | Recommended Value | Env Variable | Rationale |
-|---------|-------------------|--------------|-----------|
-| Pool max connections | 10-20 | `DATABASE_POOL_MAX` | Sufficient for concurrent admin mutations + regular traffic |
-| Idle timeout | 30000ms | `DATABASE_POOL_IDLE_MS` | Default; releases idle connections promptly |
-| Connection timeout | 2000ms | `DATABASE_POOL_CONN_TIMEOUT_MS` | Fails fast when pool is exhausted |
+| Setting              | Recommended Value | Env Variable                    | Rationale                                                   |
+| -------------------- | ----------------- | ------------------------------- | ----------------------------------------------------------- |
+| Pool max connections | 10-20             | `DATABASE_POOL_MAX`             | Sufficient for concurrent admin mutations + regular traffic |
+| Idle timeout         | 30000ms           | `DATABASE_POOL_IDLE_MS`         | Default; releases idle connections promptly                 |
+| Connection timeout   | 2000ms            | `DATABASE_POOL_CONN_TIMEOUT_MS` | Fails fast when pool is exhausted                           |
 
 When the pool is saturated, the health readiness check (`/health/ready`) will return 503 with `database_unavailable`, preventing further traffic from reaching the database.
 

@@ -28,7 +28,9 @@ import {
   PayoutAttemptConflictError,
   registerPayoutAttempt,
   updatePayoutAttemptFromObservation,
+  type PayoutAuditContext,
 } from "../services/transaction-recovery.js";
+import { hashIp } from "../middleware/payments-admin.js";
 
 export const transactionsRouter = Router();
 
@@ -39,6 +41,15 @@ const payoutHistoryService = createPayoutHistoryService();
 // the caller's own rate limit. Protects the DB and the response from an
 // unbounded query even for a fully authorized, well-intentioned caller.
 const EXPORT_MAX_ROWS = 50_000;
+
+/** Correlation metadata for payout transition audit rows (#1643). */
+function payoutAuditContext(req: Request, res: Response): PayoutAuditContext {
+  const requestId = res.locals.requestId;
+  return {
+    ...(typeof requestId === "string" && requestId ? { correlationId: requestId } : {}),
+    ipHash: hashIp(req.ip),
+  };
+}
 
 function formatPayoutAttempt(attempt: TransactionAttempt) {
   return {
@@ -70,12 +81,17 @@ transactionsRouter.post(
       }
 
       const networkPassphrase = getEnv().SOROBAN_NETWORK_PASSPHRASE;
-      const attempt = await registerPayoutAttempt(getDataSource(), {
-        txHash: parsed.data.txHash.toLowerCase(),
-        projectId: parsed.data.projectId,
-        sourceAccount: parsed.data.sourceAccount,
-        networkPassphrase,
-      });
+      const attempt = await registerPayoutAttempt(
+        getDataSource(),
+        {
+          txHash: parsed.data.txHash.toLowerCase(),
+          projectId: parsed.data.projectId,
+          sourceAccount: parsed.data.sourceAccount,
+          networkPassphrase,
+        },
+        undefined,
+        payoutAuditContext(req, res),
+      );
       return res.status(200).json(formatPayoutAttempt(attempt));
     } catch (error) {
       if (error instanceof PayoutAttemptConflictError) {
@@ -130,6 +146,8 @@ transactionsRouter.get(
             ? { ledger: observation.ledger }
             : {}),
         },
+        undefined,
+        payoutAuditContext(req, res),
       );
       return res.status(200).json(formatPayoutAttempt(reconciled));
     } catch (error) {

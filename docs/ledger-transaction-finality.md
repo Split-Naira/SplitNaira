@@ -12,14 +12,14 @@ like on proof-of-work chains. Ledgers close roughly every 5–6 seconds.
 
 The backend still applies a per-network policy, for operational reasons:
 
-| Network | Passphrase | `confirmationDepth` | `submissionTimeoutLedgers` | Resets possible |
-|---|---|---|---|---|
-| mainnet | `Public Global Stellar Network ; September 2015` | 1 | 120 (~10 min) | No |
-| testnet | `Test SDF Network ; September 2015` | 0 | 120 | Yes (periodic SDF resets) |
-| futurenet | `Test SDF Future Network ; October 2022` | 0 | 120 | Yes (frequent) |
-| standalone | `Standalone Network ; February 2017` | 0 | 60 | Yes (local container) |
+| Network    | Passphrase                                       | `confirmationDepth` | `submissionTimeoutLedgers` | Resets possible           |
+| ---------- | ------------------------------------------------ | ------------------- | -------------------------- | ------------------------- |
+| mainnet    | `Public Global Stellar Network ; September 2015` | 1                   | 120 (~10 min)              | No                        |
+| testnet    | `Test SDF Network ; September 2015`              | 0                   | 120                        | Yes (periodic SDF resets) |
+| futurenet  | `Test SDF Future Network ; October 2022`         | 0                   | 120                        | Yes (frequent)            |
+| standalone | `Standalone Network ; February 2017`             | 0                   | 60                         | Yes (local container)     |
 
-- **`confirmationDepth`** is the number of ledgers that must close *after* the
+- **`confirmationDepth`** is the number of ledgers that must close _after_ the
   inclusion ledger before the backend books the transaction as `completed`. On
   mainnet we require 1. That isn't for consensus safety. It makes sure the
   load-balanced RPC we read from, and the event listener that writes
@@ -84,6 +84,38 @@ Only `final` maps to `TransactionStatus = "completed"`. `included` and
   conflicting failure. A failed or expired attempt can be retried only by
   building and signing a fresh transaction; the failed signed envelope is never
   reused. Check the recovery endpoint before retrying an unconfirmed payout.
+- Every payout attempt status change is written to `audit_log` with
+  `action = payout_attempt_transition` (#1643), in the same database
+  transaction as the status update. If the audit row can't be written, the
+  status change is rolled back, so the trail can't miss a transition. Each row
+  stores:
+  - `request_id`: the request's correlation id (`x-request-id` /
+    `x-correlation-id`). Outside a request, a generated UUID is used.
+  - `actor` (`system:payout-recovery` unless a principal is supplied) and
+    `ip_hash` (`system` outside a request).
+  - `payload`: `attemptId`, `txHash`, `projectId`, `previousStatus`,
+    `nextStatus`, `previousFailureCode`, `failureCode`, `failureLedger`, the
+    RPC `observation` (`status`, `ledger`) and `occurredAt` (epoch ms).
+
+  Registration writes the first row (`previousStatus: null`, `nextStatus:
+pending`). Re-registering a hash and still-pending checks write no row.
+  Allowed transitions are `pending -> failed | completed` and
+  `failed -> completed`. `completed` is terminal. Updates are guarded on the
+  status that was read, so `previousStatus` is always the state actually
+  overwritten, and a concurrent writer's change is never reverted.
+  `verifyPayoutAuditTrail(rows, currentStatus)` in
+  `backend/src/services/transaction-recovery.ts` checks that a hash's rows,
+  oldest first, form an unbroken chain from registration to the current
+  status. To pull one attempt's trail:
+
+  ```sql
+  SELECT request_id, performed_at, payload
+  FROM audit_log
+  WHERE action = 'payout_attempt_transition'
+    AND payload->>'txHash' = '<hash>'
+  ORDER BY performed_at;
+  ```
+
 - To change a policy value, edit `FINALITY_POLICIES` and update the table above
   in the same PR. The tests assert that mainnet stays at least as strict as
   every resettable network.
