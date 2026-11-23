@@ -50,6 +50,12 @@ mod reliability_tests;
 mod tests;
 #[cfg(test)]
 mod ttl_renewal_tests;
+#[cfg(test)]
+mod metadata_alias_boundary_tests;
+#[cfg(test)]
+mod ownership_transfer_edge_tests;
+#[cfg(test)]
+mod distribution_rollback_tests;
 
 use errors::SplitError;
 
