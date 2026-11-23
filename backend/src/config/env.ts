@@ -97,6 +97,14 @@ const backendEnvSchema = z.object({
 
   RATE_LIMIT_WINDOW_MS: z.string().optional(),
   RATE_LIMIT_MAX: z.string().optional(),
+
+  WALLET_CHALLENGE_TTL_MS: z
+    .string()
+    .optional()
+    .refine(
+      (val) => val === undefined || (Number.isInteger(Number(val)) && Number(val) > 0),
+      "WALLET_CHALLENGE_TTL_MS must be a positive integer",
+    ),
   SHUTDOWN_FORCE_TIMEOUT_MS: z.string().optional(),
 
   READ_CACHE_TTL_MS: z

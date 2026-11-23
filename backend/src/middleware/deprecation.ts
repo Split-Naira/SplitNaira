@@ -52,6 +52,18 @@ export const API_DEPRECATIONS: Record<string, DeprecationPolicy> = {
     documentation:
       "GET /health is a backwards-compatibility alias for GET /health/ready and is scheduled for removal.",
   },
+  "wallet-login-address-only": {
+    key: "wallet-login-address-only",
+    // Issue #1232: signing in with nothing but a public wallet address proves
+    // no ownership. The signed flow (`/auth/wallet/challenge` +
+    // `/auth/wallet/verify`) is the replacement; this endpoint is kept only
+    // until existing clients migrate.
+    deprecatedAt: "2026-11-22T00:00:00.000Z",
+    sunset: "2027-06-30T00:00:00.000Z",
+    replacement: "/auth/wallet/verify",
+    documentation:
+      "POST /users/login authenticates from a public wallet address alone. Use the signed wallet challenge flow instead.",
+  },
 };
 
 /** HTTP-date (IMF-fixdate) formatter used by RFC 9745 / RFC 8594 headers. */

@@ -1038,7 +1038,12 @@ registry.registerPath({
   method: "post",
   path: "/users/login",
   summary: "Log in by wallet address",
-  description: "Returns a JWT for an active registered wallet. Five failed attempts within 15 minutes lock that wallet for 15 minutes. Unknown, inactive, deleted, and locked wallets receive the same 401 response. The existing per-IP limiter may also return 429.",
+  description:
+    "Deprecated by the signed wallet challenge flow (Issue #1232): this endpoint authenticates from a public wallet address alone. " +
+    "Returns a JWT for an active registered wallet. Five failed attempts within 15 minutes lock that wallet for 15 minutes. " +
+    "Unknown, inactive, deleted, and locked wallets receive the same 401 response. The existing per-IP limiter may also return 429. " +
+    "Migrate to POST /auth/wallet/challenge followed by POST /auth/wallet/verify.",
+  deprecated: true,
   tags: ["Users"],
   request: {
     body: {
@@ -1070,6 +1075,91 @@ registry.registerPath({
       },
       serverError: true,
     }),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/auth/wallet/challenge",
+  summary: "Request a signed wallet login challenge",
+  description:
+    "Issues a short-lived, single-use challenge (default 5 minutes, see WALLET_CHALLENGE_TTL_MS) bound to one Stellar account address. " +
+    "The wallet must sign the returned `challenge` string with the Ed25519 key behind the address and submit the base64 signature to " +
+    "POST /auth/wallet/verify. Requesting a new challenge does not invalidate earlier ones; each is single-use.",
+  tags: ["Auth"],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: z.object({ walletAddress: stellarAddressSchema }),
+        },
+      },
+    },
+  },
+  responses: {
+    201: {
+      description: "Challenge issued",
+      content: {
+        "application/json": {
+          schema: z.object({
+            challengeId: z.string().uuid().describe("Pass this to POST /auth/wallet/verify"),
+            walletAddress: z.string(),
+            challenge: z
+              .string()
+              .describe("Exact UTF-8 message the wallet must sign; do not trim or reformat it"),
+            issuedAt: z.iso.datetime(),
+            expiresAt: z.iso.datetime(),
+            expiresInSeconds: z.number().int().positive(),
+            requestId: z.string().optional(),
+          }),
+        },
+      },
+    },
+    ...standardErrorResponses({ badRequest: true, rateLimited: true, serverError: true }),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/auth/wallet/verify",
+  summary: "Verify a wallet signature and issue a JWT",
+  description:
+    "Verifies the base64 Ed25519 signature over the exact challenge string against the address the challenge was issued for, then returns " +
+    "a JWT bearer token for an active registered account. Unknown, expired, reused, mismatched, and malformed challenges fail with 401; " +
+    "the signature is verified before the account lookup, and the challenge is consumed exactly once.",
+  tags: ["Auth"],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            walletAddress: stellarAddressSchema,
+            challengeId: z.string().uuid(),
+            signature: z
+              .string()
+              .min(1)
+              .max(512)
+              .describe("Base64-encoded 64-byte Ed25519 signature over the challenge string"),
+          }),
+          example: {
+            walletAddress: EXAMPLE_OWNER,
+            challengeId: "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d",
+            signature: "OUq3...base64-encoded-ed25519-signature...==",
+          },
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Signature verified; authenticated user with JWT",
+      content: {
+        "application/json": {
+          schema: userResponseSchema.extend({ token: z.string(), requestId: z.string().optional() }),
+        },
+      },
+    },
+    ...standardErrorResponses({ badRequest: true, unauthorized: true, rateLimited: true, serverError: true }),
   },
 });
 
