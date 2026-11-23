@@ -32,15 +32,36 @@ export const payoutAttemptSchema = z.object({
 });
 
 export const payoutRecoveryStatusSchema = z.object({
-  txHash: z.string(),
-  projectId: z.string(),
-  sourceAccount: z.string(),
-  networkPassphrase: z.string(),
-  submittedAt: z.number().int(),
-  status: z.enum(["pending", "completed", "failed"]),
-  failureCode: z.string().nullable(),
-  failureLedger: z.number().int().nullable(),
-  lastCheckedAt: z.number().int().nullable(),
+  txHash: z.string().describe("Lowercase hex transaction hash used as the recovery idempotency key"),
+  projectId: z.string().describe("Project the payout belongs to"),
+  sourceAccount: z.string().describe("Stellar account that signed and submitted the payout"),
+  networkPassphrase: z.string().describe("Network the transaction was submitted to"),
+  submittedAt: z.number().int().describe("Unix epoch milliseconds when the attempt was first registered"),
+  status: z
+    .enum(["pending", "completed", "failed"])
+    .describe(
+      "`pending` means the outcome is unknown: the transaction was accepted for submission but has " +
+        "not been confirmed or rejected on-chain yet. Keep polling this endpoint; do not resubmit. " +
+        "`completed` is final. `failed` is final and is the only state in which a retry may be safe.",
+    ),
+  failureCode: z
+    .string()
+    .nullable()
+    .describe(
+      "Null unless `status` is `failed`. `transaction_failed` means the network included a failed " +
+        "transaction (see `failureLedger`). `transaction_expired` means the hash was still NOT_FOUND " +
+        "after the submission validity window, so it will never be included.",
+    ),
+  failureLedger: z
+    .number()
+    .int()
+    .nullable()
+    .describe("Ledger containing the failed transaction, or null for `transaction_expired`"),
+  lastCheckedAt: z
+    .number()
+    .int()
+    .nullable()
+    .describe("Unix epoch milliseconds of the last network reconciliation, or null before the first check"),
 });
 
 // Transaction export query schema (#1332).
