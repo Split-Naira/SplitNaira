@@ -1,35 +1,55 @@
+
 #!/usr/bin/env node
+
 /**
  * Lightweight static analysis for the SplitNaira Soroban contract.
- * Reports public function count, error codes, and event types without
- * requiring a live Soroban node.
  *
- * Usage: node contracts/scripts/analyze-contract.mjs
+ * Reports the number of public functions, error codes, and event types
+ * without requiring a live Soroban node.
+ *
+ * Usage:
+ *   node contracts/scripts/analyze-contract.mjs
  */
+
 import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const CONTRACT_ROOT = resolve(SCRIPT_DIR, "..");
 
-function read(file) {
-  return readFileSync(resolve(root, file), "utf8");
+/**
+ * Reads a contract file relative to the contracts directory.
+ *
+ * @param {string} file - Relative path to the file to read.
+ * @returns {string} The file contents as UTF-8 text.
+ */
+function readContractFile(file) {
+  const filePath = resolve(CONTRACT_ROOT, file);
+  return readFileSync(filePath, "utf8");
 }
 
-function count(src, re) {
-  return (src.match(re) ?? []).length;
+/**
+ * Counts matches of a regular expression in a source string.
+ *
+ * @param {string} source - Source text to analyze.
+ * @param {RegExp} pattern - Pattern used to identify matching occurrences.
+ * @returns {number} The total number of matches.
+ */
+function countMatches(source, pattern) {
+  return (source.match(pattern) ?? []).length;
 }
 
-const lib    = read("lib.rs");
-const errors = read("errors.rs");
-const events = read("events.rs");
+const contractSource = readContractFile("lib.rs");
+const errorSource = readContractFile("errors.rs");
+const eventSource = readContractFile("events.rs");
 
-const fns      = count(lib,    /pub fn /g);
-const errCodes = count(errors, /= \d+,/g);
-const evTypes  = count(events, /pub struct /g);
+const publicFunctionCount = countMatches(contractSource, /pub fn /g);
+const errorCodeCount = countMatches(errorSource, /= \d+,/g);
+const eventTypeCount = countMatches(eventSource, /pub struct /g);
 
-console.log("Contract surface analysis");
+console.log("Contract Surface Analysis");
 console.log("--------------------------");
-console.log(`Public functions : ${fns}`);
-console.log(`Error codes      : ${errCodes}`);
-console.log(`Event types      : ${evTypes}`);
+console.log(`Public functions : ${publicFunctionCount}`);
+console.log(`Error codes      : ${errorCodeCount}`);
+console.log(`Event types      : ${eventTypeCount}`);
