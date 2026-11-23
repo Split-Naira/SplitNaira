@@ -780,6 +780,281 @@
         ]
       }
     },
+    "/auth/wallet/challenge": {
+      "post": {
+        "description": "Issues a short-lived, single-use challenge (default 5 minutes, see WALLET_CHALLENGE_TTL_MS) bound to one Stellar account address. The wallet must sign the returned `challenge` string with the Ed25519 key behind the address and submit the base64 signature to POST /auth/wallet/verify. Requesting a new challenge does not invalidate earlier ones; each is single-use.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "walletAddress": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "walletAddress"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "challenge": {
+                      "description": "Exact UTF-8 message the wallet must sign; do not trim or reformat it",
+                      "type": "string"
+                    },
+                    "challengeId": {
+                      "description": "Pass this to POST /auth/wallet/verify",
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "expiresInSeconds": {
+                      "exclusiveMinimum": true,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "issuedAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "walletAddress": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "challengeId",
+                    "walletAddress",
+                    "challenge",
+                    "issuedAt",
+                    "expiresAt",
+                    "expiresInSeconds"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Challenge issued"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "RATE_LIMIT_EXCEEDED",
+                  "message": "Too many requests. Please retry after the rate limit window.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Request a signed wallet login challenge",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/auth/wallet/verify": {
+      "post": {
+        "description": "Verifies the base64 Ed25519 signature over the exact challenge string against the address the challenge was issued for, then returns a JWT bearer token for an active registered account. Unknown, expired, reused, mismatched, and malformed challenges fail with 401; the signature is verified before the account lookup, and the challenge is consumed exactly once.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "challengeId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d",
+                "signature": "OUq3...base64-encoded-ed25519-signature...==",
+                "walletAddress": "GBJRKIYXAAFD3NZCWJXGUTNKYUQFZC2ANS6LRMBPJCE4IZSMJJMZPQBT"
+              },
+              "schema": {
+                "properties": {
+                  "challengeId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "signature": {
+                    "description": "Base64-encoded 64-byte Ed25519 signature over the challenge string",
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "walletAddress": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "walletAddress",
+                  "challengeId",
+                  "signature"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "alias": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "isActive": {
+                      "type": "boolean"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "enum": [
+                        "company",
+                        "customer",
+                        "driver"
+                      ],
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "walletAddress": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "walletAddress",
+                    "role",
+                    "isActive",
+                    "createdAt",
+                    "updatedAt",
+                    "token"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Signature verified; authenticated user with JWT"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "UNAUTHORIZED",
+                  "message": "Missing or invalid bearer token / admin API key.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "RATE_LIMIT_EXCEEDED",
+                  "message": "Too many requests. Please retry after the rate limit window.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "INTERNAL_ERROR",
+                  "message": "An unexpected error occurred. Please try again later.",
+                  "requestId": "b6f1a2d4-8c3e-4a1b-9f2e-6d5c7a8b9c0d"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Verify a wallet signature and issue a JWT",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
     "/events": {
       "get": {
         "description": "Opens a Server-Sent Events stream and emits a `transaction_update` event each time the backend observes an update for the given `txHash`. Limited to 5 concurrent subscribers per `txHash` (configurable via `SSE_MAX_LISTENERS_PER_TXHASH`); exceeding it returns 429.\n\nExample frame:\n```\nevent: transaction_update\ndata: {\"txHash\":\"3389e9f0f1a65f19736cacf544c2e825313e8447f569233bb8db39aa607c8fc\",\"status\":\"pending\"}\n\n```",
@@ -4336,7 +4611,7 @@
     },
     "/transactions/recovery/attempts": {
       "post": {
-        "description": "Stores the transaction hash and caller-reported payout context after Soroban accepts a distribution. Network status is always verified server-side.",
+        "description": "Stores the transaction hash and caller-reported payout context after Soroban accepts a distribution. The response is always the persisted attempt with `status: \"pending\"` on first registration: acceptance by the network does **not** mean the payout succeeded, so the outcome must be resolved by polling `GET /transactions/recovery/attempts/{txHash}`. Registration is idempotent for the same hash and metadata; re-registering the same hash with different metadata returns 409 `payout_attempt_conflict`.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -4375,27 +4650,34 @@
                 "schema": {
                   "properties": {
                     "failureCode": {
+                      "description": "Null unless `status` is `failed`. `transaction_failed` means the network included a failed transaction (see `failureLedger`). `transaction_expired` means the hash was still NOT_FOUND after the submission validity window, so it will never be included.",
                       "nullable": true,
                       "type": "string"
                     },
                     "failureLedger": {
+                      "description": "Ledger containing the failed transaction, or null for `transaction_expired`",
                       "nullable": true,
                       "type": "integer"
                     },
                     "lastCheckedAt": {
+                      "description": "Unix epoch milliseconds of the last network reconciliation, or null before the first check",
                       "nullable": true,
                       "type": "integer"
                     },
                     "networkPassphrase": {
+                      "description": "Network the transaction was submitted to",
                       "type": "string"
                     },
                     "projectId": {
+                      "description": "Project the payout belongs to",
                       "type": "string"
                     },
                     "sourceAccount": {
+                      "description": "Stellar account that signed and submitted the payout",
                       "type": "string"
                     },
                     "status": {
+                      "description": "`pending` means the outcome is unknown: the transaction was accepted for submission but has not been confirmed or rejected on-chain yet. Keep polling this endpoint; do not resubmit. `completed` is final. `failed` is final and is the only state in which a retry may be safe.",
                       "enum": [
                         "pending",
                         "completed",
@@ -4404,9 +4686,11 @@
                       "type": "string"
                     },
                     "submittedAt": {
+                      "description": "Unix epoch milliseconds when the attempt was first registered",
                       "type": "integer"
                     },
                     "txHash": {
+                      "description": "Lowercase hex transaction hash used as the recovery idempotency key",
                       "type": "string"
                     }
                   },
@@ -4425,7 +4709,7 @@
                 }
               }
             },
-            "description": "Persisted payout attempt"
+            "description": "Persisted payout attempt. `status` is `pending` on first registration, meaning the on-chain outcome is not known yet; poll the GET endpoint instead of submitting the payout again."
           },
           "400": {
             "content": {
@@ -4438,7 +4722,7 @@
             "description": "Validation error"
           },
           "409": {
-            "description": "Transaction hash is already associated with different metadata"
+            "description": "Transaction hash is already associated with different metadata (`payout_attempt_conflict`). The original attempt is untouched; register a retry only under its own new hash."
           },
           "500": {
             "content": {
@@ -4464,7 +4748,7 @@
     },
     "/transactions/recovery/attempts/{txHash}": {
       "get": {
-        "description": "Checks the stored transaction hash against Soroban RPC and updates its persisted recovery status. A retry is safe only after a failed or expired result.",
+        "description": "Checks the stored transaction hash against Soroban RPC and updates its persisted recovery status.\n\nUnknown outcomes: when Soroban RPC reports `NOT_FOUND`, the transaction may still be in flight, so the attempt stays `pending` and this endpoint must be polled. `NOT_FOUND` is never treated as a failure on its own. If the hash is still unknown 6 minutes after `submittedAt`, the attempt becomes `failed` with `failureCode: \"transaction_expired\"`; a transaction that can no longer be included may be safely retried under a new hash.\n\nSafe retries: never resubmit while `status` is `pending` — the original transaction may still land, and resubmitting can pay collaborators twice. Only `failed` is final and eligible for a retry. A retry must be a newly built, newly signed transaction with its own hash; hashes are immutable and replaying one fails on-chain. `completed` is final even if a later observation is stale.",
         "parameters": [
           {
             "in": "path",
@@ -4483,27 +4767,34 @@
                 "schema": {
                   "properties": {
                     "failureCode": {
+                      "description": "Null unless `status` is `failed`. `transaction_failed` means the network included a failed transaction (see `failureLedger`). `transaction_expired` means the hash was still NOT_FOUND after the submission validity window, so it will never be included.",
                       "nullable": true,
                       "type": "string"
                     },
                     "failureLedger": {
+                      "description": "Ledger containing the failed transaction, or null for `transaction_expired`",
                       "nullable": true,
                       "type": "integer"
                     },
                     "lastCheckedAt": {
+                      "description": "Unix epoch milliseconds of the last network reconciliation, or null before the first check",
                       "nullable": true,
                       "type": "integer"
                     },
                     "networkPassphrase": {
+                      "description": "Network the transaction was submitted to",
                       "type": "string"
                     },
                     "projectId": {
+                      "description": "Project the payout belongs to",
                       "type": "string"
                     },
                     "sourceAccount": {
+                      "description": "Stellar account that signed and submitted the payout",
                       "type": "string"
                     },
                     "status": {
+                      "description": "`pending` means the outcome is unknown: the transaction was accepted for submission but has not been confirmed or rejected on-chain yet. Keep polling this endpoint; do not resubmit. `completed` is final. `failed` is final and is the only state in which a retry may be safe.",
                       "enum": [
                         "pending",
                         "completed",
@@ -4512,9 +4803,11 @@
                       "type": "string"
                     },
                     "submittedAt": {
+                      "description": "Unix epoch milliseconds when the attempt was first registered",
                       "type": "integer"
                     },
                     "txHash": {
+                      "description": "Lowercase hex transaction hash used as the recovery idempotency key",
                       "type": "string"
                     }
                   },
@@ -4533,7 +4826,7 @@
                 }
               }
             },
-            "description": "Latest payout recovery status"
+            "description": "Latest payout recovery status. `pending` means the outcome is unconfirmed (including RPC `NOT_FOUND`): keep polling. `completed` is final. `failed` with `transaction_failed` or `transaction_expired` is final and is the only state where a retry may be safe."
           },
           "400": {
             "content": {
@@ -4697,7 +4990,8 @@
     },
     "/users/login": {
       "post": {
-        "description": "Returns a JWT for an active registered wallet. Five failed attempts within 15 minutes lock that wallet for 15 minutes. Unknown, inactive, deleted, and locked wallets receive the same 401 response. The existing per-IP limiter may also return 429.",
+        "deprecated": true,
+        "description": "Deprecated by the signed wallet challenge flow (Issue #1232): this endpoint authenticates from a public wallet address alone. Returns a JWT for an active registered wallet. Five failed attempts within 15 minutes lock that wallet for 15 minutes. Unknown, inactive, deleted, and locked wallets receive the same 401 response. The existing per-IP limiter may also return 429. Migrate to POST /auth/wallet/challenge followed by POST /auth/wallet/verify.",
         "requestBody": {
           "content": {
             "application/json": {

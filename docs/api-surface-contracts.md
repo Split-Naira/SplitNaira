@@ -126,6 +126,50 @@ The response shape is documented in `docs/openapi.yaml`; the codec lives in
 `backend/src/__tests__/keyset-cursor.test.ts` and
 `backend/src/__tests__/transactions-pagination.test.ts`.
 
+## Unknown payout outcomes
+
+`POST /transactions/recovery/attempts` only records that a hash was submitted,
+so its response is `status: "pending"` — not proof the payout landed. Clients
+must poll `GET /transactions/recovery/attempts/{txHash}`:
+
+| Observation from Soroban RPC | Persisted status                             | Client action               |
+| :--------------------------- | :------------------------------------------- | :-------------------------- |
+| `NOT_FOUND`                  | `pending` (unknown, may still be in flight)  | Keep polling; do not retry. |
+| `NOT_FOUND` past 6 minutes   | `failed`, `failureCode: transaction_expired` | Retry under a new hash.     |
+| `SUCCESS`                    | `completed` (final)                          | Stop polling.               |
+| `FAILED`                     | `failed`, `failureCode: transaction_failed`  | Retry under a new hash.     |
+
+Never resubmit while `pending`: the original transaction can still land and a
+second submission can pay collaborators twice. Only `failed` is final and
+retryable, and a retry must be a newly built, signed transaction with its own
+hash. The descriptions and field guidance are generated into
+`docs/openapi.yaml` and pinned by
+`backend/src/__tests__/openapi-transaction-outcomes.test.ts`.
+
+## Split response casing and compatibility window
+
+Split/project responses are accepted and emitted in two casings during the
+compatibility window that ends **2027-01-01**:
+
+| Current (preferred) | Legacy alias         | Notes                          |
+| :------------------ | :------------------- | :----------------------------- |
+| `projectId`         | `project_id`         |                                |
+| `projectType`       | `project_type`       |                                |
+| `totalDistributed`  | `total_distributed`  | Stays a string (stroops).      |
+| `distributionRound` | `distribution_round` |                                |
+| `basisPoints`       | `basis_points`       | Inside each `collaborators[]`. |
+
+`camelCase` wins when a payload contains both forms. `balance` and
+`totalDistributed` remain decimal strings end-to-end so 64-bit stroop amounts are
+never rounded through a JavaScript number. The legacy aliases were frozen on
+2026-01-01 and may only be removed after the sunset date with a major version
+bump and a frontend release that no longer reads them.
+
+The fixtures and field list live in
+`backend/src/fixtures/split-response.compatibility.ts`; the window, alias list,
+casing precedence, and boundary defaults are pinned by
+`backend/src/fixtures/split-response.compatibility.test.ts`.
+
 ## Per-route rate limits
 
 Route groups have deliberately distinct budgets (auth, admin, read, write,

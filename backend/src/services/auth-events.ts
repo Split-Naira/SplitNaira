@@ -27,7 +27,9 @@ export type AuthEventName =
   | "email_verification_resent"
   | "email_verified"
   | "email_change_requested"
-  | "email_change_confirmed";
+  | "email_change_confirmed"
+  | "wallet_challenge_issued"
+  | "wallet_signature_verified";
 
 export type AuthEventOutcome = "success" | "failure";
 

@@ -42,8 +42,44 @@ cargo test --manifest-path contracts/Cargo.toml --features testutils \
 
 - `authorization_tests.rs` — deep owner/admin boundary tests and the
   permissionless-distribution guarantee (issue #865).
+- `admin_token_authorization_tests.rs` — caller matrix for the admin token
+  operations (`allow_token`, `disallow_token`, `withdraw_unallocated`), issue
+  #1648. See below.
 - `failure_invariant_tests.rs` — rejected operations leave storage and
   balances untouched (issue #1486).
+
+## Admin token operations: caller matrix (issue #1648)
+
+`contracts/admin_token_authorization_tests.rs` runs every admin token
+operation as each persona against a funded project that also holds stray
+(unallocated) tokens. Run it with:
+
+```bash
+cargo test --manifest-path contracts/Cargo.toml admin_token_authorization
+```
+
+| Caller                        | `allow_token`  | `disallow_token` | `withdraw_unallocated` |
+| ----------------------------- | -------------- | ---------------- | ---------------------- |
+| Any caller, admin not set     | `AdminNotSet`  | `AdminNotSet`    | `AdminNotSet`          |
+| Project owner                 | `Unauthorized` | `Unauthorized`   | `Unauthorized`         |
+| Project collaborator          | `Unauthorized` | `Unauthorized`   | `Unauthorized`         |
+| Unrelated address             | `Unauthorized` | `Unauthorized`   | `Unauthorized`         |
+| Previous admin after rotation | `Unauthorized` | `Unauthorized`   | `Unauthorized`         |
+| Current admin                 | ok             | ok               | ok, up to unallocated  |
+
+Boundary cases the suite also pins:
+
+- The identity check runs before argument validation. A non-admin sending a
+  zero, negative, contract-recipient or overdraw withdrawal still gets
+  `Unauthorized`, and every rejection leaves the allowlist, token balances
+  and accounted project funds unchanged.
+- Each admin call demands the stored admin's signature. The withdrawal
+  recipient is not asked to sign.
+- `allow_token` is idempotent (no double count). `disallow_token` on a token
+  that is not listed is a no-op, and the count never underflows.
+- `withdraw_unallocated` accepts one stroop and the exact unallocated amount,
+  and rejects one stroop more with `InsufficientUnallocated`. Project funds
+  stay fully distributable afterwards, including after the token is delisted.
 
 ## Backend resource routes: persona matrix
 
@@ -68,14 +104,14 @@ Personas:
 
 Roles always come from the stored record, never from the request body.
 
-| Route | anonymous | malformed | owner | admin | editor | viewer | unrelated |
-|---|---|---|---|---|---|---|---|
-| `POST /collaboration/projects/:projectId/delete` | 401 | 400 | **200** | 403 | 403 | 403 | 403 |
-| `POST /collaboration/projects/:projectId/invitations` | 401 | 400 | **201** | **201** | 403 | 403 | 403 |
-| `POST /collaboration/invitations/:invitationId/cancel`¹ | 401 | 400 | **200** | **200** | 403 | 403 | 403 |
-| `POST /collaboration/projects/:projectId/transfer-ownership` | 401 | 400 | **200** | 403 | 403 | 403 | 403 |
-| `GET /collaboration/permissions/matrix` (public) | 200 | 200 | 200 | 200 | 200 | 200 | 200 |
-| `POST /collaboration/invitations/accept` (token-gated)² | 200 | — | — | — | — | — | — |
+| Route                                                        | anonymous | malformed | owner   | admin   | editor | viewer | unrelated |
+| ------------------------------------------------------------ | --------- | --------- | ------- | ------- | ------ | ------ | --------- |
+| `POST /collaboration/projects/:projectId/delete`             | 401       | 400       | **200** | 403     | 403    | 403    | 403       |
+| `POST /collaboration/projects/:projectId/invitations`        | 401       | 400       | **201** | **201** | 403    | 403    | 403       |
+| `POST /collaboration/invitations/:invitationId/cancel`¹      | 401       | 400       | **200** | **200** | 403    | 403    | 403       |
+| `POST /collaboration/projects/:projectId/transfer-ownership` | 401       | 400       | **200** | 403     | 403    | 403    | 403       |
+| `GET /collaboration/permissions/matrix` (public)             | 200       | 200       | 200     | 200     | 200    | 200    | 200       |
+| `POST /collaboration/invitations/accept` (token-gated)²      | 200       | —         | —       | —       | —      | —      | —         |
 
 ¹ In the test, the invitation was sent by the admin. Cancel is allowed for the
 inviter or the project owner (`forbidden_not_inviter` otherwise).
