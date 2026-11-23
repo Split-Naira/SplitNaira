@@ -33,6 +33,22 @@ const nextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            key: "Content-Security-Policy",
+            // Wallet adapters (Freighter, LOBSTR) inject scripts from their
+            // extension origins; they are allowed via 'self' since the browser
+            // treats extension scripts as same-origin relative to the extension
+            // context. connect-src covers RPC and API calls.
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline'",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: blob:",
+              "font-src 'self'",
+              "connect-src 'self' https:",
+              "frame-ancestors 'none'",
+            ].join("; "),
+          },
         ],
       },
     ];
