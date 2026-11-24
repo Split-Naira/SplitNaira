@@ -18,6 +18,18 @@ import { fileURLToPath } from "node:url";
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const CONTRACT_ROOT = resolve(SCRIPT_DIR, "..");
 
+const FILES = {
+  contract: "lib.rs",
+  errors: "errors.rs",
+  events: "events.rs",
+};
+
+const PATTERNS = {
+  publicFunctions: /\bpub\s+fn\s+/g,
+  errorCodes: /=\s*\d+\s*,/g,
+  eventTypes: /\bpub\s+struct\s+/g,
+};
+
 /**
  * Reads a contract file relative to the contracts directory.
  *
@@ -26,30 +38,81 @@ const CONTRACT_ROOT = resolve(SCRIPT_DIR, "..");
  */
 function readContractFile(file) {
   const filePath = resolve(CONTRACT_ROOT, file);
+
   return readFileSync(filePath, "utf8");
 }
 
 /**
- * Counts matches of a regular expression in a source string.
+ * Counts occurrences of a regular expression in source text.
  *
  * @param {string} source - Source text to analyze.
- * @param {RegExp} pattern - Pattern used to identify matching occurrences.
+ * @param {RegExp} pattern - Pattern used to identify matches.
  * @returns {number} The total number of matches.
  */
 function countMatches(source, pattern) {
-  return (source.match(pattern) ?? []).length;
+  const matches = source.match(pattern);
+
+  return matches?.length ?? 0;
 }
 
-const contractSource = readContractFile("lib.rs");
-const errorSource = readContractFile("errors.rs");
-const eventSource = readContractFile("events.rs");
+/**
+ * Analyzes the contract source files.
+ *
+ * @returns {{
+ *   publicFunctions: number,
+ *   errorCodes: number,
+ *   eventTypes: number
+ * }}
+ */
+function analyzeContract() {
+  const sources = Object.fromEntries(
+    Object.entries(FILES).map(([key, file]) => [
+      key,
+      readContractFile(file),
+    ])
+  );
 
-const publicFunctionCount = countMatches(contractSource, /pub fn /g);
-const errorCodeCount = countMatches(errorSource, /= \d+,/g);
-const eventTypeCount = countMatches(eventSource, /pub struct /g);
+  return {
+    publicFunctions: countMatches(
+      sources.contract,
+      PATTERNS.publicFunctions
+    ),
+    errorCodes: countMatches(
+      sources.errors,
+      PATTERNS.errorCodes
+    ),
+    eventTypes: countMatches(
+      sources.events,
+      PATTERNS.eventTypes
+    ),
+  };
+}
 
-console.log("Contract Surface Analysis");
-console.log("--------------------------");
-console.log(`Public functions : ${publicFunctionCount}`);
-console.log(`Error codes      : ${errorCodeCount}`);
-console.log(`Event types      : ${eventTypeCount}`);
+/**
+ * Prints the contract analysis results.
+ *
+ * @param {{
+ *   publicFunctions: number,
+ *   errorCodes: number,
+ *   eventTypes: number
+ * }} results - Contract analysis results.
+ */
+function printResults({
+  publicFunctions,
+  errorCodes,
+  eventTypes,
+}) {
+  console.log("Contract Surface Analysis");
+  console.log("--------------------------");
+  console.log(`Public functions : ${publicFunctions}`);
+  console.log(`Error codes      : ${errorCodes}`);
+  console.log(`Event types      : ${eventTypes}`);
+}
+
+function main() {
+  const results = analyzeContract();
+
+  printResults(results);
+}
+
+main();
