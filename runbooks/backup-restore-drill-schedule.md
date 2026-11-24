@@ -1,30 +1,55 @@
-# Database Backup Restore Drill Schedule
 
-Issue #1075. Backups exist, but restores must be drilled regularly to
-confirm they actually work.
+# Database Backup and Restore Drill Schedule
 
-## Cadence
-- Run a restore drill **quarterly**, and after any change to the backup
+**Issue:** #1075
+
+Backups must be regularly tested through restore drills to verify
+recoverability and ensure that database backups remain usable when
+needed.
+
+## 1. Drill Cadence
+
+- Conduct a restore drill **quarterly**.
+- Perform an additional drill after any change to the backup
   configuration or database version.
 
-## Owner
-- On-call backend engineer for the quarter schedules and runs the drill,
-  with a second engineer reviewing the evidence.
+## 2. Ownership and Responsibilities
 
-## Procedure
-1. Provision a scratch Postgres instance (not production).
-2. Restore the most recent automated backup into it.
-3. Run `npm run verify:data-integrity` against the restored instance.
-4. Spot-check row counts on `splits`, `payouts`, and `users` against
-   production.
+- The on-call backend engineer for the quarter is responsible for
+  scheduling and executing the restore drill.
+- A second engineer must review the drill results and supporting
+  evidence.
 
-## Success criteria
-- [ ] Restore completes without error.
-- [ ] Data integrity check passes.
-- [ ] Row counts match production within expected drift (pending writes
-      since the backup was taken).
+## 3. Restore Drill Procedure
 
-## Evidence capture
-- [ ] Record drill date, duration, engineer, and pass/fail in
-      `docs/audit-log-retention.md`'s linked tracking sheet (or attach
-      output logs to the drill ticket).
+1. Provision a scratch PostgreSQL instance isolated from production.
+2. Restore the most recent automated backup into the scratch instance.
+3. Run `npm run verify:data-integrity` against the restored database.
+4. Compare row counts for the `splits`, `payouts`, and `users` tables
+   against production, accounting for expected data changes since
+   the backup was taken.
+
+## 4. Success Criteria
+
+The restore drill is considered successful when all the following
+conditions are met:
+
+- [ ] The backup restores successfully without errors.
+- [ ] The data integrity verification completes successfully.
+- [ ] Row counts for `splits`, `payouts`, and `users` match production,
+      allowing for expected drift caused by writes occurring after
+      the backup was created.
+
+## 5. Evidence and Audit Trail
+
+For every restore drill, record the following information:
+
+- [ ] Drill date.
+- [ ] Restore duration.
+- [ ] Executing engineer.
+- [ ] Pass/fail result.
+- [ ] Supporting verification output and restore logs.
+
+Store the drill record in the tracking sheet linked from
+`docs/audit-log-retention.md`, or attach the supporting output logs
+to the corresponding drill ticket.
