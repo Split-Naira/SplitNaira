@@ -3258,7 +3258,8 @@ paths:
       description: Always scoped to the authenticated wallet from the bearer token,
         never a request parameter. format=csv (default) streams an
         injection-safe CSV of the full matching result set, capped at 50,000
-        rows. format=json returns one limit/offset page.
+        rows. format=json returns paginated records with stable keyset cursor
+        pagination matching /transactions/history.
       tags:
         - Transactions
       security:
@@ -3311,6 +3312,13 @@ paths:
             default: 0
           required: false
           name: offset
+          in: query
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 512
+          required: false
+          name: cursor
           in: query
       responses:
         "200":

@@ -102,7 +102,8 @@ the first registered deprecation.
 
 ## Transaction pagination contract
 
-`GET /transactions/history` and `GET /transactions/recipient/:walletAddress`
+`GET /transactions/history`, `GET /transactions/recipient/:walletAddress`, and
+the authenticated account-scoped `GET /transactions/export` (`format=json`)
 share one pagination contract (#1259):
 
 - **Stable order.** Rows are ordered by `(timestamp DESC, id DESC)`. `timestamp`
@@ -120,6 +121,9 @@ share one pagination contract (#1259):
   after the cursor.
 - **`hasMore`** is derived from a `limit + 1` probe, so a full last page is not
   reported as having a next page.
+- **Account scope.** `GET /transactions/export` enforces account isolation via
+  the verified bearer token (`req.user.walletAddress`), rejecting unauthenticated
+  callers with `401 UNAUTHORIZED` and ignoring client-supplied wallet addresses.
 
 The response shape is documented in `docs/openapi.yaml`; the codec lives in
 `backend/src/lib/keyset-cursor.ts` and is pinned by

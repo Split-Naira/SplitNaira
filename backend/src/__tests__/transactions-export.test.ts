@@ -19,6 +19,7 @@ const mockRecords = [
 
 const mockGetMany = vi.fn().mockResolvedValue(mockRecords);
 const mockGetManyAndCount = vi.fn().mockResolvedValue([mockRecords, mockRecords.length]);
+const mockGetCount = vi.fn().mockResolvedValue(mockRecords.length);
 
 const mockQueryBuilder = {
   andWhere: vi.fn().mockReturnThis(),
@@ -26,6 +27,7 @@ const mockQueryBuilder = {
   addOrderBy: vi.fn().mockReturnThis(),
   skip: vi.fn().mockReturnThis(),
   take: vi.fn().mockReturnThis(),
+  getCount: mockGetCount,
   getMany: mockGetMany,
   getManyAndCount: mockGetManyAndCount,
 };
@@ -50,6 +52,7 @@ vi.mock("../services/session-revocation.js", () => ({
 
 import { app } from "../index.js";
 import { signToken } from "../services/jwt.js";
+import { encodeTransactionCursor } from "../lib/keyset-cursor.js";
 
 describe("GET /transactions/export", () => {
   it("rejects a request with no bearer token", async () => {
@@ -72,7 +75,7 @@ describe("GET /transactions/export", () => {
     );
   });
 
-  it("returns a paginated JSON page for format=json", async () => {
+  it("returns a paginated JSON page with pagination metadata for format=json", async () => {
     const token = signToken(OWN_ADDRESS);
     const response = await request(app)
       .get("/transactions/export?format=json&limit=10&offset=0")
@@ -83,6 +86,48 @@ describe("GET /transactions/export", () => {
     expect(response.body).toHaveProperty("total", mockRecords.length);
     expect(response.body).toHaveProperty("limit", 10);
     expect(response.body).toHaveProperty("offset", 0);
+    expect(response.body).toHaveProperty("hasMore", false);
+    expect(response.body).toHaveProperty("nextCursor", null);
+    // Verify financial precision is preserved
+    expect(typeof response.body.transactions[0].amount).toBe("string");
+    expect(response.body.transactions[0].amount).toBe("1000");
+  });
+
+  it("accepts a valid cursor for format=json pagination", async () => {
+    const token = signToken(OWN_ADDRESS);
+    const cursor = encodeTransactionCursor({
+      timestamp: mockRecords[0].timestamp,
+      id: "11111111-1111-4111-8111-111111111111",
+    });
+    const response = await request(app)
+      .get(`/transactions/export?format=json&cursor=${encodeURIComponent(cursor)}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveProperty("transactions");
+    expect(response.body).toHaveProperty("total");
+    expect(response.body).toHaveProperty("hasMore");
+  });
+
+  it("rejects an invalid cursor with 400 VALIDATION_ERROR", async () => {
+    const token = signToken(OWN_ADDRESS);
+    const response = await request(app)
+      .get("/transactions/export?format=json&cursor=invalid-cursor-token!")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("VALIDATION_ERROR");
+    expect(response.body.details).toEqual({ cursor: "invalid" });
+  });
+
+  it("rejects limit above 100 with 400", async () => {
+    const token = signToken(OWN_ADDRESS);
+    const response = await request(app)
+      .get("/transactions/export?format=json&limit=101")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("VALIDATION_ERROR");
   });
 
   it("streams a CSV by default with a header row and a downloadable filename", async () => {

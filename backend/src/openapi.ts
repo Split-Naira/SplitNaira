@@ -1324,7 +1324,9 @@ registry.registerPath({
   path: "/transactions/export",
   summary: "Export the authenticated wallet's own transaction history",
   description:
-    "Always scoped to the authenticated wallet from the bearer token, never a request parameter. format=csv (default) streams an injection-safe CSV of the full matching result set, capped at 50,000 rows. format=json returns one limit/offset page.",
+    "Always scoped to the authenticated wallet from the bearer token, never a request parameter. " +
+    "format=csv (default) streams an injection-safe CSV of the full matching result set, capped at 50,000 rows. " +
+    "format=json returns paginated records with stable keyset cursor pagination matching /transactions/history.",
   tags: ["Transactions"],
   security: [{ bearerAuth: [] }],
   request: { query: transactionExportQuerySchema },

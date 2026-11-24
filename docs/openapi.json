@@ -3919,7 +3919,7 @@
     },
     "/transactions/export": {
       "get": {
-        "description": "Always scoped to the authenticated wallet from the bearer token, never a request parameter. format=csv (default) streams an injection-safe CSV of the full matching result set, capped at 50,000 rows. format=json returns one limit/offset page.",
+        "description": "Always scoped to the authenticated wallet from the bearer token, never a request parameter. format=csv (default) streams an injection-safe CSV of the full matching result set, capped at 50,000 rows. format=json returns paginated records with stable keyset cursor pagination matching /transactions/history.",
         "parameters": [
           {
             "in": "query",
@@ -3987,6 +3987,16 @@
               "minimum": 0,
               "nullable": true,
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
             }
           }
         ],

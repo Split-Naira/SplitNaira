@@ -77,8 +77,10 @@ export const transactionExportQuerySchema = z.object({
   status: z.enum(["pending", "completed", "failed"]).optional(),
   // Only meaningful for format=json, which returns one page rather than
   // streaming the full result set.
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  limit: z.coerce.number().int().min(1).max(MAX_TRANSACTION_PAGE_SIZE).default(20),
   offset: z.coerce.number().int().min(0).default(0),
+  /** Opaque `(timestamp, id)` cursor returned as `nextCursor` by a prior page. */
+  cursor: z.string().min(1).max(512).optional(),
 });
 
 // Transaction record schema

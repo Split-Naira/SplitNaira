@@ -85,11 +85,18 @@ vi.mock("../services/database.js", () => ({
   closeDatabase: async () => {},
 }));
 
+vi.mock("../services/session-revocation.js", () => ({
+  getSessionVersion: vi.fn(async () => 0),
+  getMaxSessionVersionForEmail: vi.fn(async () => 0),
+  revokeSessionsForEmail: vi.fn(async () => 1),
+}));
+
 import { transactionsRouter } from "../routes/transactions.js";
 import { createPayoutHistoryService } from "../services/PayoutHistoryService.js";
 import { errorHandler, notFoundHandler } from "../middleware/error.js";
 import { requestIdMiddleware } from "../middleware/request-id.js";
 import { encodeTransactionCursor } from "../lib/keyset-cursor.js";
+import { signToken } from "../services/jwt.js";
 
 const WALLET = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
 const OTHER_WALLET = "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
@@ -293,6 +300,125 @@ describe("GET /transactions/recipient/:walletAddress cursor pagination", () => {
 
     expect(res.body.code).toBe("VALIDATION_ERROR");
     expect(h.builders).toHaveLength(0);
+  });
+});
+
+describe("GET /transactions/export cursor pagination", () => {
+  it("scopes the page to the authenticated user from bearer token and returns pagination metadata", async () => {
+    enqueue([], 5);
+    enqueue([ROW_A, ROW_B, ROW_C]);
+
+    const token = signToken(WALLET);
+    const res = await request(createApp())
+      .get("/transactions/export?format=json&limit=2")
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body.total).toBe(5);
+    expect(res.body.limit).toBe(2);
+    expect(res.body.offset).toBe(0);
+    expect(res.body.hasMore).toBe(true);
+    expect(res.body.transactions.map((t: { id: string }) => t.id)).toEqual([ID_A, ID_B]);
+    expect(res.body.nextCursor).toBe(
+      encodeTransactionCursor({ timestamp: ROW_B.timestamp, id: ROW_B.id })
+    );
+
+    const [countBuilder, pageBuilder] = h.builders;
+    expect(countBuilder.conditions[0].params).toEqual({ recipient: WALLET });
+    expect(pageBuilder.conditions[0].params).toEqual({ recipient: WALLET });
+    expect(pageBuilder.orders).toEqual([
+      ["transaction.timestamp", "DESC"],
+      ["transaction.id", "DESC"],
+    ]);
+    expect(pageBuilder.takeValue).toBe(3);
+    expect(pageBuilder.skipValue).toBeUndefined();
+  });
+
+  it("continues after the cursor with a keyset predicate, ignoring offset and client wallet param", async () => {
+    enqueue([], 5);
+    enqueue([ROW_C]);
+
+    const token = signToken(WALLET);
+    const cursor = encodeTransactionCursor({ timestamp: ROW_B.timestamp, id: ROW_B.id });
+    const res = await request(createApp())
+      .get(
+        `/transactions/export?format=json&cursor=${encodeURIComponent(cursor)}&offset=99&walletAddress=${OTHER_WALLET}`
+      )
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body.hasMore).toBe(false);
+    expect(res.body.nextCursor).toBeNull();
+    expect(res.body.transactions).toHaveLength(1);
+
+    const [countBuilder, pageBuilder] = h.builders;
+    expect(countBuilder.conditions[0].params).toEqual({ recipient: WALLET });
+    expect(pageBuilder.conditions[0].params).toEqual({ recipient: WALLET });
+    expect(pageBuilder.conditions[1].sql).toContain("transaction.timestamp < :cursorTimestamp");
+    expect(pageBuilder.conditions[1].params).toEqual({
+      cursorTimestamp: ROW_B.timestamp,
+      cursorId: ROW_B.id,
+    });
+    expect(pageBuilder.skipValue).toBeUndefined();
+  });
+
+  it("applies status and date filters alongside account scope", async () => {
+    enqueue([], 1);
+    enqueue([ROW_A]);
+
+    const token = signToken(WALLET);
+    await request(createApp())
+      .get("/transactions/export?format=json&status=completed&startDate=1&endDate=9999999999")
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200);
+
+    const [countBuilder, pageBuilder] = h.builders;
+    expect(countBuilder.conditions).toHaveLength(4);
+    expect(pageBuilder.conditions).toHaveLength(4);
+  });
+
+  it("rejects an unauthenticated request with 401", async () => {
+    const res = await request(createApp()).get("/transactions/export?format=json").expect(401);
+    expect(res.body.code).toBe("UNAUTHORIZED");
+    expect(h.builders).toHaveLength(0);
+  });
+
+  it("rejects a malformed cursor with 400 and does not query the database", async () => {
+    const token = signToken(WALLET);
+    const res = await request(createApp())
+      .get("/transactions/export?format=json&cursor=bad-cursor!!!")
+      .set("Authorization", `Bearer ${token}`)
+      .expect(400);
+
+    expect(res.body.code).toBe("VALIDATION_ERROR");
+    expect(res.body.details).toEqual({ cursor: "invalid" });
+    expect(h.builders).toHaveLength(0);
+  });
+
+  it("rejects page size above 100 with 400", async () => {
+    const token = signToken(WALLET);
+    const res = await request(createApp())
+      .get("/transactions/export?format=json&limit=101")
+      .set("Authorization", `Bearer ${token}`)
+      .expect(400);
+
+    expect(res.body.code).toBe("VALIDATION_ERROR");
+    expect(h.builders).toHaveLength(0);
+  });
+
+  it("allows maximum page size of 100", async () => {
+    enqueue([], 0);
+    enqueue([]);
+
+    const token = signToken(WALLET);
+    const res = await request(createApp())
+      .get("/transactions/export?format=json&limit=100")
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200);
+
+    expect(res.body.limit).toBe(100);
+    const [, pageBuilder] = h.builders;
+    expect(pageBuilder.takeValue).toBe(101);
   });
 });
 

@@ -258,8 +258,8 @@ transactionsRouter.get("/history", async (req: Request, res: Response, next: Nex
  *   wallet — a caller can never export another wallet's transactions,
  *   regardless of query parameters. `format=csv` (default) streams the
  *   full matching result set as an injection-safe CSV in fixed-size
- *   batches, capped at 50,000 rows. `format=json` returns one
- *   limit/offset page, matching /transactions/history's pagination.
+ *   batches, capped at 50,000 rows. `format=json` returns paginated
+ *   records with stable keyset cursor pagination, matching /transactions/history.
  * tags: [Transactions]
  */
 transactionsRouter.get("/export", authJwtMiddleware, async (req: Request, res: Response, next: NextFunction) => {
@@ -275,24 +275,39 @@ transactionsRouter.get("/export", authJwtMiddleware, async (req: Request, res: R
       );
     }
 
-    const { format, startDate, endDate, status, limit, offset } = parsed.data;
+    const { format, startDate, endDate, status, limit, offset, cursor } = parsed.data;
     // Access control: the export is always scoped to the authenticated
     // caller's own wallet, taken from the verified token — never from a
     // request parameter — so one user cannot export another's transactions.
     const recipient = req.user!.walletAddress;
+    const decodedCursor = decodePageCursor(cursor);
 
-    logger.info("Exporting transaction history", { recipient, format, startDate, endDate, status });
+    logger.info("Exporting transaction history", {
+      recipient,
+      format,
+      startDate,
+      endDate,
+      status,
+      limit,
+      offset,
+      cursor: decodedCursor ? "provided" : "none",
+    });
 
     if (format === "json") {
-      const { records, total } = await payoutHistoryService.getPayoutsWithCount({
+      const page = await payoutHistoryService.getPayoutsPage({
         recipient,
         startDate,
         endDate,
         status,
         limit,
         offset,
+        cursor: decodedCursor,
       });
-      return res.status(200).json({ transactions: records, total, limit, offset });
+      return res.status(200).json({
+        transactions: page.records,
+        total: page.total,
+        ...buildPageMetadata(page, limit, offset),
+      });
     }
 
     // format === "csv": stream the full authorized result set.
