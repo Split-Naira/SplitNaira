@@ -1,6 +1,10 @@
-extern crate alloc;
-use alloc::string::{String, ToString};
 
+extern crate alloc;
+
+use alloc::string::String;
+
+/// Converts an error code into an owned String.
 pub fn err(code: &str) -> String {
-    code.to_string()
+    String::from(code)
 }
+
